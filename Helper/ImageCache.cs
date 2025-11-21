@@ -1,0 +1,101 @@
+﻿using System.Security.Cryptography;
+using System.Text;
+
+namespace RARPEditor.Helpers
+{
+    public static class ImageCache
+    {
+        private static readonly string CacheDir = Path.Combine(Application.StartupPath, "Cache", "Badges");
+        private static readonly HttpClient _client = new HttpClient();
+
+        // Memory cache to prevent re-loading from disk repeatedly
+        private static Dictionary<string, Image> _memoryCache = new Dictionary<string, Image>();
+
+        static ImageCache()
+        {
+            if (!Directory.Exists(CacheDir))
+                Directory.CreateDirectory(CacheDir);
+        }
+
+        // Must be called when loading a new file/project to free memory
+        public static void Clear()
+        {
+            foreach (var img in _memoryCache.Values)
+            {
+                img.Dispose();
+            }
+            _memoryCache.Clear();
+        }
+
+        public static async Task<Image> GetBadgeAsync(string badgeName)
+        {
+            if (string.IsNullOrEmpty(badgeName) || badgeName == "00000")
+                return CreatePlaceholder();
+
+            // Check memory cache first
+            if (_memoryCache.ContainsKey(badgeName))
+                return _memoryCache[badgeName];
+
+            string localPath = Path.Combine(CacheDir, $"{badgeName}.png");
+
+            if (File.Exists(localPath))
+            {
+                var img = LoadImageSafe(localPath);
+                if (img != null)
+                {
+                    _memoryCache[badgeName] = img;
+                    return img;
+                }
+            }
+
+            try
+            {
+                // Download from RA
+                string url = $"https://media.retroachievements.org/Badge/{badgeName}.png";
+                var data = await _client.GetByteArrayAsync(url);
+
+                await File.WriteAllBytesAsync(localPath, data);
+                var img = LoadImageSafe(localPath);
+
+                if (img != null)
+                {
+                    _memoryCache[badgeName] = img;
+                    return img;
+                }
+                return CreatePlaceholder();
+            }
+            catch
+            {
+                return CreatePlaceholder();
+            }
+        }
+
+        private static Image? LoadImageSafe(string path)
+        {
+            try
+            {
+                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read))
+                {
+                    // Create a copy to avoid locking the file stream
+                    return new Bitmap(fs);
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static Image CreatePlaceholder()
+        {
+            var bmp = new Bitmap(64, 64);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.Clear(Color.LightGray);
+                g.DrawRectangle(Pens.Gray, 0, 0, 63, 63);
+                g.DrawString("?", SystemFonts.DefaultFont, Brushes.Gray, 25, 25);
+            }
+            return bmp;
+        }
+    }
+}
