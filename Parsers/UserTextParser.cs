@@ -1,5 +1,6 @@
 ﻿using RALogicEditor.Models;
-using RARPEditor.Models;
+using System.Collections.Generic;
+using System.IO;
 using System.Text.RegularExpressions;
 
 namespace RALogicEditor.Parsers
@@ -17,15 +18,7 @@ namespace RALogicEditor.Parsers
         {
             var data = new UserData();
             string[] lines;
-
-            try
-            {
-                lines = File.ReadAllLines(filepath);
-            }
-            catch
-            {
-                return data; // Return empty if file can't be read
-            }
+            try { lines = File.ReadAllLines(filepath); } catch { return data; }
 
             foreach (var line in lines)
             {
@@ -58,7 +51,7 @@ namespace RALogicEditor.Parsers
 
                         if (parts.Count >= 8)
                         {
-                            var lb = new RaLeaderboard
+                            data.Leaderboards.Add(new RaLeaderboard
                             {
                                 ID = id,
                                 Logic = $"STA:{parts[0]}::CAN:{parts[1]}::SUB:{parts[2]}::VAL:{parts[3]}",
@@ -67,8 +60,7 @@ namespace RALogicEditor.Parsers
                                 Description = parts[6],
                                 LowerIsBetter = int.TryParse(parts[7], out int lbVal) ? lbVal : 0,
                                 State = AssetState.Local
-                            };
-                            data.Leaderboards.Add(lb);
+                            });
                         }
                     }
                     else if (char.IsDigit(line[0]))
@@ -91,21 +83,15 @@ namespace RALogicEditor.Parsers
                                 Description = parts[2],
                                 State = AssetState.Local
                             };
-
                             if (parts.Count > 5) ach.Type = parts[5];
                             if (parts.Count > 6) ach.Author = parts[6];
                             if (parts.Count > 7 && int.TryParse(parts[7], out int pts)) ach.Points = pts;
                             if (parts.Count > 12) ach.BadgeName = parts[12];
-
                             data.Achievements.Add(ach);
                         }
                     }
                 }
-                catch
-                {
-                    // Skip malformed lines without crashing the loader
-                    continue;
-                }
+                catch { continue; }
             }
             return data;
         }
@@ -114,24 +100,18 @@ namespace RALogicEditor.Parsers
         {
             var result = new List<string>();
             if (string.IsNullOrEmpty(line)) return result;
-
             bool inQuote = false;
             int start = 0;
-
             for (int i = 0; i < line.Length; i++)
             {
                 if (line[i] == '"') inQuote = !inQuote;
                 else if (line[i] == ':' && !inQuote)
                 {
-                    string val = line.Substring(start, i - start);
-                    result.Add(CleanValue(val));
+                    result.Add(CleanValue(line.Substring(start, i - start)));
                     start = i + 1;
                 }
             }
-            if (start <= line.Length)
-            {
-                result.Add(CleanValue(line.Substring(start)));
-            }
+            if (start <= line.Length) result.Add(CleanValue(line.Substring(start)));
             return result;
         }
 
@@ -139,9 +119,7 @@ namespace RALogicEditor.Parsers
         {
             if (string.IsNullOrEmpty(val)) return "";
             if (val.StartsWith("\"") && val.EndsWith("\"") && val.Length >= 2)
-            {
                 return val.Substring(1, val.Length - 2).Replace("\\\"", "\"");
-            }
             return val;
         }
     }

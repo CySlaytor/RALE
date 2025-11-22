@@ -1,10 +1,16 @@
-﻿using System.Security.Cryptography;
-using System.Text;
+﻿using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 
-namespace RARPEditor.Helpers
+namespace RALogicEditor.Helpers
 {
     public static class ImageCache
     {
+        // Saves to bin/Debug/Cache/Badges
         private static readonly string CacheDir = Path.Combine(Application.StartupPath, "Cache", "Badges");
         private static readonly HttpClient _client = new HttpClient();
 
@@ -17,7 +23,6 @@ namespace RARPEditor.Helpers
                 Directory.CreateDirectory(CacheDir);
         }
 
-        // Clears memory cache to free resources (called when loading a new game)
         public static void Clear()
         {
             foreach (var img in _memoryCache.Values)
@@ -71,7 +76,6 @@ namespace RARPEditor.Helpers
             }
         }
 
-        // Loads image non-exclusively so file isn't locked
         private static Image? LoadImageSafe(string path)
         {
             try

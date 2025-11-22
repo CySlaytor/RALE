@@ -1,0 +1,463 @@
+﻿using RALogicEditor.Controls;
+using RALogicEditor.Definitions;
+using RALogicEditor.Forms;
+using RALogicEditor.Models;
+using RALogicEditor.Parsers;
+using RALogicEditor.Utilities;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Windows.Forms;
+
+namespace RALogicEditor.Helpers
+{
+    public class ConditionGridManager
+    {
+        private readonly DoubleBufferedDataGridView _grid;
+
+        private readonly ContextMenuStrip _flagContextMenu = new();
+        private readonly ContextMenuStrip _typeContextMenu = new();
+        private readonly ContextMenuStrip _sizeContextMenu = new();
+        private readonly ContextMenuStrip _cmpContextMenu = new();
+        private readonly ContextMenuStrip _cmpArithmeticContextMenu = new();
+        private readonly ContextMenuStrip _cmpStrictContextMenu = new();
+
+        public event EventHandler? LogicChanged;
+        public event EventHandler<string>? StatusUpdateRequested;
+        public event EventHandler<string>? AddressSelected;
+        public event EventHandler<PointerChainArgs>? PointerChainSelected;
+
+        public ConditionGridManager(DoubleBufferedDataGridView grid)
+        {
+            _grid = grid;
+            InitializeContextMenus();
+            WireUpGridEvents();
+        }
+
+        private void WireUpGridEvents()
+        {
+            _grid.CellValueChanged += Grid_CellValueChanged;
+            _grid.CellMouseDown += Grid_CellMouseDown;
+            _grid.CellDoubleClick += Grid_CellDoubleClick;
+            _grid.EditingControlShowing += Grid_EditingControlShowing;
+            _grid.CellEndEdit += Grid_CellEndEdit;
+            _grid.KeyDown += Grid_KeyDown;
+        }
+
+        private void InitializeContextMenus()
+        {
+            CreateMenu(_flagContextMenu, RaLogicSyntax.Flags);
+            CreateMenu(_typeContextMenu, RaLogicSyntax.OperandTypes);
+            CreateMenu(_sizeContextMenu, RaLogicSyntax.MemorySizes);
+            CreateMenu(_cmpContextMenu, RaLogicSyntax.ComparisonOperators);
+            CreateMenu(_cmpArithmeticContextMenu, RaLogicSyntax.ArithmeticOperators);
+            var strictOps = RaLogicSyntax.ComparisonOperators.Where(op => op != RaLogicSyntax.NO_OPERATOR_TEXT).ToArray();
+            CreateMenu(_cmpStrictContextMenu, strictOps);
+        }
+
+        private void CreateMenu(ContextMenuStrip menu, string[] items)
+        {
+            foreach (var item in items)
+            {
+                var text = item.Replace("&", "&&");
+                var menuItem = new ToolStripMenuItem(text, null, OnContextMenuItemClick) { Tag = item };
+                menu.Items.Add(menuItem);
+            }
+        }
+
+        private void Grid_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter && _grid.CurrentCell != null)
+            {
+                HandleAddressSelection(_grid.CurrentCell.RowIndex, _grid.CurrentCell.ColumnIndex);
+                e.Handled = true;
+            }
+            if (_grid.ReadOnly && e.KeyCode != Keys.C) { if (e.KeyCode == Keys.Delete || e.KeyCode == Keys.V) { e.Handled = true; return; } }
+            if (e.Control && e.KeyCode == Keys.C) { CopySelectedRows(); e.Handled = true; }
+            else if (e.Control && e.Shift && e.KeyCode == Keys.C) { CopySelectedLogic(); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.V) { PasteLogic(); e.Handled = true; }
+        }
+
+        private void Grid_CellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right && e.RowIndex >= 0 && e.ColumnIndex >= 0)
+            {
+                if (!_grid.Rows[e.RowIndex].Selected) { _grid.ClearSelection(); _grid.Rows[e.RowIndex].Selected = true; }
+                if (_grid.ReadOnly) return;
+
+                var colName = _grid.Columns[e.ColumnIndex].Name;
+                if (colName == "ColFlag") _flagContextMenu.Show(Cursor.Position);
+                else if (colName == "ColLType" || colName == "ColRType") _typeContextMenu.Show(Cursor.Position);
+                else if (colName == "ColLSize" || colName == "ColRSize") _sizeContextMenu.Show(Cursor.Position);
+                else if (colName == "ColCmp")
+                {
+                    var flag = _grid.Rows[e.RowIndex].Cells["ColFlag"].Value?.ToString() ?? "";
+                    if (RaLogicSyntax.ArithmeticFlags.Contains(flag)) _cmpArithmeticContextMenu.Show(Cursor.Position);
+                    else if (RaLogicSyntax.StrictComparisonFlags.Contains(flag)) _cmpStrictContextMenu.Show(Cursor.Position);
+                    else _cmpContextMenu.Show(Cursor.Position);
+                }
+            }
+        }
+
+        private void Grid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= 0) Grid_CellMouseDown(sender, new DataGridViewCellMouseEventArgs(e.ColumnIndex, e.RowIndex, 0, 0, new MouseEventArgs(MouseButtons.Right, 1, 0, 0, 0)));
+        }
+
+        private void Grid_EditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
+        {
+            if (e.Control is TextBox editingControl && _grid.CurrentCell != null)
+            {
+                editingControl.CharacterCasing = CharacterCasing.Lower;
+                editingControl.KeyPress -= EditingControl_KeyPress;
+                editingControl.KeyPress += EditingControl_KeyPress;
+                string colName = _grid.Columns[_grid.CurrentCell.ColumnIndex].Name;
+                string type = colName == "ColLValue" ? (_grid.Rows[_grid.CurrentCell.RowIndex].Cells["ColLType"].Value?.ToString() ?? "") : (_grid.Rows[_grid.CurrentCell.RowIndex].Cells["ColRType"].Value?.ToString() ?? "");
+                if (type == "Float") editingControl.MaxLength = 32;
+                else if (type == "Value") editingControl.MaxLength = 15;
+                else { editingControl.MaxLength = 8; if (editingControl.Text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) editingControl.Text = editingControl.Text.Substring(2); }
+            }
+        }
+
+        private void EditingControl_KeyPress(object? sender, KeyPressEventArgs e)
+        {
+            if (char.IsControl(e.KeyChar)) return;
+            bool allowFloat = false;
+            if (_grid.CurrentCell != null)
+            {
+                string colName = _grid.Columns[_grid.CurrentCell.ColumnIndex].Name;
+                string type = colName == "ColLValue" ? (_grid.Rows[_grid.CurrentCell.RowIndex].Cells["ColLType"].Value?.ToString() ?? "") : (_grid.Rows[_grid.CurrentCell.RowIndex].Cells["ColRType"].Value?.ToString() ?? "");
+                allowFloat = type == "Float";
+            }
+            bool isHex = char.IsDigit(e.KeyChar) || (e.KeyChar >= 'a' && e.KeyChar <= 'f') || (e.KeyChar >= 'A' && e.KeyChar <= 'F') || e.KeyChar == 'x' || e.KeyChar == 'X';
+            if (isHex) return;
+            if (allowFloat && (e.KeyChar == '.' || e.KeyChar == '-' || e.KeyChar == ',')) return;
+            e.Handled = true;
+        }
+
+        private void Grid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            var row = _grid.Rows[e.RowIndex];
+            if (row.Tag is not AchievementCondition cond) return;
+            var cell = row.Cells[e.ColumnIndex];
+            string value = cell.Value?.ToString() ?? "";
+
+            if (cell.OwningColumn.Name == "ColLValue") cond.LeftOperand.Value = LogicFormatter.ParseAndFormatValue(value, cond.LeftOperand.Type, cond.LeftOperand.Size);
+            else if (cell.OwningColumn.Name == "ColRValue") cond.RightOperand.Value = LogicFormatter.ParseAndFormatValue(value, cond.RightOperand.Type, LogicFormatter.GetRightOperandSizeReference(cond));
+            else if (cell.OwningColumn.Name == "ColHits") { var match = Regex.Match(value, @"\d+"); cond.RequiredHits = match.Success ? uint.Parse(match.Value) : 0; }
+        }
+
+        private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            var row = _grid.Rows[e.RowIndex];
+            if (row.Tag is AchievementCondition cond)
+            {
+                ApplyConditionLogicRules(cond);
+                ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly);
+                LogicChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        private void OnContextMenuItemClick(object? sender, EventArgs e)
+        {
+            if (_grid.ReadOnly || sender is not ToolStripMenuItem item) return;
+            string val = item.Tag as string ?? "";
+            if (val == RaLogicSyntax.NO_FLAG_TEXT || val == RaLogicSyntax.NO_OPERATOR_TEXT) val = "";
+
+            bool changed = false;
+            foreach (DataGridViewRow row in _grid.SelectedRows)
+            {
+                if (row.Tag is AchievementCondition cond)
+                {
+                    if (_grid.CurrentCell == null) continue;
+                    string colName = _grid.Columns[_grid.CurrentCell.ColumnIndex].Name;
+
+                    if (colName == "ColFlag") { string old = cond.Flag; cond.Flag = val; HandleFlagChange(cond, old); }
+                    else if (colName == "ColLType") HandleTypeChange(cond.LeftOperand, val, cond.LeftOperand.Size);
+                    else if (colName == "ColLSize") cond.LeftOperand.Size = val;
+                    else if (colName == "ColCmp") { string old = cond.Operator; cond.Operator = val; HandleOperatorChange(cond, old); }
+                    else if (colName == "ColRType") HandleTypeChange(cond.RightOperand, val, cond.LeftOperand.Size);
+                    else if (colName == "ColRSize") cond.RightOperand.Size = val;
+
+                    ApplyConditionLogicRules(cond);
+                    ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly);
+                    changed = true;
+                }
+            }
+            if (changed) { LogicChanged?.Invoke(this, EventArgs.Empty); StatusUpdateRequested?.Invoke(this, "Updated condition property."); }
+        }
+
+        private void HandleTypeChange(Operand op, string newType, string refSize)
+        {
+            string oldType = op.Type;
+            if (oldType == newType) return;
+            if (newType == "Recall") { op.Value = ""; op.Type = newType; return; }
+            if (string.IsNullOrEmpty(op.Value) || oldType == "Recall")
+            {
+                if (newType == "Float") op.Value = "1.0";
+                else op.Value = "0x" + 1.ToString("x" + LogicFormatter.GetPaddingForSize(refSize));
+            }
+            else
+            {
+                var integerLike = new HashSet<string> { "Mem", "Value", "Delta", "Prior", "BCD", "Inverted" };
+                if (integerLike.Contains(oldType) && newType == "Float") { if (uint.TryParse(op.Value.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint hexVal)) op.Value = BitConverter.ToSingle(BitConverter.GetBytes(hexVal), 0).ToString("G9", CultureInfo.InvariantCulture); }
+                else if (oldType == "Float" && integerLike.Contains(newType)) { string safeVal = op.Value.Replace(',', '.'); if (float.TryParse(safeVal, NumberStyles.Float, CultureInfo.InvariantCulture, out float floatVal)) op.Value = "0x" + BitConverter.ToUInt32(BitConverter.GetBytes(floatVal), 0).ToString("x8"); }
+            }
+            op.Type = newType;
+        }
+
+        private void HandleFlagChange(AchievementCondition cond, string oldFlag)
+        {
+            bool wasA = RaLogicSyntax.ArithmeticFlags.Contains(oldFlag);
+            bool isA = RaLogicSyntax.ArithmeticFlags.Contains(cond.Flag);
+            if (wasA && !isA) { cond.Operator = "="; cond.RightOperand = new Operand { Type = "Value", Value = "0x1" }; }
+            else if (!wasA && isA) { cond.Operator = ""; cond.RightOperand = new Operand(); }
+        }
+
+        private void HandleOperatorChange(AchievementCondition cond, string oldOp)
+        {
+            bool wasE = string.IsNullOrEmpty(oldOp);
+            bool isE = string.IsNullOrEmpty(cond.Operator);
+            if (wasE && !isE) cond.RightOperand = new Operand { Type = "Value", Value = "0x1" };
+            else if (!wasE && isE) cond.RightOperand = new Operand();
+        }
+
+        private void ApplyConditionLogicRules(AchievementCondition cond)
+        {
+            if (cond.LeftOperand.Type is "Value" or "Float" or "Recall") cond.LeftOperand.Size = "";
+            else if (RaLogicSyntax.MemoryTypes.Contains(cond.LeftOperand.Type) && string.IsNullOrEmpty(cond.LeftOperand.Size)) cond.LeftOperand.Size = "32-bit";
+
+            if (cond.RightOperand.Type is "Value" or "Float" or "Recall") cond.RightOperand.Size = "";
+            else if (RaLogicSyntax.MemoryTypes.Contains(cond.RightOperand.Type) && string.IsNullOrEmpty(cond.RightOperand.Size)) cond.RightOperand.Size = "32-bit";
+
+            if (cond.RightOperand.Type == "Value") cond.RightOperand.Size = "";
+
+            if (RaLogicSyntax.StrictComparisonFlags.Contains(cond.Flag))
+            {
+                if (!RaLogicSyntax.ComparisonOperators.Contains(cond.Operator) || string.IsNullOrEmpty(cond.Operator)) { cond.Operator = "="; cond.RightOperand = new Operand { Type = "Value", Value = "0x1" }; }
+            }
+            else if (RaLogicSyntax.ArithmeticFlags.Contains(cond.Flag))
+            {
+                if (RaLogicSyntax.ComparisonOperators.Contains(cond.Operator)) { cond.Operator = ""; cond.RightOperand = new Operand(); }
+            }
+        }
+
+        public void CopySelectedRows()
+        {
+            if (_grid.SelectedRows.Count == 0) return;
+            var sb = new StringBuilder();
+            foreach (DataGridViewRow row in _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index))
+            {
+                var cells = row.Cells.Cast<DataGridViewCell>().Select(c => c.FormattedValue?.ToString() ?? "");
+                sb.AppendLine(string.Join("\t", cells));
+            }
+            Clipboard.SetText(sb.ToString());
+            StatusUpdateRequested?.Invoke(this, "Rows copied to clipboard.");
+        }
+
+        public void CopySelectedLogic()
+        {
+            if (_grid.SelectedRows.Count == 0) return;
+            var sb = new StringBuilder();
+            foreach (DataGridViewRow row in _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index))
+            {
+                if (row.Tag is AchievementCondition cond)
+                {
+                    if (sb.Length > 0) sb.Append('_');
+                    sb.Append(LogicFormatter.ConditionToString(cond));
+                }
+            }
+            Clipboard.SetText(sb.ToString());
+            StatusUpdateRequested?.Invoke(this, "Logic string copied to clipboard.");
+        }
+
+        private void RestoreSelection(List<int> indicesToSelect)
+        {
+            if (indicesToSelect.Count == 0) return;
+
+            // 1. Clear existing
+            _grid.ClearSelection();
+
+            // 2. Set CurrentCell to the first item to scroll it into view and set focus anchor
+            int firstIdx = indicesToSelect.Min();
+            if (firstIdx >= 0 && firstIdx < _grid.Rows.Count)
+            {
+                _grid.CurrentCell = _grid.Rows[firstIdx].Cells[0];
+            }
+
+            // 3. Select all items (including the first one again to be safe)
+            foreach (int idx in indicesToSelect)
+            {
+                if (idx >= 0 && idx < _grid.Rows.Count)
+                {
+                    _grid.Rows[idx].Selected = true;
+                }
+            }
+        }
+
+        public void PasteLogic()
+        {
+            if (!Clipboard.ContainsText() || _grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
+            string txt = Clipboard.GetText().Trim().Replace("\r", "").Replace("\n", "");
+            if (string.IsNullOrWhiteSpace(txt)) return;
+
+            int idx = _grid.SelectedRows.Count > 0 ? _grid.SelectedRows.Cast<DataGridViewRow>().Max(r => r.Index) + 1 : _grid.Rows.Count;
+            var conds = AchievementParser.ParseAchievementTrigger(txt, 'S', false).SelectMany(g => g.Conditions).ToList();
+            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
+
+            group.Conditions.InsertRange(idx, conds);
+
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+
+            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
+                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
+
+            // Prepare indices for new items
+            var newIndices = Enumerable.Range(idx, conds.Count).ToList();
+            RestoreSelection(newIndices);
+
+            LogicChanged?.Invoke(this, EventArgs.Empty);
+            StatusUpdateRequested?.Invoke(this, "Logic pasted.");
+        }
+
+        public void DuplicateSelected()
+        {
+            if (_grid.ReadOnly || _grid.SelectedRows.Count == 0 || _grid.Tag is not AchievementConditionGroup group) return;
+
+            var rows = _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index).ToList();
+            int idx = rows.Max(r => r.Index) + 1;
+
+            var clones = rows.Select(r => r.Tag).OfType<AchievementCondition>().Select(c => c.Clone()).ToList();
+            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
+
+            group.Conditions.InsertRange(idx, clones);
+
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+
+            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
+                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
+
+            // Prepare indices for cloned items
+            var newIndices = Enumerable.Range(idx, clones.Count).ToList();
+            RestoreSelection(newIndices);
+
+            LogicChanged?.Invoke(this, EventArgs.Empty);
+            StatusUpdateRequested?.Invoke(this, "Conditions duplicated.");
+        }
+
+        public void DeleteSelected()
+        {
+            if (_grid.ReadOnly || _grid.SelectedRows.Count == 0 || _grid.Tag is not AchievementConditionGroup group) return;
+
+            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
+            int firstSelIndex = _grid.SelectedRows.Cast<DataGridViewRow>().Min(r => r.Index);
+
+            foreach (DataGridViewRow row in _grid.SelectedRows) { if (row.Tag is AchievementCondition cond) group.Conditions.Remove(cond); }
+
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+
+            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
+                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
+
+            if (_grid.Rows.Count > 0)
+            {
+                if (firstSelIndex >= _grid.Rows.Count) firstSelIndex = _grid.Rows.Count - 1;
+                RestoreSelection(new List<int> { firstSelIndex });
+            }
+
+            LogicChanged?.Invoke(this, EventArgs.Empty);
+            StatusUpdateRequested?.Invoke(this, "Conditions deleted.");
+        }
+
+        public void MoveSelected(int dist)
+        {
+            if (_grid.ReadOnly || _grid.SelectedRows.Count == 0 || _grid.Tag is not AchievementConditionGroup group) return;
+
+            var indices = _grid.SelectedRows.Cast<DataGridViewRow>().Select(r => r.Index).OrderBy(i => i).ToList();
+            if (dist < 0 && indices.Min() == 0) return;
+            if (dist > 0 && indices.Max() == _grid.Rows.Count - 1) return;
+
+            if (dist > 0) indices.Reverse();
+
+            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
+
+            foreach (var idx in indices) { var item = group.Conditions[idx]; group.Conditions.RemoveAt(idx); group.Conditions.Insert(idx + dist, item); }
+
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+
+            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
+                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
+
+            // Calculate where the items moved to
+            var newIndices = new List<int>();
+            foreach (var idx in indices)
+            {
+                newIndices.Add(idx + dist);
+            }
+
+            RestoreSelection(newIndices);
+
+            LogicChanged?.Invoke(this, EventArgs.Empty);
+            StatusUpdateRequested?.Invoke(this, "Conditions moved.");
+        }
+
+        public void AddCondition()
+        {
+            if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
+
+            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
+
+            group.Conditions.Add(new AchievementCondition { LeftOperand = { Type = "Value", Value = "0" }, Operator = "=", RightOperand = { Type = "Value", Value = "1" } });
+
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+
+            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
+                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
+
+            if (_grid.Rows.Count > 0)
+            {
+                int lastIdx = _grid.Rows.Count - 1;
+                RestoreSelection(new List<int> { lastIdx });
+                _grid.FirstDisplayedScrollingRowIndex = Math.Max(0, lastIdx - 5);
+            }
+
+            LogicChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void HandleAddressSelection(int rowIndex, int colIndex)
+        {
+            if (colIndex != 4 && colIndex != 8) return;
+            string val = _grid.Rows[rowIndex].Cells[colIndex].Value?.ToString() ?? "";
+            if (!val.StartsWith("0x") || !long.TryParse(val.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long currentOffset)) return;
+
+            List<long> offsets = new List<long>();
+            string baseAddress = val;
+            var collected = new Stack<long>();
+            collected.Push(currentOffset);
+            int scanIndex = rowIndex - 1;
+            bool chainFound = false;
+
+            while (scanIndex >= 0)
+            {
+                var row = _grid.Rows[scanIndex];
+                string flag = row.Cells["ColFlag"].Value?.ToString() ?? "";
+                string memVal = row.Cells["ColLValue"].Value?.ToString() ?? "";
+                if (flag == "Add Address" && memVal.StartsWith("0x") && long.TryParse(memVal.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long addr)) { collected.Push(addr); scanIndex--; chainFound = true; } else break;
+            }
+
+            if (chainFound)
+            {
+                long baseAddrLong = collected.Pop();
+                baseAddress = "0x" + baseAddrLong.ToString("x");
+                offsets = collected.ToList();
+                PointerChainSelected?.Invoke(this, new PointerChainArgs(baseAddress, offsets));
+            }
+            else AddressSelected?.Invoke(this, val);
+        }
+    }
+}

@@ -1,16 +1,15 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace RALogicEditor.Models
 {
-    // Enum to track if an achievement exists on the server, is modified locally, or is brand new.
     public enum AssetState
     {
-        Synced,     // Matches server exactly (White)
-        Modified,   // Exists on server but changed locally (Orange)
-        Local       // Created locally, does not exist on server (Green)
+        Synced,
+        Modified,
+        Local
     }
 
-    // Common interface so the Grid can display both Achievements and Leaderboards
     public interface IAssetItem
     {
         int ID { get; set; }
@@ -22,20 +21,15 @@ namespace RALogicEditor.Models
         AssetState State { get; set; }
     }
 
-    // The root object of the downloaded RA JSON file.
     public class RaRoot
     {
         public bool Success { get; set; }
         public int GameId { get; set; }
         public string Title { get; set; } = "";
-
-        // Stores the Rich Presence script found in the JSON
         public string RichPresencePatch { get; set; } = "";
-
         public List<RaSet> Sets { get; set; } = new List<RaSet>();
     }
 
-    // A set of achievements (Core, Unofficial, etc.)
     public class RaSet
     {
         public string Type { get; set; } = "";
@@ -51,8 +45,6 @@ namespace RALogicEditor.Models
         public int Points { get; set; }
         public string Author { get; set; } = "Unknown";
         public string BadgeName { get; set; } = "00000";
-        public long Created { get; set; }
-        public long Modified { get; set; }
         public string Type { get; set; } = "";
 
         [JsonPropertyName("MemAddr")]
@@ -66,7 +58,6 @@ namespace RALogicEditor.Models
 
         public override string ToString() => $"{ID} - {Title}";
 
-        // Deep clone helper for Undo/Redo functionality
         public RaAchievement Clone(bool newId = true)
         {
             return new RaAchievement
