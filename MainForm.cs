@@ -12,40 +12,60 @@ namespace RALogicEditor
 {
     public partial class MainForm : Form
     {
-        private RaRoot? _serverData;
-        private UserTextParser.UserData? _localData;
+        // -- Data Storage --
+        private RaRoot? _serverData;        // Represents the clean data from RA (JSON)
+        private UserTextParser.UserData? _localData; // Represents the local modifications (User.txt)
 
-        private IAssetItem? _selectedAsset;
-        private bool _isLoading;
-        private string _currentFilePath = "";
-        private string _currentUserFilePath = "";
-        private string _lastLoadedPath = "";
+        // -- State Tracking --
+        private IAssetItem? _selectedAsset; // The item currently being edited in the Trigger Editor
+        private bool _isLoading;            // Flag to suppress events during bulk operations
+        private string _currentFilePath = ""; // Path to the main JSON file
+        private string _currentUserFilePath = ""; // Path to the User.txt file
+        private string _lastLoadedPath = "";      // Used for the "Reload" button
 
         private RecentFilesManager _recentFiles = new RecentFilesManager();
-        private List<IAssetItem> _currentDisplayList = new();
+        private List<IAssetItem> _currentDisplayList = new(); // The filtered list shown in the grid
 
-        // Main Undo/Redo stacks for asset management
+        // -- Global Undo/Redo Stacks --
+        // These store full snapshots of the UserData state. 
+        // Used when adding/deleting/moving assets (not for text edits inside an asset).
         private Stack<UserTextParser.UserData> _mainUndoStack = new();
         private Stack<UserTextParser.UserData> _mainRedoStack = new();
 
         public MainForm()
         {
             InitializeComponent();
+
+            // -- Wire up Trigger Editor Events --
+            // When logic text changes, update the local asset model
             triggerEditor.TriggerTextChanged += TriggerEditor_TriggerTextChanged;
+            // When metadata (points, title) changes, update the grid
             triggerEditor.AchievementDataChanged += TriggerEditor_AchievementDataChanged;
+            // When user clicks Reset, revert to server state
             triggerEditor.AssetResetRequested += TriggerEditor_AssetResetRequested;
+            // When user clicks Add Note, inject logic from Code Note panel
             triggerEditor.AddFromCodeNoteRequested += TriggerEditor_AddFromCodeNoteRequested;
 
+            // -- Bridge: Trigger Editor -> Code Note Editor --
+            // When user selects an address in the logic grid, highlight it in the notes
+            triggerEditor.AddressSelected += TriggerEditor_AddressSelected;
+            // When user selects a pointer chain, highlight the deep variable in the notes
+            triggerEditor.PointerChainSelected += TriggerEditor_PointerChainSelected;
+
+            // -- Wire up Code Note Editor Events --
             codeNoteEditor.ReloadRequested += Reload_Click;
 
+            // -- Wire up Grid Events --
             achievementGrid.CellDoubleClick += achievementGrid_CellDoubleClick;
             achievementGrid.KeyDown += achievementGrid_KeyDown;
 
-            cmbAssetType.SelectedIndex = 0;
-            cmbSource.SelectedIndex = 0;
+            // -- Toolbar Setup --
+            cmbAssetType.SelectedIndex = 0; // Default to Achievements
+            cmbSource.SelectedIndex = 0;    // Default to Local view
             cmbAssetType.SelectedIndexChanged += (s, e) => PopulateList();
             cmbSource.SelectedIndexChanged += (s, e) => { ReloadDataView(); };
 
+            // -- Menu Item Wiring --
             newAssetToolStripMenuItem.Click += NewAsset_Click;
             cloneAssetToolStripMenuItem.Click += DuplicateAsset_Click;
             deleteAssetToolStripMenuItem.Click += DeleteAsset_Click;
@@ -53,17 +73,39 @@ namespace RALogicEditor
             moveUpAssetToolStripMenuItem.Click += MoveAssetUp_Click;
             moveDownAssetToolStripMenuItem.Click += MoveAssetDown_Click;
 
+            // -- Button Wiring --
             btnAddAsset.Click += NewAsset_Click;
             btnDuplicateAsset.Click += DuplicateAsset_Click;
             btnDeleteAsset.Click += DeleteAsset_Click;
 
+            // Handle context menu state (enable/disable items based on selection)
             achievementGrid.ContextMenuStrip.Opening += AchievementContextMenu_Opening;
 
-            // Hook closing event for unsaved check
+            // Safety check before closing app
             this.FormClosing += MainForm_FormClosing;
 
+            // Load recent files list
             _recentFiles.Load();
             UpdateRecentMenu();
+        }
+
+        // BRIDGE METHOD: Handles simple address selection from Trigger Editor
+        private void TriggerEditor_AddressSelected(object? sender, string address)
+        {
+            codeNoteEditor.HighlightAddress(address);
+        }
+
+        // BRIDGE METHOD: Handles complex pointer chain selection
+        private void TriggerEditor_PointerChainSelected(object? sender, PointerChainArgs e)
+        {
+            // 1. Load the Base Note (Root of the pointer)
+            codeNoteEditor.HighlightAddress(e.BaseAddress);
+
+            // 2. Traverse the tree to find the specific offset
+            if (e.Offsets.Count > 0)
+            {
+                codeNoteEditor.HighlightVariable(e.Offsets);
+            }
         }
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -74,11 +116,12 @@ namespace RALogicEditor
             }
         }
 
+        // Checks for dirty state in local data before performing destructive actions
         private bool ConfirmDiscardChanges()
         {
             if (_localData == null) return true;
 
-            // Check for any modified or local items
+            // Check if any achievements or leaderboards have unsaved changes
             bool hasChanges = _localData.Achievements.Any(a => a.State != AssetState.Synced) ||
                               _localData.Leaderboards.Any(l => l.State != AssetState.Synced);
 
@@ -96,6 +139,7 @@ namespace RALogicEditor
             if (string.IsNullOrEmpty(_lastLoadedPath)) return;
             if (!ConfirmDiscardChanges()) return;
 
+            // Remember selection to restore it after reload
             int selectedId = -1;
             if (achievementGrid.SelectedRows.Count > 0 && achievementGrid.SelectedRows[0].Tag is IAssetItem item)
             {
@@ -104,6 +148,7 @@ namespace RALogicEditor
 
             LoadFiles(_lastLoadedPath);
 
+            // Restore selection
             if (selectedId != -1)
             {
                 foreach (DataGridViewRow row in achievementGrid.Rows)
@@ -119,6 +164,7 @@ namespace RALogicEditor
             }
         }
 
+        // Helper to inject logic from the Code Note panel into the Logic Grid
         private void TriggerEditor_AddFromCodeNoteRequested(object? sender, EventArgs e)
         {
             var data = codeNoteEditor.GetSelectedLogic();
@@ -133,6 +179,7 @@ namespace RALogicEditor
         }
 
         #region Main Undo/Redo Logic
+        // Creates a deep copy of the current Local Data state
         private UserTextParser.UserData CreateSnapshot()
         {
             var snapshot = new UserTextParser.UserData();
@@ -170,6 +217,7 @@ namespace RALogicEditor
         }
         #endregion
 
+        // Determines enabled state of context menu items based on selection
         private void AchievementContextMenu_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             UpdateSelectionUI();
@@ -182,14 +230,18 @@ namespace RALogicEditor
             {
                 if (row.Tag is IAssetItem asset)
                 {
+                    // "Local" items are new achievements not yet on the server.
+                    // Only these can be fully deleted or moved freely.
                     if (asset.State != AssetState.Local) allLocal = false;
+
+                    // "Modified" means server items that have local changes.
                     if (asset.State == AssetState.Modified) anyModified = true;
                 }
             }
 
             cloneAssetToolStripMenuItem.Enabled = hasSelection;
-            deleteAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
-            resetAssetToolStripMenuItem.Enabled = hasSelection && anyModified;
+            deleteAssetToolStripMenuItem.Enabled = hasSelection && allLocal; // Prevent deleting server assets
+            resetAssetToolStripMenuItem.Enabled = hasSelection && anyModified; // Only reset dirty items
             moveUpAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
             moveDownAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
         }
@@ -219,6 +271,7 @@ namespace RALogicEditor
             }
         }
 
+        // Main file loading logic. Handles JSON, User.txt, and Notes.json
         private void LoadFiles(string primaryPath)
         {
             // Clear image cache to prevent memory leaks
@@ -240,9 +293,11 @@ namespace RALogicEditor
 
             triggerEditor.Clear();
 
+            // Determine file paths based on naming convention (GameID.json)
             string dir = Path.GetDirectoryName(primaryPath) ?? "";
             string fileName = Path.GetFileNameWithoutExtension(primaryPath);
 
+            // Extract Game ID
             string gameIdStr = new string(fileName.TakeWhile(char.IsDigit).ToArray());
             if (string.IsNullOrEmpty(gameIdStr))
             {
@@ -257,6 +312,7 @@ namespace RALogicEditor
 
             string selectedExt = Path.GetExtension(primaryPath).ToLower();
 
+            // Handle opening different file types directly
             if (selectedExt == ".json")
             {
                 if (primaryPath.EndsWith("-Notes.json", StringComparison.OrdinalIgnoreCase))
@@ -272,6 +328,7 @@ namespace RALogicEditor
             if (File.Exists(jsonPath)) LoadLogic(jsonPath);
             if (File.Exists(userPath)) LoadUserFile(userPath);
 
+            // Load Notes
             List<CodeNote> jsonNotes = new();
             if (File.Exists(notesPath))
             {
@@ -292,6 +349,7 @@ namespace RALogicEditor
                 }
             }
 
+            // Merge JSON notes with local User notes
             var mergedNotesMap = new Dictionary<string, CodeNote>();
 
             foreach (var n in jsonNotes)
@@ -352,6 +410,7 @@ namespace RALogicEditor
             }
         }
 
+        // Refreshes the main asset list based on current filters
         private void ReloadDataView()
         {
             int savedScroll = achievementGrid.FirstDisplayedScrollingRowIndex;
@@ -361,6 +420,7 @@ namespace RALogicEditor
 
             PopulateList();
 
+            // Restore selection
             if (savedId != -1)
             {
                 foreach (DataGridViewRow row in achievementGrid.Rows)
@@ -380,6 +440,7 @@ namespace RALogicEditor
             }
         }
 
+        // Saves the local changes to User.txt format
         private void saveToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (_localData == null && _serverData == null) return;
@@ -403,15 +464,18 @@ namespace RALogicEditor
                 var mergedAchievements = GetMergedList<RaAchievement>(false);
                 var mergedLeaderboards = GetMergedList<RaLeaderboard>(true);
 
+                // Write Achievements (Only local or modified)
                 foreach (var a in mergedAchievements)
                 {
                     if (a.State == AssetState.Synced) continue;
                     sb.AppendLine($"{a.ID}:\"{a.Logic}\":{a.Title}:{a.Description}:::{a.Type}:{a.Author}:{a.Points}:::::{a.BadgeName}");
                 }
 
+                // Write Leaderboards
                 foreach (var l in mergedLeaderboards)
                 {
                     if (l.State == AssetState.Synced) continue;
+                    // Re-format logic string for LB format
                     var parts = l.Logic.Split(new[] { "::" }, StringSplitOptions.None);
                     string pSta = parts.Length > 0 ? parts[0].Replace("STA:", "") : "";
                     string pCan = parts.Length > 1 ? parts[1].Replace("CAN:", "") : "";
@@ -420,6 +484,7 @@ namespace RALogicEditor
                     sb.AppendLine($"L{l.ID}:\"{pSta}\":\"{pCan}\":\"{pSub}\":\"{pVal}\":{l.Format}:{l.Title}:{l.Description}:{l.LowerIsBetter}");
                 }
 
+                // Write Notes
                 var notesToSave = _localData?.Notes ?? new List<CodeNote>();
                 foreach (var n in notesToSave)
                 {
@@ -432,6 +497,7 @@ namespace RALogicEditor
             catch (Exception ex) { MessageBox.Show($"Error saving: {ex.Message}"); }
         }
 
+        // Fills the main GridView
         private void PopulateList()
         {
             achievementGrid.Rows.Clear();
@@ -449,6 +515,7 @@ namespace RALogicEditor
                 foreach (DataGridViewColumn col in achievementGrid.Columns) col.SortMode = DataGridViewColumnSortMode.Automatic;
             }
 
+            // Logic to filter what to show based on Source dropdown
             if (sourceMode == "New")
             {
                 if (_localData != null)
@@ -515,6 +582,7 @@ namespace RALogicEditor
             }
         }
 
+        // Helper to merge Server and Local lists, determining state
         private List<T> GetMergedList<T>(bool leaderboard) where T : IAssetItem
         {
             var list = new List<T>();
@@ -727,6 +795,7 @@ namespace RALogicEditor
                 if (row.Tag is IAssetItem asset)
                 {
                     _isLoading = true;
+                    // Create a detached clone for editing to allow cancelation/reset
                     if (asset.State == AssetState.Synced)
                     {
                         IAssetItem clone;
@@ -836,6 +905,7 @@ namespace RALogicEditor
 
             PushMainUndo();
 
+            // Generate ID (111000001 is common start for local devs)
             int newId = 111000001;
             var allIds = _currentDisplayList.Select(x => x.ID).ToList();
             if (allIds.Any())
@@ -1014,6 +1084,7 @@ namespace RALogicEditor
         private void achievementGrid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0) LoadSelectedAsset(); }
     }
 
+    // Helper class for Recent Files
     public class RecentFilesManager
     {
         private const int MaxFiles = 5;

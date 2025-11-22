@@ -8,7 +8,7 @@ namespace RARPEditor.Helpers
         private static readonly string CacheDir = Path.Combine(Application.StartupPath, "Cache", "Badges");
         private static readonly HttpClient _client = new HttpClient();
 
-        // Memory cache to prevent re-loading from disk repeatedly
+        // In-memory cache for this session
         private static Dictionary<string, Image> _memoryCache = new Dictionary<string, Image>();
 
         static ImageCache()
@@ -17,7 +17,7 @@ namespace RARPEditor.Helpers
                 Directory.CreateDirectory(CacheDir);
         }
 
-        // Must be called when loading a new file/project to free memory
+        // Clears memory cache to free resources (called when loading a new game)
         public static void Clear()
         {
             foreach (var img in _memoryCache.Values)
@@ -32,12 +32,13 @@ namespace RARPEditor.Helpers
             if (string.IsNullOrEmpty(badgeName) || badgeName == "00000")
                 return CreatePlaceholder();
 
-            // Check memory cache first
+            // 1. Check Memory
             if (_memoryCache.ContainsKey(badgeName))
                 return _memoryCache[badgeName];
 
             string localPath = Path.Combine(CacheDir, $"{badgeName}.png");
 
+            // 2. Check Disk
             if (File.Exists(localPath))
             {
                 var img = LoadImageSafe(localPath);
@@ -50,7 +51,7 @@ namespace RARPEditor.Helpers
 
             try
             {
-                // Download from RA
+                // 3. Download from RA
                 string url = $"https://media.retroachievements.org/Badge/{badgeName}.png";
                 var data = await _client.GetByteArrayAsync(url);
 
@@ -70,13 +71,13 @@ namespace RARPEditor.Helpers
             }
         }
 
+        // Loads image non-exclusively so file isn't locked
         private static Image? LoadImageSafe(string path)
         {
             try
             {
                 using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read))
                 {
-                    // Create a copy to avoid locking the file stream
                     return new Bitmap(fs);
                 }
             }

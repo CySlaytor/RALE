@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using RALogicEditor.Forms;
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RARPEditor.Helpers;
@@ -11,42 +12,72 @@ using System.Text.RegularExpressions;
 
 namespace RALogicEditor.Controls
 {
+    // CLASS 1: The Main UserControl
+    // Must be first for Visual Studio Designer support.
     public partial class TriggerEditorControl : UserControl
     {
+        // -- State Variables --
         private bool _isProgrammaticallyChanging;
         private string _triggerText = "";
 
+        // Core data models
         private List<AchievementConditionGroup> _activeGroups = new();
         private Dictionary<string, List<AchievementConditionGroup>> _leaderboardSegments = new();
 
+        // UI Settings
         private bool _showDecimal = false;
         private IAssetItem? _boundAsset;
         private bool _isLeaderboardMode;
 
+        // Undo/Redo
         private Stack<string> _undoStack = new();
         private Stack<string> _redoStack = new();
         private bool _isUndoingRedoing;
 
+        // Grid Tracking
         private DoubleBufferedDataGridView? _activeGrid;
         private int _activeColIndex = -1;
         private int _activeRowIndex = -1;
 
+        // -- Logic Generator State --
+        private class GeneratorDefinition
+        {
+            public int Copies { get; set; }
+            public List<GeneratorRule> Rules { get; set; } = new();
+        }
+
+        private class GeneratorRule
+        {
+            public string SourceAddress { get; set; } = "";
+            public int Stride { get; set; }
+        }
+
+        private Dictionary<int, GeneratorDefinition> _generatorRules = new();
+
+        // -- Events --
         public event EventHandler? TriggerTextChanged;
         public event EventHandler? AchievementDataChanged;
         public event EventHandler<string>? StatusUpdateRequested;
         public event EventHandler? AssetResetRequested;
         public event EventHandler? AddFromCodeNoteRequested;
 
+        // Bridge events
+        public event EventHandler<string>? AddressSelected;
+        public event EventHandler<AddressTooltipEventArgs>? AddressTooltipNeeded;
+        public event EventHandler<PointerChainArgs>? PointerChainSelected;
+
         public char GroupSeparator { get; set; } = 'S';
 
         #region Constants & Menus
         private const string NO_FLAG_TEXT = "(No Flag)";
         private const string NO_OPERATOR_TEXT = "(None)";
+
         private static readonly string[] Flags = { NO_FLAG_TEXT, "Reset If", "Pause If", "Add Source", "Sub Source", "Add Hits", "Sub Hits", "Add Address", "AndNext", "OrNext", "Measured", "MeasuredIf", "Measured%", "Trigger", "ResetNextIf", "Remember" };
         private static readonly string[] OperandTypes = { "Mem", "Value", "Delta", "Prior", "BCD", "Inverted", "Float", "Recall" };
         private static readonly string[] MemorySizes = { "", "8-bit", "16-bit", "24-bit", "32-bit", "Bit0", "Bit1", "Bit2", "Bit3", "Bit4", "Bit5", "Bit6", "Bit7", "Lower4", "Upper4", "BitCount", "16-bit BE", "24-bit BE", "32-bit BE", "Float", "Float BE", "Double32", "Double32 BE", "MBF32", "MBF32 LE" };
         private static readonly string[] ComparisonOperators = { NO_OPERATOR_TEXT, "=", "!=", "<", "<=", ">", ">=" };
         private static readonly string[] ArithmeticOperators = { NO_OPERATOR_TEXT, "&", "^", "+", "-", "*", "/", "%" };
+
         private static readonly HashSet<string> ArithmeticFlags = new() { "Add Source", "Sub Source", "Add Address", "Remember" };
         private static readonly HashSet<string> StrictComparisonFlags = new() { "Reset If", "Pause If", "Add Hits", "Sub Hits", "AndNext", "OrNext", "MeasuredIf", "Trigger", "ResetNextIf" };
         private static readonly HashSet<string> FlagsWithoutHits = new() { "Add Source", "Sub Source", "Add Address", "AndNext", "OrNext" };
@@ -93,17 +124,23 @@ namespace RALogicEditor.Controls
             CreateEditingContextMenus();
             InitializeHeaderEvents();
             InitializeLeaderboardControls();
+
+            chkShowDecimal.CheckedChanged += (s, e) =>
+            {
+                _showDecimal = chkShowDecimal.Checked;
+                RefreshCurrentGridDisplay();
+            };
+
             SetStatus("Ready");
         }
 
         private void SetStatus(string message)
         {
             if (lblEditorStatus != null)
-            {
                 lblEditorStatus.Text = message;
-            }
         }
 
+        // Setup Leaderboard UI
         private void InitializeLeaderboardControls()
         {
             lvLeaderboardComponents.Items.Clear();
@@ -118,6 +155,31 @@ namespace RALogicEditor.Controls
             lvLeaderboardComponents.SelectedIndexChanged += LvLeaderboardComponents_SelectedIndexChanged;
         }
 
+        // Leaderboard Segment Click Handler
+        private void LvLeaderboardComponents_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (_isProgrammaticallyChanging) return;
+            if (lvLeaderboardComponents.SelectedItems.Count > 0)
+            {
+                RefreshLeaderboardGroupsList();
+            }
+        }
+
+        // Loads the specific leaderboard logic (Start/Cancel/Submit/Value) into the active groups
+        private void RefreshLeaderboardGroupsList()
+        {
+            if (lvLeaderboardComponents.SelectedItems.Count == 0) return;
+
+            string key = lvLeaderboardComponents.SelectedItems[0].Text;
+
+            if (_leaderboardSegments.TryGetValue(key, out var segGroups))
+            {
+                _activeGroups = segGroups;
+                RefreshGroupsListUI();
+            }
+        }
+
+        // Setup Grid
         private void InitializeGrids()
         {
             AddGridColumn(conditionGrid, "ColID", "ID", 35, true);
@@ -137,7 +199,7 @@ namespace RALogicEditor.Controls
             conditionGrid.EditingControlShowing += Grid_EditingControlShowing;
             conditionGrid.CellEndEdit += Grid_CellEndEdit;
             conditionGrid.KeyDown += Grid_KeyDown;
-            conditionGrid.CellToolTipTextNeeded += Grid_CellToolTipTextNeeded;
+            conditionGrid.CellEnter += Grid_CellEnter;
 
             conditionGrid.ContextMenuStrip.Opening += (s, e) =>
             {
@@ -149,37 +211,130 @@ namespace RALogicEditor.Controls
                 copyRowToolStripMenuItem.Enabled = any;
                 copyLogicToolStripMenuItem.Enabled = any;
                 pasteToolStripMenuItem.Enabled = Clipboard.ContainsText();
+
+                createGeneratorToolStripMenuItem.Enabled = any;
+                if (any && conditionGrid.SelectedRows.Count == 1)
+                {
+                    var row = conditionGrid.SelectedRows[0];
+                    string lVal = row.Cells["ColLValue"].Value?.ToString() ?? "";
+                    string rVal = row.Cells["ColRValue"].Value?.ToString() ?? "";
+                    createGeneratorToolStripMenuItem.Enabled = lVal.StartsWith("0x") || rVal.StartsWith("0x");
+                }
             };
 
             groupsList.SelectedIndexChanged += GroupsList_SelectedIndexChanged;
+
             if (groupsList.Columns.Count > 0)
-                groupsList.Columns[0].Width = groupsList.ClientSize.Width - 5;
+                groupsList.Columns[0].Width = groupsList.ClientSize.Width - 2;
+
+            groupsList.Resize += (s, e) =>
+            {
+                if (groupsList.Columns.Count > 0)
+                    groupsList.Columns[0].Width = groupsList.ClientSize.Width - 2;
+            };
         }
 
-        private void Grid_CellToolTipTextNeeded(object? sender, DataGridViewCellToolTipTextNeededEventArgs e)
+        private void RefreshCurrentGridDisplay()
         {
-            if (e.RowIndex < 0) return;
-
-            // Hits Column: Show Hex
-            if (e.ColumnIndex == 9)
+            if (conditionGrid.Tag is AchievementConditionGroup group)
             {
-                var val = conditionGrid.Rows[e.RowIndex].Cells[9].Value?.ToString();
-                if (uint.TryParse(val, out uint hits) && hits > 0)
+                bool isGenerated = false;
+                int index = _activeGroups.IndexOf(group);
+                if (index >= 0)
                 {
-                    e.ToolTipText = $"Hex: 0x{hits:X}";
-                }
-            }
-            // Memory/Value Columns: Show Decimal if it's Hex, or Hex if Decimal
-            else if (e.ColumnIndex == 4 || e.ColumnIndex == 8)
-            {
-                var val = conditionGrid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString();
-                if (!string.IsNullOrEmpty(val) && val.StartsWith("0x"))
-                {
-                    if (long.TryParse(val.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long decVal))
+                    foreach (var kvp in _generatorRules)
                     {
-                        e.ToolTipText = $"Decimal: {decVal}";
+                        if (index > kvp.Key && index <= kvp.Key + kvp.Value.Copies)
+                        {
+                            isGenerated = true;
+                            break;
+                        }
                     }
                 }
+                PopulateGridRows(conditionGrid, group, isGenerated);
+            }
+        }
+
+        private void Grid_CellEnter(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+        }
+
+        private void Grid_KeyDown(object? sender, KeyEventArgs e)
+        {
+            _activeGrid = sender as DoubleBufferedDataGridView;
+
+            if (e.KeyCode == Keys.Enter && _activeGrid != null && _activeGrid.CurrentCell != null)
+            {
+                HandleAddressSelection(_activeGrid.CurrentCell.RowIndex, _activeGrid.CurrentCell.ColumnIndex);
+                e.Handled = true;
+            }
+
+            if (_activeGrid != null && _activeGrid.ReadOnly && e.KeyCode != Keys.C)
+            {
+                if (e.KeyCode == Keys.Delete || e.KeyCode == Keys.V) { e.Handled = true; return; }
+            }
+
+            if (e.Control && e.KeyCode == Keys.V) { PasteLogic(); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.C) { CopySelectedRows(); e.Handled = true; }
+            else if (e.Control && e.Shift && e.KeyCode == Keys.C) { CopySelectedLogic(); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.D) { DuplicateSelectedItems(sender, e); e.Handled = true; }
+            else if (e.Alt && e.KeyCode == Keys.Up) { MoveSelectedItems(-1); e.Handled = true; }
+            else if (e.Alt && e.KeyCode == Keys.Down) { MoveSelectedItems(1); e.Handled = true; }
+            else if (e.KeyCode == Keys.Delete) { DeleteSelected(sender, e); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.Z) { Undo(); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.Y) { Redo(); e.Handled = true; }
+        }
+
+        private void HandleAddressSelection(int rowIndex, int colIndex)
+        {
+            if (_activeGrid == null) return;
+            if (colIndex != 4 && colIndex != 8) return;
+
+            string val = _activeGrid.Rows[rowIndex].Cells[colIndex].Value?.ToString() ?? "";
+            if (!val.StartsWith("0x")) return;
+
+            if (!long.TryParse(val.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long currentOffset))
+                return;
+
+            List<long> offsets = new List<long>();
+            string baseAddress = val;
+
+            var collected = new Stack<long>();
+            collected.Push(currentOffset);
+
+            int scanIndex = rowIndex - 1;
+            bool chainFound = false;
+
+            while (scanIndex >= 0)
+            {
+                var row = _activeGrid.Rows[scanIndex];
+                string flag = row.Cells["ColFlag"].Value?.ToString() ?? "";
+                string memVal = row.Cells["ColLValue"].Value?.ToString() ?? "";
+
+                if (flag == "Add Address" && memVal.StartsWith("0x") &&
+                    long.TryParse(memVal.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long addr))
+                {
+                    collected.Push(addr);
+                    scanIndex--;
+                    chainFound = true;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (chainFound)
+            {
+                long baseAddrLong = collected.Pop();
+                baseAddress = "0x" + baseAddrLong.ToString("x");
+                offsets = collected.ToList();
+                PointerChainSelected?.Invoke(this, new PointerChainArgs(baseAddress, offsets));
+            }
+            else
+            {
+                AddressSelected?.Invoke(this, val);
             }
         }
 
@@ -241,6 +396,7 @@ namespace RALogicEditor.Controls
         {
             _boundAsset = null;
             _triggerText = "";
+            _generatorRules.Clear();
 
             txtTitle.Text = "";
             txtDescription.Text = "";
@@ -272,6 +428,7 @@ namespace RALogicEditor.Controls
         {
             _boundAsset = asset;
             _isLeaderboardMode = asset.IsLeaderboard;
+            _generatorRules.Clear();
             this.TriggerText = asset.Logic;
             _undoStack.Clear();
             _redoStack.Clear();
@@ -392,6 +549,7 @@ namespace RALogicEditor.Controls
                     activeGroup.Conditions.AddRange(conditions);
                     PopulateGridRows(conditionGrid, activeGroup);
                     BuildTriggerAndNotify();
+                    ApplyGeneratorRules(activeGroup);
 
                     conditionGrid.ClearSelection();
                     int startIdx = conditionGrid.Rows.Count - conditions.Count;
@@ -534,36 +692,42 @@ namespace RALogicEditor.Controls
             return segments;
         }
 
-        private void LvLeaderboardComponents_SelectedIndexChanged(object? sender, EventArgs e)
-        {
-            if (_isProgrammaticallyChanging) return;
-            if (lvLeaderboardComponents.SelectedItems.Count > 0)
-            {
-                RefreshLeaderboardGroupsList();
-            }
-        }
-
-        private void RefreshLeaderboardGroupsList()
-        {
-            if (lvLeaderboardComponents.SelectedItems.Count == 0) return;
-
-            string key = lvLeaderboardComponents.SelectedItems[0].Text;
-
-            if (_leaderboardSegments.TryGetValue(key, out var segGroups))
-            {
-                _activeGroups = segGroups;
-                RefreshGroupsListUI();
-            }
-        }
-
         private void RefreshGroupsListUI()
         {
             groupsList.BeginUpdate();
             groupsList.Items.Clear();
-            foreach (var group in _activeGroups)
+
+            HashSet<int> generatedIndices = new HashSet<int>();
+            foreach (var kvp in _generatorRules)
             {
-                groupsList.Items.Add(new ListViewItem(group.GroupName));
+                int masterIndex = kvp.Key;
+                int copies = kvp.Value.Copies;
+                for (int i = 1; i <= copies; i++)
+                {
+                    generatedIndices.Add(masterIndex + i);
+                }
             }
+
+            for (int i = 0; i < _activeGroups.Count; i++)
+            {
+                var group = _activeGroups[i];
+                var item = new ListViewItem(group.GroupName);
+
+                if (generatedIndices.Contains(i))
+                {
+                    item.ForeColor = Color.Gray;
+                    item.Font = new Font(groupsList.Font, FontStyle.Italic);
+                    item.Text += " (Auto)";
+                }
+                else if (_generatorRules.ContainsKey(i))
+                {
+                    item.ForeColor = Color.Blue;
+                    item.Font = new Font(groupsList.Font, FontStyle.Bold);
+                    item.Text += " *";
+                }
+                groupsList.Items.Add(item);
+            }
+
             if (groupsList.Items.Count > 0) groupsList.Items[0].Selected = true;
             else conditionGrid.Rows.Clear();
             groupsList.EndUpdate();
@@ -579,7 +743,18 @@ namespace RALogicEditor.Controls
             {
                 var group = _activeGroups[index];
                 conditionGrid.Tag = group;
-                PopulateGridRows(conditionGrid, group);
+
+                bool isGenerated = false;
+                foreach (var kvp in _generatorRules)
+                {
+                    if (index > kvp.Key && index <= kvp.Key + kvp.Value.Copies)
+                    {
+                        isGenerated = true;
+                        break;
+                    }
+                }
+
+                PopulateGridRows(conditionGrid, group, isGenerated);
             }
         }
 
@@ -598,10 +773,14 @@ namespace RALogicEditor.Controls
             grid.Columns.Add(col);
         }
 
-        private void PopulateGridRows(DoubleBufferedDataGridView grid, AchievementConditionGroup group)
+        private void PopulateGridRows(DoubleBufferedDataGridView grid, AchievementConditionGroup group, bool readOnlyMode = false)
         {
             grid.Rows.Clear();
             if (group == null || group.Conditions == null) return;
+
+            grid.ReadOnly = readOnlyMode;
+            grid.DefaultCellStyle.BackColor = readOnlyMode ? SystemColors.Control : SystemColors.Window;
+            grid.DefaultCellStyle.ForeColor = readOnlyMode ? SystemColors.GrayText : SystemColors.ControlText;
 
             for (int i = 0; i < group.Conditions.Count; i++)
             {
@@ -610,12 +789,12 @@ namespace RALogicEditor.Controls
                 var row = new DataGridViewRow();
                 row.CreateCells(grid);
                 row.Tag = cond;
-                SetRowValues(row, cond);
+                SetRowValues(row, cond, readOnlyMode);
                 grid.Rows.Add(row);
             }
         }
 
-        private void SetRowValues(DataGridViewRow row, AchievementCondition cond)
+        private void SetRowValues(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode = false)
         {
             row.Cells[0].Value = cond.ID;
             row.Cells[1].Value = cond.Flag;
@@ -631,37 +810,40 @@ namespace RALogicEditor.Controls
             var lValueCell = row.Cells[4];
             bool leftIsRecall = cond.LeftOperand.Type == "Recall";
 
+            Color editableColor = readOnlyMode ? SystemColors.Control : SystemColors.Window;
+            Color staticColor = SystemColors.ControlLight;
+
             if (cond.LeftOperand.Type is "Float" or "Value" or "Recall")
             {
-                lSizeCell.Style.BackColor = SystemColors.ControlLight;
+                lSizeCell.Style.BackColor = staticColor;
                 lSizeCell.ToolTipText = "";
                 if (leftIsRecall)
                 {
                     lValueCell.ReadOnly = true;
-                    lValueCell.Style.BackColor = SystemColors.ControlLight;
+                    lValueCell.Style.BackColor = staticColor;
                     row.Cells[4].Value = "";
                 }
                 else
                 {
-                    lValueCell.ReadOnly = false;
-                    lValueCell.Style.BackColor = SystemColors.Window;
+                    lValueCell.ReadOnly = readOnlyMode;
+                    lValueCell.Style.BackColor = editableColor;
                 }
             }
             else
             {
                 if (string.IsNullOrEmpty(cond.LeftOperand.Size))
                 {
-                    lSizeCell.Style.BackColor = Color.LemonChiffon;
+                    lSizeCell.Style.BackColor = readOnlyMode ? Color.FromArgb(240, 240, 220) : Color.LemonChiffon;
                     lSizeCell.ToolTipText = "Implicit 32-bit (Please specify size explicitly)";
                 }
                 else
                 {
-                    lSizeCell.Style.BackColor = SystemColors.Window;
+                    lSizeCell.Style.BackColor = editableColor;
                     lSizeCell.ToolTipText = "";
                 }
 
-                lValueCell.ReadOnly = false;
-                lValueCell.Style.BackColor = SystemColors.Window;
+                lValueCell.ReadOnly = readOnlyMode;
+                lValueCell.Style.BackColor = editableColor;
             }
 
             var rTypeCell = row.Cells[6];
@@ -671,31 +853,31 @@ namespace RALogicEditor.Controls
 
             if (string.IsNullOrEmpty(cond.Operator))
             {
-                rTypeCell.Style.BackColor = SystemColors.ControlLight;
-                rSizeCell.Style.BackColor = SystemColors.ControlLight;
+                rTypeCell.Style.BackColor = staticColor;
+                rSizeCell.Style.BackColor = staticColor;
                 rValueCell.ReadOnly = true;
-                rValueCell.Style.BackColor = SystemColors.ControlLight;
+                rValueCell.Style.BackColor = staticColor;
                 row.Cells[6].Value = "";
                 row.Cells[7].Value = "";
                 row.Cells[8].Value = "";
             }
             else
             {
-                rTypeCell.Style.BackColor = SystemColors.Window;
+                rTypeCell.Style.BackColor = editableColor;
 
                 if (rightIsRecall)
                 {
-                    rSizeCell.Style.BackColor = SystemColors.ControlLight;
+                    rSizeCell.Style.BackColor = staticColor;
                     rSizeCell.ToolTipText = "";
                     rValueCell.ReadOnly = true;
-                    rValueCell.Style.BackColor = SystemColors.ControlLight;
+                    rValueCell.Style.BackColor = staticColor;
                     row.Cells[8].Value = "";
                 }
                 else if (cond.RightOperand.Type is "Float" or "Value")
                 {
-                    rValueCell.ReadOnly = false;
-                    rValueCell.Style.BackColor = SystemColors.Window;
-                    rSizeCell.Style.BackColor = SystemColors.ControlLight;
+                    rValueCell.ReadOnly = readOnlyMode;
+                    rValueCell.Style.BackColor = editableColor;
+                    rSizeCell.Style.BackColor = staticColor;
                     rSizeCell.ToolTipText = "";
                 }
                 else
@@ -704,23 +886,23 @@ namespace RALogicEditor.Controls
                     {
                         if (MemoryTypes.Contains(cond.RightOperand.Type))
                         {
-                            rSizeCell.Style.BackColor = Color.LemonChiffon;
+                            rSizeCell.Style.BackColor = readOnlyMode ? Color.FromArgb(240, 240, 220) : Color.LemonChiffon;
                             rSizeCell.ToolTipText = "Implicit 32-bit (Please specify size explicitly)";
                         }
                         else
                         {
-                            rSizeCell.Style.BackColor = SystemColors.Window;
+                            rSizeCell.Style.BackColor = editableColor;
                             rSizeCell.ToolTipText = "";
                         }
                     }
                     else
                     {
-                        rSizeCell.Style.BackColor = SystemColors.Window;
+                        rSizeCell.Style.BackColor = editableColor;
                         rSizeCell.ToolTipText = "";
                     }
 
-                    rValueCell.ReadOnly = false;
-                    rValueCell.Style.BackColor = SystemColors.Window;
+                    rValueCell.ReadOnly = readOnlyMode;
+                    rValueCell.Style.BackColor = editableColor;
                 }
             }
 
@@ -729,13 +911,13 @@ namespace RALogicEditor.Controls
                 cond.RequiredHits = 0;
                 row.Cells[9].Value = "";
                 row.Cells[9].ReadOnly = true;
-                row.Cells[9].Style.BackColor = SystemColors.ControlLight;
+                row.Cells[9].Style.BackColor = staticColor;
             }
             else
             {
                 row.Cells[9].Value = cond.RequiredHits > 0 ? cond.RequiredHits.ToString() : "";
-                row.Cells[9].ReadOnly = false;
-                row.Cells[9].Style.BackColor = SystemColors.Window;
+                row.Cells[9].ReadOnly = readOnlyMode;
+                row.Cells[9].Style.BackColor = editableColor;
             }
         }
         #endregion
@@ -750,11 +932,14 @@ namespace RALogicEditor.Controls
         private string FormatDisplayValue(Operand operand, string sizeReference = "")
         {
             if (string.IsNullOrEmpty(operand.Value)) return "";
+
             if (long.TryParse(operand.Value.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val))
             {
                 if (operand.Type == "Value")
                 {
+                    // Apply Show Decimal setting only for "Value" type
                     if (_showDecimal) return val.ToString();
+
                     int padding = GetPaddingForSize(sizeReference);
                     long mask = GetMaskForSize(sizeReference);
                     return "0x" + (val & mask).ToString($"x{padding}");
@@ -875,6 +1060,9 @@ namespace RALogicEditor.Controls
                 ApplyConditionLogicRules(cond);
                 SetRowValues(row, cond);
                 BuildTriggerAndNotify();
+
+                if (grid.Tag is AchievementConditionGroup group)
+                    ApplyGeneratorRules(group);
             }
         }
 
@@ -971,6 +1159,8 @@ namespace RALogicEditor.Controls
                     _activeGrid.Rows[e.RowIndex].Selected = true;
                 }
 
+                if (_activeGrid.ReadOnly) return;
+
                 var colName = _activeGrid.Columns[e.ColumnIndex].Name;
                 if (colName == "ColFlag") _flagContextMenu.Show(Cursor.Position);
                 else if (colName == "ColLType" || colName == "ColRType") _typeContextMenu.Show(Cursor.Position);
@@ -997,10 +1187,14 @@ namespace RALogicEditor.Controls
         private void OnContextMenuItemClick(object? sender, EventArgs e)
         {
             if (_activeGrid == null || sender is not ToolStripMenuItem item) return;
+            if (_activeGrid.ReadOnly) return;
+
             DoubleBufferedDataGridView grid = _activeGrid!;
             PushUndoState();
             string val = item.Tag as string ?? "";
             if (val == NO_FLAG_TEXT || val == NO_OPERATOR_TEXT) val = "";
+
+            AchievementConditionGroup? currentGroup = grid.Tag as AchievementConditionGroup;
 
             foreach (DataGridViewRow row in grid.SelectedRows)
             {
@@ -1028,6 +1222,10 @@ namespace RALogicEditor.Controls
                 }
             }
             BuildTriggerAndNotify();
+
+            if (currentGroup != null)
+                ApplyGeneratorRules(currentGroup);
+
             SetStatus("Updated condition property.");
         }
         #endregion
@@ -1140,19 +1338,7 @@ namespace RALogicEditor.Controls
             _isUndoingRedoing = false;
             SetStatus("Redone last action.");
         }
-        private void Grid_KeyDown(object? sender, KeyEventArgs e)
-        {
-            _activeGrid = sender as DoubleBufferedDataGridView;
-            if (e.Control && e.KeyCode == Keys.V) { PasteLogic(); e.Handled = true; }
-            else if (e.Control && e.KeyCode == Keys.C) { CopySelectedRows(); e.Handled = true; }
-            else if (e.Control && e.Shift && e.KeyCode == Keys.C) { CopySelectedLogic(); e.Handled = true; }
-            else if (e.Control && e.KeyCode == Keys.D) { DuplicateSelectedItems(sender, e); e.Handled = true; }
-            else if (e.Alt && e.KeyCode == Keys.Up) { MoveSelectedItems(-1); e.Handled = true; }
-            else if (e.Alt && e.KeyCode == Keys.Down) { MoveSelectedItems(1); e.Handled = true; }
-            else if (e.KeyCode == Keys.Delete) { DeleteSelected(sender, e); e.Handled = true; }
-            else if (e.Control && e.KeyCode == Keys.Z) { Undo(); e.Handled = true; }
-            else if (e.Control && e.KeyCode == Keys.Y) { Redo(); e.Handled = true; }
-        }
+
         // Actions
         private void CopySelectedRows()
         {
@@ -1186,6 +1372,8 @@ namespace RALogicEditor.Controls
         private void PasteLogic()
         {
             if (!Clipboard.ContainsText() || _activeGrid == null) return;
+            if (_activeGrid.ReadOnly) return;
+
             string txt = Clipboard.GetText();
             if (string.IsNullOrWhiteSpace(txt)) return;
 
@@ -1204,7 +1392,24 @@ namespace RALogicEditor.Controls
 
             group.Conditions.InsertRange(idx, conds);
             PopulateGridRows(_activeGrid, group);
+
+            // Selection Logic
+            _activeGrid.ClearSelection();
+
+            if (conds.Count > 0 && idx < _activeGrid.Rows.Count)
+            {
+                _activeGrid.CurrentCell = _activeGrid.Rows[idx].Cells[0];
+
+                for (int i = 0; i < conds.Count; i++)
+                {
+                    if (idx + i < _activeGrid.Rows.Count)
+                        _activeGrid.Rows[idx + i].Selected = true;
+                }
+            }
+
             BuildTriggerAndNotify();
+            ApplyGeneratorRules(group);
+
             StatusUpdateRequested?.Invoke(this, "Pasted logic.");
             SetStatus("Logic pasted from clipboard.");
         }
@@ -1212,6 +1417,8 @@ namespace RALogicEditor.Controls
         private void DuplicateSelectedItems(object? sender, EventArgs e)
         {
             if (_activeGrid == null) return;
+            if (_activeGrid.ReadOnly) return;
+
             PushUndoState();
             var group = _activeGrid.Tag as AchievementConditionGroup;
             if (group == null || _activeGrid.SelectedRows.Count == 0) return;
@@ -1223,29 +1430,31 @@ namespace RALogicEditor.Controls
             group.Conditions.InsertRange(idx, clones);
             PopulateGridRows(_activeGrid, group);
 
+            // Selection Logic
             _activeGrid.ClearSelection();
+
             if (idx < _activeGrid.Rows.Count)
             {
-                for (int i = 0; i < clones.Count; i++)
+                _activeGrid.CurrentCell = _activeGrid.Rows[idx].Cells[0];
+            }
+
+            for (int i = 0; i < clones.Count; i++)
+            {
+                if (idx + i < _activeGrid.Rows.Count)
                 {
-                    if (idx + i < _activeGrid.Rows.Count)
-                    {
-                        _activeGrid.Rows[idx + i].Selected = true;
-                    }
-                }
-                if (_activeGrid.Columns.Count > 0)
-                {
-                    _activeGrid.CurrentCell = _activeGrid.Rows[idx].Cells[0];
+                    _activeGrid.Rows[idx + i].Selected = true;
                 }
             }
 
             BuildTriggerAndNotify();
+            ApplyGeneratorRules(group);
             SetStatus("Conditions duplicated.");
         }
 
         private void DeleteSelected(object? sender, EventArgs e)
         {
             if (_activeGrid == null) return;
+            if (_activeGrid.ReadOnly) return;
 
             var group = _activeGrid.Tag as AchievementConditionGroup;
             if (group == null) return;
@@ -1267,11 +1476,14 @@ namespace RALogicEditor.Controls
             }
 
             BuildTriggerAndNotify();
+            ApplyGeneratorRules(group);
             SetStatus("Conditions deleted.");
         }
         private void MoveSelectedItems(int dist)
         {
             if (_activeGrid == null) return;
+            if (_activeGrid.ReadOnly) return;
+
             var group = _activeGrid.Tag as AchievementConditionGroup;
             if (group == null) return;
             PushUndoState();
@@ -1290,6 +1502,7 @@ namespace RALogicEditor.Controls
             _activeGrid.ClearSelection();
             foreach (var i in newSel) _activeGrid.Rows[i].Selected = true;
             BuildTriggerAndNotify();
+            ApplyGeneratorRules(group);
             SetStatus("Conditions moved.");
         }
 
@@ -1317,6 +1530,17 @@ namespace RALogicEditor.Controls
 
             if (_activeGroups.Count <= 1) return;
 
+            foreach (var kvp in _generatorRules)
+            {
+                if (idx > kvp.Key && idx <= kvp.Key + kvp.Value.Copies)
+                {
+                    MessageBox.Show("Cannot manually delete a generated group. Modify the Generator on the Master Group instead.", "Action Blocked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+
+            if (_generatorRules.ContainsKey(idx)) _generatorRules.Remove(idx);
+
             PushUndoState();
             _activeGroups.RemoveAt(idx);
             groupsList.Items.RemoveAt(idx);
@@ -1337,6 +1561,35 @@ namespace RALogicEditor.Controls
             SetStatus("Group removed.");
         }
 
+        private void removeAllAltGroupsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (_activeGroups.Count <= 1) return;
+
+            if (_generatorRules.Count > 0)
+            {
+                var result = MessageBox.Show("This will delete all Alt groups, including those managed by Generators. Are you sure?", "Confirm Delete All", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result != DialogResult.Yes) return;
+            }
+            else
+            {
+                var result = MessageBox.Show("Are you sure you want to remove all Alt groups? This cannot be easily undone without Undo.", "Confirm Delete All", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (result != DialogResult.Yes) return;
+            }
+
+            PushUndoState();
+            _generatorRules.Clear();
+
+            var first = _activeGroups[0];
+            _activeGroups.Clear();
+            _activeGroups.Add(first);
+
+            if (_isLeaderboardMode == false && first.GroupName != "Core") first.GroupName = "Core";
+
+            RefreshGroupsListUI();
+            BuildTriggerAndNotify();
+            SetStatus("All Alt groups removed.");
+        }
+
         private void moveUpToolStripMenuItem_Click(object sender, EventArgs e) => MoveSelectedItems(-1);
         private void moveDownToolStripMenuItem_Click(object sender, EventArgs e) => MoveSelectedItems(1);
         private void duplicateToolStripMenuItem_Click(object sender, EventArgs e) => DuplicateSelectedItems(sender, e);
@@ -1347,8 +1600,9 @@ namespace RALogicEditor.Controls
         private void addConditionToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (_activeGrid == null) return;
+            if (_activeGrid.ReadOnly) return;
+
             PushUndoState();
-            // Updated logic to default to 0=1 (False condition)
             var cond = new AchievementCondition
             {
                 LeftOperand = { Type = "Value", Value = "0" },
@@ -1362,10 +1616,126 @@ namespace RALogicEditor.Controls
                 group.Conditions.Add(cond);
                 PopulateGridRows(_activeGrid!, group);
                 BuildTriggerAndNotify();
+                ApplyGeneratorRules(group);
             }
             SetStatus("Condition added: 0=1");
         }
         private void addGroupToolStripMenuItem_Click(object sender, EventArgs e) => AddGroupAction(sender, e);
+        #endregion
+
+        #region Generator Logic
+        private void createGeneratorToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (conditionGrid.SelectedRows.Count != 1) return;
+            var group = conditionGrid.Tag as AchievementConditionGroup;
+            if (group == null) return;
+
+            int groupIndex = _activeGroups.IndexOf(group);
+            if (groupIndex == -1) return;
+
+            var row = conditionGrid.SelectedRows[0];
+            string lVal = row.Cells["ColLValue"].Value?.ToString() ?? "";
+            string rVal = row.Cells["ColRValue"].Value?.ToString() ?? "";
+
+            string targetAddress = lVal.StartsWith("0x") ? lVal : (rVal.StartsWith("0x") ? rVal : "");
+            if (string.IsNullOrEmpty(targetAddress)) return;
+
+            using var form = new GeneratorConfigForm(targetAddress);
+            if (form.ShowDialog() == DialogResult.OK)
+            {
+                PushUndoState();
+
+                if (!_generatorRules.ContainsKey(groupIndex))
+                {
+                    _generatorRules[groupIndex] = new GeneratorDefinition
+                    {
+                        Copies = form.Copies,
+                        Rules = new List<GeneratorRule>()
+                    };
+                }
+                else
+                {
+                    _generatorRules[groupIndex].Copies = form.Copies;
+                }
+
+                var def = _generatorRules[groupIndex];
+                var existingRule = def.Rules.FirstOrDefault(r => r.SourceAddress == targetAddress);
+                if (existingRule != null)
+                {
+                    existingRule.Stride = form.Stride;
+                }
+                else
+                {
+                    def.Rules.Add(new GeneratorRule { SourceAddress = targetAddress, Stride = form.Stride });
+                }
+
+                ApplyGeneratorRules(group);
+                RefreshGroupsListUI();
+            }
+        }
+
+        private void ApplyGeneratorRules(AchievementConditionGroup masterGroup)
+        {
+            int masterIndex = _activeGroups.IndexOf(masterGroup);
+            if (masterIndex == -1 || !_generatorRules.ContainsKey(masterIndex)) return;
+
+            var def = _generatorRules[masterIndex];
+
+            while (_activeGroups.Count <= masterIndex + def.Copies)
+            {
+                _activeGroups.Insert(masterIndex + 1, new AchievementConditionGroup { GroupName = "Temp" });
+            }
+
+            for (int i = 1; i <= def.Copies; i++)
+            {
+                int targetGroupIndex = masterIndex + i;
+                var targetGroup = _activeGroups[targetGroupIndex];
+
+                string baseName = masterGroup.GroupName;
+                if (baseName.Contains(" #"))
+                {
+                    baseName = Regex.Replace(baseName, @" #\d+", "");
+                }
+                targetGroup.GroupName = $"{baseName} (+{i})";
+
+                targetGroup.Conditions.Clear();
+                foreach (var cond in masterGroup.Conditions)
+                {
+                    var newCond = cond.Clone();
+
+                    foreach (var rule in def.Rules)
+                    {
+                        ApplyOffsetToOperand(newCond.LeftOperand, rule.SourceAddress, rule.Stride, i);
+                        ApplyOffsetToOperand(newCond.RightOperand, rule.SourceAddress, rule.Stride, i);
+                    }
+
+                    targetGroup.Conditions.Add(newCond);
+                }
+            }
+
+            RefreshGroupsListUI();
+        }
+
+        private void ApplyOffsetToOperand(Operand op, string targetAddress, int stride, int multiplier)
+        {
+            if (op == null || string.IsNullOrEmpty(op.Value)) return;
+            if (op.Type == "Recall") return;
+
+            string cleanTarget = targetAddress.StartsWith("0x") ? targetAddress.Substring(2) : targetAddress;
+            string cleanOp = op.Value.StartsWith("0x") ? op.Value.Substring(2) : op.Value;
+
+            if (cleanOp.Equals(cleanTarget, StringComparison.OrdinalIgnoreCase))
+            {
+                if (long.TryParse(cleanOp, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long baseVal))
+                {
+                    long offset = (long)stride * multiplier;
+                    long newVal = baseVal + offset;
+
+                    int padding = cleanOp.Length;
+                    op.Value = "0x" + newVal.ToString($"X{padding}");
+                }
+            }
+        }
         #endregion
 
         #region String Utils
@@ -1471,5 +1841,26 @@ namespace RALogicEditor.Controls
             return sb.ToString();
         }
         #endregion
+    }
+
+    // -- HELPER CLASSES --
+
+    public class AddressTooltipEventArgs : EventArgs
+    {
+        public string Address { get; }
+        public string TooltipText { get; set; } = "";
+        public AddressTooltipEventArgs(string address) { Address = address; }
+    }
+
+    public class PointerChainArgs : EventArgs
+    {
+        public string BaseAddress { get; set; }
+        public List<long> Offsets { get; set; }
+
+        public PointerChainArgs(string baseAddr, List<long> offsets)
+        {
+            BaseAddress = baseAddr;
+            Offsets = offsets;
+        }
     }
 }

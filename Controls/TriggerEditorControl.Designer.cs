@@ -12,397 +12,444 @@
 
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
-            this.panelHeader = new System.Windows.Forms.Panel();
-            this.btnAddNote = new System.Windows.Forms.Button();
-            this.btnReset = new System.Windows.Forms.Button();
-            this.lvLeaderboardComponents = new System.Windows.Forms.ListView();
-            this.colLbComp = new System.Windows.Forms.ColumnHeader();
-            this.lblAuthor = new System.Windows.Forms.Label();
-            this.cmbType = new System.Windows.Forms.ComboBox();
-            this.cmbPoints = new System.Windows.Forms.ComboBox();
-            this.txtDescription = new System.Windows.Forms.TextBox();
-            this.txtTitle = new System.Windows.Forms.TextBox();
-            this.pbBadge = new System.Windows.Forms.PictureBox();
-            this.splitGroups = new System.Windows.Forms.SplitContainer();
-            this.groupsList = new System.Windows.Forms.ListView();
-            this.colGroups = new System.Windows.Forms.ColumnHeader();
-            this.groupsContextMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.addGroupToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.removeGroupToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.conditionGrid = new RALogicEditor.Controls.DoubleBufferedDataGridView();
-            this.gridContextMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.moveUpToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.moveDownToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
-            this.addConditionToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.duplicateToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.deleteToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
-            this.copyLogicToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.copyRowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.pasteToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.statusStripEditor = new System.Windows.Forms.StatusStrip();
-            this.lblEditorStatus = new System.Windows.Forms.ToolStripStatusLabel();
-            this.panelHeader.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.pbBadge)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.splitGroups)).BeginInit();
-            this.splitGroups.Panel1.SuspendLayout();
-            this.splitGroups.Panel2.SuspendLayout();
-            this.splitGroups.SuspendLayout();
-            this.groupsContextMenu.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.conditionGrid)).BeginInit();
-            this.gridContextMenu.SuspendLayout();
-            this.statusStripEditor.SuspendLayout();
-            this.SuspendLayout();
+            components = new System.ComponentModel.Container();
+            panelHeader = new Panel();
+            btnAddNote = new Button();
+            btnReset = new Button();
+            lvLeaderboardComponents = new ListView();
+            colLbComp = new ColumnHeader();
+            lblAuthor = new Label();
+            cmbType = new ComboBox();
+            cmbPoints = new ComboBox();
+            txtDescription = new TextBox();
+            txtTitle = new TextBox();
+            pbBadge = new PictureBox();
+            splitGroups = new SplitContainer();
+            groupsList = new ListView();
+            colGroups = new ColumnHeader();
+            groupsContextMenu = new ContextMenuStrip(components);
+            addGroupToolStripMenuItem = new ToolStripMenuItem();
+            removeGroupToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparator4 = new ToolStripSeparator();
+            removeAllAltGroupsToolStripMenuItem = new ToolStripMenuItem();
+            panelGroupButtons = new Panel();
+            btnRemoveGroup = new Button();
+            btnAddGroup = new Button();
+            conditionGrid = new DoubleBufferedDataGridView();
+            gridContextMenu = new ContextMenuStrip(components);
+            moveUpToolStripMenuItem = new ToolStripMenuItem();
+            moveDownToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparator1 = new ToolStripSeparator();
+            addConditionToolStripMenuItem = new ToolStripMenuItem();
+            duplicateToolStripMenuItem = new ToolStripMenuItem();
+            deleteToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparator2 = new ToolStripSeparator();
+            copyLogicToolStripMenuItem = new ToolStripMenuItem();
+            copyRowToolStripMenuItem = new ToolStripMenuItem();
+            pasteToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparator3 = new ToolStripSeparator();
+            createGeneratorToolStripMenuItem = new ToolStripMenuItem();
+            statusStripEditor = new StatusStrip();
+            lblEditorStatus = new ToolStripStatusLabel();
+            chkShowDecimal = new CheckBox();
+            panelHeader.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)pbBadge).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)splitGroups).BeginInit();
+            splitGroups.Panel1.SuspendLayout();
+            splitGroups.Panel2.SuspendLayout();
+            splitGroups.SuspendLayout();
+            groupsContextMenu.SuspendLayout();
+            panelGroupButtons.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)conditionGrid).BeginInit();
+            gridContextMenu.SuspendLayout();
+            statusStripEditor.SuspendLayout();
+            SuspendLayout();
             // 
             // panelHeader
             // 
-            this.panelHeader.BackColor = System.Drawing.SystemColors.Control;
-            this.panelHeader.Controls.Add(this.btnAddNote);
-            this.panelHeader.Controls.Add(this.btnReset);
-            this.panelHeader.Controls.Add(this.lvLeaderboardComponents);
-            this.panelHeader.Controls.Add(this.lblAuthor);
-            this.panelHeader.Controls.Add(this.cmbType);
-            this.panelHeader.Controls.Add(this.cmbPoints);
-            this.panelHeader.Controls.Add(this.txtDescription);
-            this.panelHeader.Controls.Add(this.txtTitle);
-            this.panelHeader.Controls.Add(this.pbBadge);
-            this.panelHeader.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelHeader.Location = new System.Drawing.Point(0, 0);
-            this.panelHeader.Name = "panelHeader";
-            this.panelHeader.Padding = new System.Windows.Forms.Padding(5);
-            this.panelHeader.Size = new System.Drawing.Size(700, 85);
-            this.panelHeader.TabIndex = 0;
+            panelHeader.BackColor = SystemColors.Control;
+            panelHeader.Controls.Add(btnAddNote);
+            panelHeader.Controls.Add(btnReset);
+            panelHeader.Controls.Add(lvLeaderboardComponents);
+            panelHeader.Controls.Add(lblAuthor);
+            panelHeader.Controls.Add(cmbType);
+            panelHeader.Controls.Add(cmbPoints);
+            panelHeader.Controls.Add(txtDescription);
+            panelHeader.Controls.Add(txtTitle);
+            panelHeader.Controls.Add(pbBadge);
+            panelHeader.Dock = DockStyle.Top;
+            panelHeader.Location = new Point(0, 0);
+            panelHeader.Name = "panelHeader";
+            panelHeader.Padding = new Padding(5);
+            panelHeader.Size = new Size(700, 85);
+            panelHeader.TabIndex = 0;
             // 
             // btnAddNote
             // 
-            this.btnAddNote.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnAddNote.Location = new System.Drawing.Point(537, 58);
-            this.btnAddNote.Name = "btnAddNote";
-            this.btnAddNote.Size = new System.Drawing.Size(75, 23);
-            this.btnAddNote.TabIndex = 8;
-            this.btnAddNote.Text = "Add Note";
-            this.btnAddNote.UseVisualStyleBackColor = true;
-            this.btnAddNote.Click += new System.EventHandler(this.btnAddNote_Click);
+            btnAddNote.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnAddNote.Location = new Point(537, 58);
+            btnAddNote.Name = "btnAddNote";
+            btnAddNote.Size = new Size(75, 23);
+            btnAddNote.TabIndex = 8;
+            btnAddNote.Text = "Add Note";
+            btnAddNote.UseVisualStyleBackColor = true;
+            btnAddNote.Click += btnAddNote_Click;
             // 
             // btnReset
             // 
-            this.btnReset.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnReset.Location = new System.Drawing.Point(618, 58);
-            this.btnReset.Name = "btnReset";
-            this.btnReset.Size = new System.Drawing.Size(75, 23);
-            this.btnReset.TabIndex = 7;
-            this.btnReset.Text = "Reset";
-            this.btnReset.UseVisualStyleBackColor = true;
-            this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
+            btnReset.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnReset.Location = new Point(618, 58);
+            btnReset.Name = "btnReset";
+            btnReset.Size = new Size(75, 23);
+            btnReset.TabIndex = 7;
+            btnReset.Text = "Reset";
+            btnReset.UseVisualStyleBackColor = true;
+            btnReset.Click += btnReset_Click;
             // 
             // lvLeaderboardComponents
             // 
-            this.lvLeaderboardComponents.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
-            this.colLbComp});
-            this.lvLeaderboardComponents.FullRowSelect = true;
-            this.lvLeaderboardComponents.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.None;
-            this.lvLeaderboardComponents.HideSelection = false;
-            this.lvLeaderboardComponents.Location = new System.Drawing.Point(5, 5);
-            this.lvLeaderboardComponents.MultiSelect = false;
-            this.lvLeaderboardComponents.Name = "lvLeaderboardComponents";
-            this.lvLeaderboardComponents.Scrollable = false;
-            this.lvLeaderboardComponents.Size = new System.Drawing.Size(80, 75);
-            this.lvLeaderboardComponents.TabIndex = 6;
-            this.lvLeaderboardComponents.UseCompatibleStateImageBehavior = false;
-            this.lvLeaderboardComponents.View = System.Windows.Forms.View.Details;
-            this.lvLeaderboardComponents.Visible = false;
+            lvLeaderboardComponents.Columns.AddRange(new ColumnHeader[] { colLbComp });
+            lvLeaderboardComponents.FullRowSelect = true;
+            lvLeaderboardComponents.HeaderStyle = ColumnHeaderStyle.None;
+            lvLeaderboardComponents.Location = new Point(5, 5);
+            lvLeaderboardComponents.MultiSelect = false;
+            lvLeaderboardComponents.Name = "lvLeaderboardComponents";
+            lvLeaderboardComponents.Scrollable = false;
+            lvLeaderboardComponents.Size = new Size(80, 75);
+            lvLeaderboardComponents.TabIndex = 6;
+            lvLeaderboardComponents.UseCompatibleStateImageBehavior = false;
+            lvLeaderboardComponents.View = View.Details;
+            lvLeaderboardComponents.Visible = false;
             // 
             // colLbComp
             // 
-            this.colLbComp.Text = "Type";
-            this.colLbComp.Width = 76;
+            colLbComp.Text = "Type";
+            colLbComp.Width = 76;
             // 
             // lblAuthor
             // 
-            this.lblAuthor.AutoSize = true;
-            this.lblAuthor.ForeColor = System.Drawing.Color.Gray;
-            this.lblAuthor.Location = new System.Drawing.Point(232, 63);
-            this.lblAuthor.Name = "lblAuthor";
-            this.lblAuthor.Size = new System.Drawing.Size(96, 15);
-            this.lblAuthor.TabIndex = 5;
-            this.lblAuthor.Text = "Author: Unknown";
+            lblAuthor.AutoSize = true;
+            lblAuthor.ForeColor = Color.Gray;
+            lblAuthor.Location = new Point(232, 63);
+            lblAuthor.Name = "lblAuthor";
+            lblAuthor.Size = new Size(101, 15);
+            lblAuthor.TabIndex = 5;
+            lblAuthor.Text = "Author: Unknown";
             // 
             // cmbType
             // 
-            this.cmbType.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbType.FormattingEnabled = true;
-            this.cmbType.Items.AddRange(new object[] {
-            "",
-            "Progression",
-            "Win",
-            "Missable"});
-            this.cmbType.Location = new System.Drawing.Point(126, 59);
-            this.cmbType.Name = "cmbType";
-            this.cmbType.Size = new System.Drawing.Size(100, 23);
-            this.cmbType.TabIndex = 4;
+            cmbType.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbType.FormattingEnabled = true;
+            cmbType.Items.AddRange(new object[] { "", "Progression", "Win", "Missable" });
+            cmbType.Location = new Point(126, 59);
+            cmbType.Name = "cmbType";
+            cmbType.Size = new Size(100, 23);
+            cmbType.TabIndex = 4;
             // 
             // cmbPoints
             // 
-            this.cmbPoints.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbPoints.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
-            this.cmbPoints.FormattingEnabled = true;
-            this.cmbPoints.Items.AddRange(new object[] {
-            "0",
-            "1",
-            "2",
-            "3",
-            "4",
-            "5",
-            "10",
-            "25",
-            "50",
-            "100"});
-            this.cmbPoints.Location = new System.Drawing.Point(75, 59);
-            this.cmbPoints.Name = "cmbPoints";
-            this.cmbPoints.Size = new System.Drawing.Size(45, 23);
-            this.cmbPoints.TabIndex = 3;
+            cmbPoints.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbPoints.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            cmbPoints.FormattingEnabled = true;
+            cmbPoints.Items.AddRange(new object[] { "0", "1", "2", "3", "4", "5", "10", "25", "50", "100" });
+            cmbPoints.Location = new Point(75, 59);
+            cmbPoints.Name = "cmbPoints";
+            cmbPoints.Size = new Size(45, 23);
+            cmbPoints.TabIndex = 3;
             // 
             // txtDescription
             // 
-            this.txtDescription.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtDescription.Location = new System.Drawing.Point(75, 34);
-            this.txtDescription.Multiline = true;
-            this.txtDescription.Name = "txtDescription";
-            this.txtDescription.ScrollBars = System.Windows.Forms.ScrollBars.None; // Changed from Vertical to None
-            this.txtDescription.Size = new System.Drawing.Size(617, 23);
-            this.txtDescription.TabIndex = 2;
+            txtDescription.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtDescription.Location = new Point(75, 34);
+            txtDescription.Multiline = true;
+            txtDescription.Name = "txtDescription";
+            txtDescription.Size = new Size(617, 23);
+            txtDescription.TabIndex = 2;
             // 
             // txtTitle
             // 
-            this.txtTitle.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtTitle.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
-            this.txtTitle.Location = new System.Drawing.Point(75, 5);
-            this.txtTitle.Name = "txtTitle";
-            this.txtTitle.Size = new System.Drawing.Size(617, 27);
-            this.txtTitle.TabIndex = 1;
+            txtTitle.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtTitle.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            txtTitle.Location = new Point(75, 5);
+            txtTitle.Name = "txtTitle";
+            txtTitle.Size = new Size(617, 27);
+            txtTitle.TabIndex = 1;
             // 
             // pbBadge
             // 
-            this.pbBadge.Dock = System.Windows.Forms.DockStyle.Left;
-            this.pbBadge.Location = new System.Drawing.Point(5, 5);
-            this.pbBadge.Name = "pbBadge";
-            this.pbBadge.Size = new System.Drawing.Size(64, 75);
-            this.pbBadge.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
-            this.pbBadge.TabIndex = 0;
-            this.pbBadge.TabStop = false;
+            pbBadge.Dock = DockStyle.Left;
+            pbBadge.Location = new Point(5, 5);
+            pbBadge.Name = "pbBadge";
+            pbBadge.Size = new Size(64, 75);
+            pbBadge.SizeMode = PictureBoxSizeMode.Zoom;
+            pbBadge.TabIndex = 0;
+            pbBadge.TabStop = false;
             // 
             // splitGroups
             // 
-            this.splitGroups.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.splitGroups.FixedPanel = System.Windows.Forms.FixedPanel.Panel1;
-            this.splitGroups.Location = new System.Drawing.Point(0, 85);
-            this.splitGroups.Name = "splitGroups";
+            splitGroups.Dock = DockStyle.Fill;
+            splitGroups.FixedPanel = FixedPanel.Panel1;
+            splitGroups.Location = new Point(0, 85);
+            splitGroups.Name = "splitGroups";
             // 
             // splitGroups.Panel1
             // 
-            this.splitGroups.Panel1.Controls.Add(this.groupsList);
+            splitGroups.Panel1.Controls.Add(groupsList);
+            splitGroups.Panel1.Controls.Add(panelGroupButtons);
+            splitGroups.Panel1MinSize = 65;
             // 
             // splitGroups.Panel2
             // 
-            this.splitGroups.Panel2.Controls.Add(this.conditionGrid);
-            this.splitGroups.Size = new System.Drawing.Size(700, 293);
-            this.splitGroups.SplitterDistance = 75;
-            this.splitGroups.SplitterWidth = 1;
-            this.splitGroups.TabIndex = 1;
+            splitGroups.Panel2.Controls.Add(conditionGrid);
+            splitGroups.Size = new Size(700, 293);
+            splitGroups.SplitterDistance = 65;
+            splitGroups.SplitterWidth = 1;
+            splitGroups.TabIndex = 1;
             // 
             // groupsList
             // 
-            this.groupsList.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
-            this.colGroups});
-            this.groupsList.ContextMenuStrip = this.groupsContextMenu;
-            this.groupsList.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupsList.FullRowSelect = true;
-            this.groupsList.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
-            this.groupsList.HideSelection = false;
-            this.groupsList.Location = new System.Drawing.Point(0, 0);
-            this.groupsList.MultiSelect = false;
-            this.groupsList.Name = "groupsList";
-            this.groupsList.Size = new System.Drawing.Size(75, 293);
-            this.groupsList.TabIndex = 0;
-            this.groupsList.UseCompatibleStateImageBehavior = false;
-            this.groupsList.View = System.Windows.Forms.View.Details;
+            groupsList.Columns.AddRange(new ColumnHeader[] { colGroups });
+            groupsList.ContextMenuStrip = groupsContextMenu;
+            groupsList.Dock = DockStyle.Fill;
+            groupsList.FullRowSelect = true;
+            groupsList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            groupsList.Location = new Point(0, 0);
+            groupsList.MultiSelect = false;
+            groupsList.Name = "groupsList";
+            groupsList.Size = new Size(65, 271);
+            groupsList.TabIndex = 0;
+            groupsList.UseCompatibleStateImageBehavior = false;
+            groupsList.View = View.Details;
+            groupsList.SelectedIndexChanged += GroupsList_SelectedIndexChanged;
             // 
             // colGroups
             // 
-            this.colGroups.Text = "Groups";
-            this.colGroups.Width = 70;
+            colGroups.Text = "Groups";
+            colGroups.Width = 66;
             // 
             // groupsContextMenu
             // 
-            this.groupsContextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.addGroupToolStripMenuItem,
-            this.removeGroupToolStripMenuItem});
-            this.groupsContextMenu.Name = "groupsContextMenu";
-            this.groupsContextMenu.Size = new System.Drawing.Size(154, 48);
+            groupsContextMenu.Items.AddRange(new ToolStripItem[] { addGroupToolStripMenuItem, removeGroupToolStripMenuItem, toolStripSeparator4, removeAllAltGroupsToolStripMenuItem });
+            groupsContextMenu.Name = "groupsContextMenu";
+            groupsContextMenu.Size = new Size(194, 76);
             // 
             // addGroupToolStripMenuItem
             // 
-            this.addGroupToolStripMenuItem.Name = "addGroupToolStripMenuItem";
-            this.addGroupToolStripMenuItem.Size = new System.Drawing.Size(153, 22);
-            this.addGroupToolStripMenuItem.Text = "Add Group";
-            this.addGroupToolStripMenuItem.Click += new System.EventHandler(this.addGroupToolStripMenuItem_Click);
+            addGroupToolStripMenuItem.Name = "addGroupToolStripMenuItem";
+            addGroupToolStripMenuItem.Size = new Size(193, 22);
+            addGroupToolStripMenuItem.Text = "Add Group";
+            addGroupToolStripMenuItem.Click += addGroupToolStripMenuItem_Click;
             // 
             // removeGroupToolStripMenuItem
             // 
-            this.removeGroupToolStripMenuItem.Name = "removeGroupToolStripMenuItem";
-            this.removeGroupToolStripMenuItem.Size = new System.Drawing.Size(153, 22);
-            this.removeGroupToolStripMenuItem.Text = "Remove Group";
-            this.removeGroupToolStripMenuItem.Click += new System.EventHandler(this.removeGroupToolStripMenuItem_Click);
+            removeGroupToolStripMenuItem.Name = "removeGroupToolStripMenuItem";
+            removeGroupToolStripMenuItem.Size = new Size(193, 22);
+            removeGroupToolStripMenuItem.Text = "Remove Group";
+            removeGroupToolStripMenuItem.Click += removeGroupToolStripMenuItem_Click;
+            // 
+            // toolStripSeparator4
+            // 
+            toolStripSeparator4.Name = "toolStripSeparator4";
+            toolStripSeparator4.Size = new Size(190, 6);
+            // 
+            // removeAllAltGroupsToolStripMenuItem
+            // 
+            removeAllAltGroupsToolStripMenuItem.Name = "removeAllAltGroupsToolStripMenuItem";
+            removeAllAltGroupsToolStripMenuItem.Size = new Size(193, 22);
+            removeAllAltGroupsToolStripMenuItem.Text = "Remove All Alt Groups";
+            removeAllAltGroupsToolStripMenuItem.Click += removeAllAltGroupsToolStripMenuItem_Click;
+            // 
+            // panelGroupButtons
+            // 
+            panelGroupButtons.Controls.Add(btnRemoveGroup);
+            panelGroupButtons.Controls.Add(btnAddGroup);
+            panelGroupButtons.Dock = DockStyle.Bottom;
+            panelGroupButtons.Location = new Point(0, 271);
+            panelGroupButtons.Name = "panelGroupButtons";
+            panelGroupButtons.Size = new Size(65, 22);
+            panelGroupButtons.TabIndex = 1;
+            // 
+            // btnRemoveGroup
+            // 
+            btnRemoveGroup.Dock = DockStyle.Right;
+            btnRemoveGroup.Location = new Point(40, 0);
+            btnRemoveGroup.Name = "btnRemoveGroup";
+            btnRemoveGroup.Size = new Size(25, 22);
+            btnRemoveGroup.TabIndex = 1;
+            btnRemoveGroup.Text = "-";
+            btnRemoveGroup.UseVisualStyleBackColor = true;
+            btnRemoveGroup.Click += removeGroupToolStripMenuItem_Click;
+            // 
+            // btnAddGroup
+            // 
+            btnAddGroup.Dock = DockStyle.Left;
+            btnAddGroup.Location = new Point(0, 0);
+            btnAddGroup.Name = "btnAddGroup";
+            btnAddGroup.Size = new Size(25, 22);
+            btnAddGroup.TabIndex = 0;
+            btnAddGroup.Text = "+";
+            btnAddGroup.UseVisualStyleBackColor = true;
+            btnAddGroup.Click += addGroupToolStripMenuItem_Click;
             // 
             // conditionGrid
             // 
-            this.conditionGrid.AllowUserToAddRows = false;
-            this.conditionGrid.AllowUserToDeleteRows = false;
-            this.conditionGrid.AllowUserToResizeRows = false;
-            this.conditionGrid.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.conditionGrid.ContextMenuStrip = this.gridContextMenu;
-            this.conditionGrid.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.conditionGrid.Location = new System.Drawing.Point(0, 0);
-            this.conditionGrid.Name = "conditionGrid";
-            this.conditionGrid.RowHeadersVisible = false;
-            this.conditionGrid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.conditionGrid.Size = new System.Drawing.Size(624, 293);
-            this.conditionGrid.TabIndex = 0;
+            conditionGrid.AllowUserToAddRows = false;
+            conditionGrid.AllowUserToDeleteRows = false;
+            conditionGrid.AllowUserToResizeRows = false;
+            conditionGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            conditionGrid.ContextMenuStrip = gridContextMenu;
+            conditionGrid.Dock = DockStyle.Fill;
+            conditionGrid.Location = new Point(0, 0);
+            conditionGrid.Name = "conditionGrid";
+            conditionGrid.RowHeadersVisible = false;
+            conditionGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            conditionGrid.Size = new Size(634, 293);
+            conditionGrid.TabIndex = 0;
             // 
             // gridContextMenu
             // 
-            this.gridContextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.moveUpToolStripMenuItem,
-            this.moveDownToolStripMenuItem,
-            this.toolStripSeparator1,
-            this.addConditionToolStripMenuItem,
-            this.duplicateToolStripMenuItem,
-            this.deleteToolStripMenuItem,
-            this.toolStripSeparator2,
-            this.copyLogicToolStripMenuItem,
-            this.copyRowToolStripMenuItem,
-            this.pasteToolStripMenuItem});
-            this.gridContextMenu.Name = "gridContextMenu";
-            this.gridContextMenu.Size = new System.Drawing.Size(153, 192);
+            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, createGeneratorToolStripMenuItem });
+            gridContextMenu.Name = "gridContextMenu";
+            gridContextMenu.Size = new Size(209, 220);
             // 
             // moveUpToolStripMenuItem
             // 
-            this.moveUpToolStripMenuItem.Name = "moveUpToolStripMenuItem";
-            this.moveUpToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Alt | System.Windows.Forms.Keys.Up)));
-            this.moveUpToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.moveUpToolStripMenuItem.Text = "Move Up";
-            this.moveUpToolStripMenuItem.Click += new System.EventHandler(this.moveUpToolStripMenuItem_Click);
+            moveUpToolStripMenuItem.Name = "moveUpToolStripMenuItem";
+            moveUpToolStripMenuItem.ShortcutKeys = Keys.Alt | Keys.Up;
+            moveUpToolStripMenuItem.Size = new Size(208, 22);
+            moveUpToolStripMenuItem.Text = "Move Up";
+            moveUpToolStripMenuItem.Click += moveUpToolStripMenuItem_Click;
             // 
             // moveDownToolStripMenuItem
             // 
-            this.moveDownToolStripMenuItem.Name = "moveDownToolStripMenuItem";
-            this.moveDownToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Alt | System.Windows.Forms.Keys.Down)));
-            this.moveDownToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.moveDownToolStripMenuItem.Text = "Move Down";
-            this.moveDownToolStripMenuItem.Click += new System.EventHandler(this.moveDownToolStripMenuItem_Click);
+            moveDownToolStripMenuItem.Name = "moveDownToolStripMenuItem";
+            moveDownToolStripMenuItem.ShortcutKeys = Keys.Alt | Keys.Down;
+            moveDownToolStripMenuItem.Size = new Size(208, 22);
+            moveDownToolStripMenuItem.Text = "Move Down";
+            moveDownToolStripMenuItem.Click += moveDownToolStripMenuItem_Click;
             // 
             // toolStripSeparator1
             // 
-            this.toolStripSeparator1.Name = "toolStripSeparator1";
-            this.toolStripSeparator1.Size = new System.Drawing.Size(149, 6);
+            toolStripSeparator1.Name = "toolStripSeparator1";
+            toolStripSeparator1.Size = new Size(205, 6);
             // 
             // addConditionToolStripMenuItem
             // 
-            this.addConditionToolStripMenuItem.Name = "addConditionToolStripMenuItem";
-            this.addConditionToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.addConditionToolStripMenuItem.Text = "Add Condition";
-            this.addConditionToolStripMenuItem.Click += new System.EventHandler(this.addConditionToolStripMenuItem_Click);
+            addConditionToolStripMenuItem.Name = "addConditionToolStripMenuItem";
+            addConditionToolStripMenuItem.Size = new Size(208, 22);
+            addConditionToolStripMenuItem.Text = "Add Condition";
+            addConditionToolStripMenuItem.Click += addConditionToolStripMenuItem_Click;
             // 
             // duplicateToolStripMenuItem
             // 
-            this.duplicateToolStripMenuItem.Name = "duplicateToolStripMenuItem";
-            this.duplicateToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.D)));
-            this.duplicateToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.duplicateToolStripMenuItem.Text = "Duplicate";
-            this.duplicateToolStripMenuItem.Click += new System.EventHandler(this.duplicateToolStripMenuItem_Click);
+            duplicateToolStripMenuItem.Name = "duplicateToolStripMenuItem";
+            duplicateToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.D;
+            duplicateToolStripMenuItem.Size = new Size(208, 22);
+            duplicateToolStripMenuItem.Text = "Duplicate";
+            duplicateToolStripMenuItem.Click += duplicateToolStripMenuItem_Click;
             // 
             // deleteToolStripMenuItem
             // 
-            this.deleteToolStripMenuItem.Name = "deleteToolStripMenuItem";
-            this.deleteToolStripMenuItem.ShortcutKeys = System.Windows.Forms.Keys.Delete;
-            this.deleteToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.deleteToolStripMenuItem.Text = "Delete";
-            this.deleteToolStripMenuItem.Click += new System.EventHandler(this.deleteToolStripMenuItem_Click);
+            deleteToolStripMenuItem.Name = "deleteToolStripMenuItem";
+            deleteToolStripMenuItem.ShortcutKeys = Keys.Delete;
+            deleteToolStripMenuItem.Size = new Size(208, 22);
+            deleteToolStripMenuItem.Text = "Delete";
+            deleteToolStripMenuItem.Click += deleteToolStripMenuItem_Click;
             // 
             // toolStripSeparator2
             // 
-            this.toolStripSeparator2.Name = "toolStripSeparator2";
-            this.toolStripSeparator2.Size = new System.Drawing.Size(149, 6);
+            toolStripSeparator2.Name = "toolStripSeparator2";
+            toolStripSeparator2.Size = new Size(205, 6);
             // 
             // copyLogicToolStripMenuItem
             // 
-            this.copyLogicToolStripMenuItem.Name = "copyLogicToolStripMenuItem";
-            this.copyLogicToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)(((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Shift)
-            | System.Windows.Forms.Keys.C)));
-            this.copyLogicToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.copyLogicToolStripMenuItem.Text = "Copy Logic";
-            this.copyLogicToolStripMenuItem.Click += new System.EventHandler(this.copyLogicToolStripMenuItem_Click);
+            copyLogicToolStripMenuItem.Name = "copyLogicToolStripMenuItem";
+            copyLogicToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Shift | Keys.C;
+            copyLogicToolStripMenuItem.Size = new Size(208, 22);
+            copyLogicToolStripMenuItem.Text = "Copy Logic";
+            copyLogicToolStripMenuItem.Click += copyLogicToolStripMenuItem_Click;
             // 
             // copyRowToolStripMenuItem
             // 
-            this.copyRowToolStripMenuItem.Name = "copyRowToolStripMenuItem";
-            this.copyRowToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.C)));
-            this.copyRowToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.copyRowToolStripMenuItem.Text = "Copy Row";
-            this.copyRowToolStripMenuItem.Click += new System.EventHandler(this.copyRowToolStripMenuItem_Click);
+            copyRowToolStripMenuItem.Name = "copyRowToolStripMenuItem";
+            copyRowToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.C;
+            copyRowToolStripMenuItem.Size = new Size(208, 22);
+            copyRowToolStripMenuItem.Text = "Copy Row";
+            copyRowToolStripMenuItem.Click += copyRowToolStripMenuItem_Click;
             // 
             // pasteToolStripMenuItem
             // 
-            this.pasteToolStripMenuItem.Name = "pasteToolStripMenuItem";
-            this.pasteToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.V)));
-            this.pasteToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.pasteToolStripMenuItem.Text = "Paste Logic";
-            this.pasteToolStripMenuItem.Click += new System.EventHandler(this.pasteToolStripMenuItem_Click);
+            pasteToolStripMenuItem.Name = "pasteToolStripMenuItem";
+            pasteToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.V;
+            pasteToolStripMenuItem.Size = new Size(208, 22);
+            pasteToolStripMenuItem.Text = "Paste Logic";
+            pasteToolStripMenuItem.Click += pasteToolStripMenuItem_Click;
+            // 
+            // toolStripSeparator3
+            // 
+            toolStripSeparator3.Name = "toolStripSeparator3";
+            toolStripSeparator3.Size = new Size(205, 6);
+            // 
+            // createGeneratorToolStripMenuItem
+            // 
+            createGeneratorToolStripMenuItem.Name = "createGeneratorToolStripMenuItem";
+            createGeneratorToolStripMenuItem.Size = new Size(208, 22);
+            createGeneratorToolStripMenuItem.Text = "Create Generator...";
+            createGeneratorToolStripMenuItem.Click += createGeneratorToolStripMenuItem_Click;
             // 
             // statusStripEditor
             // 
-            this.statusStripEditor.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.lblEditorStatus});
-            this.statusStripEditor.Location = new System.Drawing.Point(0, 378);
-            this.statusStripEditor.Name = "statusStripEditor";
-            this.statusStripEditor.Size = new System.Drawing.Size(700, 22);
-            this.statusStripEditor.SizingGrip = false;
-            this.statusStripEditor.TabIndex = 2;
-            this.statusStripEditor.Text = "statusStrip1";
+            statusStripEditor.Items.AddRange(new ToolStripItem[] { lblEditorStatus });
+            statusStripEditor.Location = new Point(0, 378);
+            statusStripEditor.Name = "statusStripEditor";
+            statusStripEditor.Size = new Size(700, 22);
+            statusStripEditor.SizingGrip = false;
+            statusStripEditor.TabIndex = 2;
+            statusStripEditor.Text = "statusStrip1";
             // 
             // lblEditorStatus
             // 
-            this.lblEditorStatus.Name = "lblEditorStatus";
-            this.lblEditorStatus.Size = new System.Drawing.Size(39, 17);
-            this.lblEditorStatus.Text = "Ready";
+            lblEditorStatus.Name = "lblEditorStatus";
+            lblEditorStatus.Size = new Size(39, 17);
+            lblEditorStatus.Text = "Ready";
+            // 
+            // chkShowDecimal
+            // 
+            chkShowDecimal.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            chkShowDecimal.AutoSize = true;
+            chkShowDecimal.BackColor = SystemColors.Control;
+            chkShowDecimal.Location = new Point(580, 381);
+            chkShowDecimal.Name = "chkShowDecimal";
+            chkShowDecimal.Size = new Size(101, 19);
+            chkShowDecimal.TabIndex = 9;
+            chkShowDecimal.Text = "Show Decimal";
+            chkShowDecimal.UseVisualStyleBackColor = true;
             // 
             // TriggerEditorControl
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.Controls.Add(this.splitGroups);
-            this.Controls.Add(this.statusStripEditor);
-            this.Controls.Add(this.panelHeader);
-            this.Name = "TriggerEditorControl";
-            this.Size = new System.Drawing.Size(700, 400);
-            this.panelHeader.ResumeLayout(false);
-            this.panelHeader.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.pbBadge)).EndInit();
-            this.splitGroups.Panel1.ResumeLayout(false);
-            this.splitGroups.Panel2.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.splitGroups)).EndInit();
-            this.splitGroups.ResumeLayout(false);
-            this.groupsContextMenu.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.conditionGrid)).EndInit();
-            this.gridContextMenu.ResumeLayout(false);
-            this.statusStripEditor.ResumeLayout(false);
-            this.statusStripEditor.PerformLayout();
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            Controls.Add(chkShowDecimal);
+            Controls.Add(splitGroups);
+            Controls.Add(statusStripEditor);
+            Controls.Add(panelHeader);
+            Name = "TriggerEditorControl";
+            Size = new Size(700, 400);
+            panelHeader.ResumeLayout(false);
+            panelHeader.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)pbBadge).EndInit();
+            splitGroups.Panel1.ResumeLayout(false);
+            splitGroups.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)splitGroups).EndInit();
+            splitGroups.ResumeLayout(false);
+            groupsContextMenu.ResumeLayout(false);
+            panelGroupButtons.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)conditionGrid).EndInit();
+            gridContextMenu.ResumeLayout(false);
+            statusStripEditor.ResumeLayout(false);
+            statusStripEditor.PerformLayout();
+            ResumeLayout(false);
+            PerformLayout();
 
         }
 
@@ -437,5 +484,13 @@
         private System.Windows.Forms.Button btnAddNote;
         private System.Windows.Forms.StatusStrip statusStripEditor;
         private System.Windows.Forms.ToolStripStatusLabel lblEditorStatus;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
+        private System.Windows.Forms.ToolStripMenuItem createGeneratorToolStripMenuItem;
+        private System.Windows.Forms.CheckBox chkShowDecimal;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator4;
+        private System.Windows.Forms.ToolStripMenuItem removeAllAltGroupsToolStripMenuItem;
+        private System.Windows.Forms.Panel panelGroupButtons;
+        private System.Windows.Forms.Button btnRemoveGroup;
+        private System.Windows.Forms.Button btnAddGroup;
     }
 }

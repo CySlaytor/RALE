@@ -2,13 +2,15 @@
 
 namespace RALogicEditor.Models
 {
+    // Enum to track if an achievement exists on the server, is modified locally, or is brand new.
     public enum AssetState
     {
-        Synced,     // Uploaded (Clean)
-        Modified,   // Uploaded (Dirty)
-        Local       // New Local
+        Synced,     // Matches server exactly (White)
+        Modified,   // Exists on server but changed locally (Orange)
+        Local       // Created locally, does not exist on server (Green)
     }
 
+    // Common interface so the Grid can display both Achievements and Leaderboards
     public interface IAssetItem
     {
         int ID { get; set; }
@@ -20,18 +22,20 @@ namespace RALogicEditor.Models
         AssetState State { get; set; }
     }
 
+    // The root object of the downloaded RA JSON file.
     public class RaRoot
     {
         public bool Success { get; set; }
         public int GameId { get; set; }
         public string Title { get; set; } = "";
 
-        // Added to handle the massive patch string without errors
+        // Stores the Rich Presence script found in the JSON
         public string RichPresencePatch { get; set; } = "";
 
         public List<RaSet> Sets { get; set; } = new List<RaSet>();
     }
 
+    // A set of achievements (Core, Unofficial, etc.)
     public class RaSet
     {
         public string Type { get; set; } = "";
@@ -62,6 +66,7 @@ namespace RALogicEditor.Models
 
         public override string ToString() => $"{ID} - {Title}";
 
+        // Deep clone helper for Undo/Redo functionality
         public RaAchievement Clone(bool newId = true)
         {
             return new RaAchievement

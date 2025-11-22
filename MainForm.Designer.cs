@@ -12,361 +12,351 @@
 
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
-            this.mainMenu = new System.Windows.Forms.MenuStrip();
-            this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.openToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.saveToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.recentToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.editToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.undoToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.redoToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.splitMain = new System.Windows.Forms.SplitContainer();
-            this.achievementGrid = new System.Windows.Forms.DataGridView();
-            this.colID = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colTitle = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.assetContextMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.newAssetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.cloneAssetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.deleteAssetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.resetAssetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.toolStripSeparatorAsset = new System.Windows.Forms.ToolStripSeparator();
-            this.moveUpAssetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.moveDownAssetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.panelGridBottom = new System.Windows.Forms.Panel();
-            this.btnDeleteAsset = new System.Windows.Forms.Button();
-            this.btnDuplicateAsset = new System.Windows.Forms.Button();
-            this.btnAddAsset = new System.Windows.Forms.Button();
-            this.panelGridTop = new System.Windows.Forms.Panel();
-            this.cmbSource = new System.Windows.Forms.ComboBox();
-            this.cmbAssetType = new System.Windows.Forms.ComboBox();
-            this.splitEditor = new System.Windows.Forms.SplitContainer();
-            this.triggerEditor = new RALogicEditor.Controls.TriggerEditorControl();
-            this.codeNoteEditor = new RALogicEditor.Controls.CodeNoteEditorControl();
-            this.mainMenu.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.splitMain)).BeginInit();
-            this.splitMain.Panel1.SuspendLayout();
-            this.splitMain.Panel2.SuspendLayout();
-            this.splitMain.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.achievementGrid)).BeginInit();
-            this.assetContextMenu.SuspendLayout();
-            this.panelGridBottom.SuspendLayout();
-            this.panelGridTop.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.splitEditor)).BeginInit();
-            this.splitEditor.Panel1.SuspendLayout();
-            this.splitEditor.Panel2.SuspendLayout();
-            this.splitEditor.SuspendLayout();
-            this.SuspendLayout();
+            components = new System.ComponentModel.Container();
+            mainMenu = new MenuStrip();
+            fileToolStripMenuItem = new ToolStripMenuItem();
+            openToolStripMenuItem = new ToolStripMenuItem();
+            saveToolStripMenuItem = new ToolStripMenuItem();
+            recentToolStripMenuItem = new ToolStripMenuItem();
+            editToolStripMenuItem = new ToolStripMenuItem();
+            undoToolStripMenuItem = new ToolStripMenuItem();
+            redoToolStripMenuItem = new ToolStripMenuItem();
+            splitMain = new SplitContainer();
+            achievementGrid = new DataGridView();
+            colID = new DataGridViewTextBoxColumn();
+            colTitle = new DataGridViewTextBoxColumn();
+            assetContextMenu = new ContextMenuStrip(components);
+            newAssetToolStripMenuItem = new ToolStripMenuItem();
+            cloneAssetToolStripMenuItem = new ToolStripMenuItem();
+            deleteAssetToolStripMenuItem = new ToolStripMenuItem();
+            resetAssetToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparatorAsset = new ToolStripSeparator();
+            moveUpAssetToolStripMenuItem = new ToolStripMenuItem();
+            moveDownAssetToolStripMenuItem = new ToolStripMenuItem();
+            panelGridBottom = new Panel();
+            btnDeleteAsset = new Button();
+            btnDuplicateAsset = new Button();
+            btnAddAsset = new Button();
+            panelGridTop = new Panel();
+            cmbSource = new ComboBox();
+            cmbAssetType = new ComboBox();
+            splitEditor = new SplitContainer();
+            triggerEditor = new RALogicEditor.Controls.TriggerEditorControl();
+            codeNoteEditor = new RALogicEditor.Controls.CodeNoteEditorControl();
+            mainMenu.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)splitMain).BeginInit();
+            splitMain.Panel1.SuspendLayout();
+            splitMain.Panel2.SuspendLayout();
+            splitMain.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)achievementGrid).BeginInit();
+            assetContextMenu.SuspendLayout();
+            panelGridBottom.SuspendLayout();
+            panelGridTop.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)splitEditor).BeginInit();
+            splitEditor.Panel1.SuspendLayout();
+            splitEditor.Panel2.SuspendLayout();
+            splitEditor.SuspendLayout();
+            SuspendLayout();
             // 
             // mainMenu
             // 
-            this.mainMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.fileToolStripMenuItem,
-            this.editToolStripMenuItem});
-            this.mainMenu.Location = new System.Drawing.Point(0, 0);
-            this.mainMenu.Name = "mainMenu";
-            this.mainMenu.Size = new System.Drawing.Size(1200, 24);
-            this.mainMenu.TabIndex = 0;
+            mainMenu.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, editToolStripMenuItem });
+            mainMenu.Location = new Point(0, 0);
+            mainMenu.Name = "mainMenu";
+            mainMenu.Size = new Size(1200, 24);
+            mainMenu.TabIndex = 0;
             // 
             // fileToolStripMenuItem
             // 
-            this.fileToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.openToolStripMenuItem,
-            this.saveToolStripMenuItem,
-            this.recentToolStripMenuItem});
-            this.fileToolStripMenuItem.Name = "fileToolStripMenuItem";
-            this.fileToolStripMenuItem.Text = "&File";
+            fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { openToolStripMenuItem, saveToolStripMenuItem, recentToolStripMenuItem });
+            fileToolStripMenuItem.Name = "fileToolStripMenuItem";
+            fileToolStripMenuItem.Size = new Size(37, 20);
+            fileToolStripMenuItem.Text = "&File";
             // 
             // openToolStripMenuItem
             // 
-            this.openToolStripMenuItem.Name = "openToolStripMenuItem";
-            this.openToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.O)));
-            this.openToolStripMenuItem.Text = "&Open...";
-            this.openToolStripMenuItem.Click += new System.EventHandler(this.openToolStripMenuItem_Click);
+            openToolStripMenuItem.Name = "openToolStripMenuItem";
+            openToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.O;
+            openToolStripMenuItem.Size = new Size(185, 22);
+            openToolStripMenuItem.Text = "&Open...";
+            openToolStripMenuItem.Click += openToolStripMenuItem_Click;
             // 
             // saveToolStripMenuItem
             // 
-            this.saveToolStripMenuItem.Name = "saveToolStripMenuItem";
-            this.saveToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.S)));
-            this.saveToolStripMenuItem.Text = "&Save User File";
-            this.saveToolStripMenuItem.Click += new System.EventHandler(this.saveToolStripMenuItem_Click);
+            saveToolStripMenuItem.Name = "saveToolStripMenuItem";
+            saveToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.S;
+            saveToolStripMenuItem.Size = new Size(185, 22);
+            saveToolStripMenuItem.Text = "&Save User File";
+            saveToolStripMenuItem.Click += saveToolStripMenuItem_Click;
             // 
             // recentToolStripMenuItem
             // 
-            this.recentToolStripMenuItem.Name = "recentToolStripMenuItem";
-            this.recentToolStripMenuItem.Text = "Recent Files";
+            recentToolStripMenuItem.Name = "recentToolStripMenuItem";
+            recentToolStripMenuItem.Size = new Size(185, 22);
+            recentToolStripMenuItem.Text = "Recent Files";
             // 
             // editToolStripMenuItem
             // 
-            this.editToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.undoToolStripMenuItem,
-            this.redoToolStripMenuItem});
-            this.editToolStripMenuItem.Name = "editToolStripMenuItem";
-            this.editToolStripMenuItem.Text = "&Edit";
+            editToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { undoToolStripMenuItem, redoToolStripMenuItem });
+            editToolStripMenuItem.Name = "editToolStripMenuItem";
+            editToolStripMenuItem.Size = new Size(39, 20);
+            editToolStripMenuItem.Text = "&Edit";
             // 
             // undoToolStripMenuItem
             // 
-            this.undoToolStripMenuItem.Name = "undoToolStripMenuItem";
-            this.undoToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Z)));
-            this.undoToolStripMenuItem.Text = "Undo";
-            this.undoToolStripMenuItem.Click += new System.EventHandler(this.Undo_Click);
+            undoToolStripMenuItem.Name = "undoToolStripMenuItem";
+            undoToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Z;
+            undoToolStripMenuItem.Size = new Size(144, 22);
+            undoToolStripMenuItem.Text = "Undo";
+            undoToolStripMenuItem.Click += Undo_Click;
             // 
             // redoToolStripMenuItem
             // 
-            this.redoToolStripMenuItem.Name = "redoToolStripMenuItem";
-            this.redoToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Y)));
-            this.redoToolStripMenuItem.Text = "Redo";
-            this.redoToolStripMenuItem.Click += new System.EventHandler(this.Redo_Click);
+            redoToolStripMenuItem.Name = "redoToolStripMenuItem";
+            redoToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Y;
+            redoToolStripMenuItem.Size = new Size(144, 22);
+            redoToolStripMenuItem.Text = "Redo";
+            redoToolStripMenuItem.Click += Redo_Click;
             // 
             // splitMain
             // 
-            this.splitMain.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.splitMain.Location = new System.Drawing.Point(0, 24);
-            this.splitMain.Name = "splitMain";
+            splitMain.Dock = DockStyle.Fill;
+            splitMain.Location = new Point(0, 24);
+            splitMain.Name = "splitMain";
             // 
             // splitMain.Panel1
             // 
-            // Add the Grid FIRST. In WinForms, controls added LAST are at the Top of Z-Order.
-            // Controls at the Top of Z-Order take layout priority.
-            // We want the Top/Bottom Panels to claim their space first, so they must be added LAST.
-            this.splitMain.Panel1.Controls.Add(this.achievementGrid);
-            this.splitMain.Panel1.Controls.Add(this.panelGridBottom);
-            this.splitMain.Panel1.Controls.Add(this.panelGridTop);
+            splitMain.Panel1.Controls.Add(achievementGrid);
+            splitMain.Panel1.Controls.Add(panelGridBottom);
+            splitMain.Panel1.Controls.Add(panelGridTop);
+            splitMain.Panel1MinSize = 240;
             // 
             // splitMain.Panel2
             // 
-            this.splitMain.Panel2.Controls.Add(this.splitEditor);
-            this.splitMain.Size = new System.Drawing.Size(1200, 650);
-            this.splitMain.SplitterDistance = 300;
-            this.splitMain.TabIndex = 1;
+            splitMain.Panel2.Controls.Add(splitEditor);
+            splitMain.Panel2MinSize = 600;
+            splitMain.Size = new Size(1200, 650);
+            splitMain.SplitterDistance = 260;
+            splitMain.TabIndex = 1;
             // 
             // achievementGrid
             // 
-            this.achievementGrid.AllowUserToAddRows = false;
-            this.achievementGrid.AllowUserToDeleteRows = false;
-            this.achievementGrid.AllowUserToResizeRows = false;
-            this.achievementGrid.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.achievementGrid.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
-            this.colID,
-            this.colTitle});
-            this.achievementGrid.ContextMenuStrip = this.assetContextMenu;
-            this.achievementGrid.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.achievementGrid.Location = new System.Drawing.Point(0, 0);
-            this.achievementGrid.MultiSelect = true;
-            this.achievementGrid.Name = "achievementGrid";
-            this.achievementGrid.ReadOnly = true;
-            this.achievementGrid.RowHeadersVisible = false;
-            this.achievementGrid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.achievementGrid.Size = new System.Drawing.Size(300, 650);
-            this.achievementGrid.TabIndex = 0;
-            this.achievementGrid.SelectionChanged += new System.EventHandler(this.achievementGrid_SelectionChanged);
+            achievementGrid.AllowUserToAddRows = false;
+            achievementGrid.AllowUserToDeleteRows = false;
+            achievementGrid.AllowUserToResizeRows = false;
+            achievementGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            achievementGrid.Columns.AddRange(new DataGridViewColumn[] { colID, colTitle });
+            achievementGrid.ContextMenuStrip = assetContextMenu;
+            achievementGrid.Dock = DockStyle.Fill;
+            achievementGrid.Location = new Point(0, 30);
+            achievementGrid.Name = "achievementGrid";
+            achievementGrid.ReadOnly = true;
+            achievementGrid.RowHeadersVisible = false;
+            achievementGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            achievementGrid.Size = new Size(260, 585);
+            achievementGrid.TabIndex = 0;
+            achievementGrid.SelectionChanged += achievementGrid_SelectionChanged;
             // 
             // colID
             // 
-            this.colID.HeaderText = "ID";
-            this.colID.Width = 80;
-            this.colID.Name = "colID";
+            colID.HeaderText = "ID";
+            colID.Name = "colID";
+            colID.ReadOnly = true;
+            colID.Width = 80;
             // 
             // colTitle
             // 
-            this.colTitle.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.Fill;
-            this.colTitle.HeaderText = "Title";
-            this.colTitle.Name = "colTitle";
+            colTitle.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            colTitle.HeaderText = "Title";
+            colTitle.Name = "colTitle";
+            colTitle.ReadOnly = true;
             // 
             // assetContextMenu
             // 
-            this.assetContextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.newAssetToolStripMenuItem,
-            this.cloneAssetToolStripMenuItem,
-            this.deleteAssetToolStripMenuItem,
-            this.resetAssetToolStripMenuItem,
-            this.toolStripSeparatorAsset,
-            this.moveUpAssetToolStripMenuItem,
-            this.moveDownAssetToolStripMenuItem});
-            this.assetContextMenu.Name = "assetContextMenu";
-            this.assetContextMenu.Size = new System.Drawing.Size(205, 142);
+            assetContextMenu.Items.AddRange(new ToolStripItem[] { newAssetToolStripMenuItem, cloneAssetToolStripMenuItem, deleteAssetToolStripMenuItem, resetAssetToolStripMenuItem, toolStripSeparatorAsset, moveUpAssetToolStripMenuItem, moveDownAssetToolStripMenuItem });
+            assetContextMenu.Name = "assetContextMenu";
+            assetContextMenu.Size = new Size(200, 142);
             // 
             // newAssetToolStripMenuItem
             // 
-            this.newAssetToolStripMenuItem.Name = "newAssetToolStripMenuItem";
-            this.newAssetToolStripMenuItem.Size = new System.Drawing.Size(204, 22);
-            this.newAssetToolStripMenuItem.Text = "New";
+            newAssetToolStripMenuItem.Name = "newAssetToolStripMenuItem";
+            newAssetToolStripMenuItem.Size = new Size(199, 22);
+            newAssetToolStripMenuItem.Text = "New";
             // 
             // cloneAssetToolStripMenuItem
             // 
-            this.cloneAssetToolStripMenuItem.Name = "cloneAssetToolStripMenuItem";
-            this.cloneAssetToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.D)));
-            this.cloneAssetToolStripMenuItem.Size = new System.Drawing.Size(204, 22);
-            this.cloneAssetToolStripMenuItem.Text = "Duplicate";
+            cloneAssetToolStripMenuItem.Name = "cloneAssetToolStripMenuItem";
+            cloneAssetToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.D;
+            cloneAssetToolStripMenuItem.Size = new Size(199, 22);
+            cloneAssetToolStripMenuItem.Text = "Duplicate";
             // 
             // deleteAssetToolStripMenuItem
             // 
-            this.deleteAssetToolStripMenuItem.Name = "deleteAssetToolStripMenuItem";
-            this.deleteAssetToolStripMenuItem.ShortcutKeys = System.Windows.Forms.Keys.Delete;
-            this.deleteAssetToolStripMenuItem.Size = new System.Drawing.Size(204, 22);
-            this.deleteAssetToolStripMenuItem.Text = "Delete";
+            deleteAssetToolStripMenuItem.Name = "deleteAssetToolStripMenuItem";
+            deleteAssetToolStripMenuItem.ShortcutKeys = Keys.Delete;
+            deleteAssetToolStripMenuItem.Size = new Size(199, 22);
+            deleteAssetToolStripMenuItem.Text = "Delete";
             // 
             // resetAssetToolStripMenuItem
             // 
-            this.resetAssetToolStripMenuItem.Name = "resetAssetToolStripMenuItem";
-            this.resetAssetToolStripMenuItem.Size = new System.Drawing.Size(204, 22);
-            this.resetAssetToolStripMenuItem.Text = "Reset";
+            resetAssetToolStripMenuItem.Name = "resetAssetToolStripMenuItem";
+            resetAssetToolStripMenuItem.Size = new Size(199, 22);
+            resetAssetToolStripMenuItem.Text = "Reset";
             // 
             // toolStripSeparatorAsset
             // 
-            this.toolStripSeparatorAsset.Name = "toolStripSeparatorAsset";
-            this.toolStripSeparatorAsset.Size = new System.Drawing.Size(201, 6);
+            toolStripSeparatorAsset.Name = "toolStripSeparatorAsset";
+            toolStripSeparatorAsset.Size = new Size(196, 6);
             // 
             // moveUpAssetToolStripMenuItem
             // 
-            this.moveUpAssetToolStripMenuItem.Name = "moveUpAssetToolStripMenuItem";
-            this.moveUpAssetToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Alt | System.Windows.Forms.Keys.Up)));
-            this.moveUpAssetToolStripMenuItem.Size = new System.Drawing.Size(204, 22);
-            this.moveUpAssetToolStripMenuItem.Text = "Move Up";
+            moveUpAssetToolStripMenuItem.Name = "moveUpAssetToolStripMenuItem";
+            moveUpAssetToolStripMenuItem.ShortcutKeys = Keys.Alt | Keys.Up;
+            moveUpAssetToolStripMenuItem.Size = new Size(199, 22);
+            moveUpAssetToolStripMenuItem.Text = "Move Up";
             // 
             // moveDownAssetToolStripMenuItem
             // 
-            this.moveDownAssetToolStripMenuItem.Name = "moveDownAssetToolStripMenuItem";
-            this.moveDownAssetToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Alt | System.Windows.Forms.Keys.Down)));
-            this.moveDownAssetToolStripMenuItem.Size = new System.Drawing.Size(204, 22);
-            this.moveDownAssetToolStripMenuItem.Text = "Move Down";
+            moveDownAssetToolStripMenuItem.Name = "moveDownAssetToolStripMenuItem";
+            moveDownAssetToolStripMenuItem.ShortcutKeys = Keys.Alt | Keys.Down;
+            moveDownAssetToolStripMenuItem.Size = new Size(199, 22);
+            moveDownAssetToolStripMenuItem.Text = "Move Down";
             // 
             // panelGridBottom
             // 
-            this.panelGridBottom.Controls.Add(this.btnDeleteAsset);
-            this.panelGridBottom.Controls.Add(this.btnDuplicateAsset);
-            this.panelGridBottom.Controls.Add(this.btnAddAsset);
-            this.panelGridBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panelGridBottom.Location = new System.Drawing.Point(0, 615);
-            this.panelGridBottom.Name = "panelGridBottom";
-            this.panelGridBottom.Size = new System.Drawing.Size(300, 35);
-            this.panelGridBottom.TabIndex = 2;
+            panelGridBottom.Controls.Add(btnDeleteAsset);
+            panelGridBottom.Controls.Add(btnDuplicateAsset);
+            panelGridBottom.Controls.Add(btnAddAsset);
+            panelGridBottom.Dock = DockStyle.Bottom;
+            panelGridBottom.Location = new Point(0, 615);
+            panelGridBottom.Name = "panelGridBottom";
+            panelGridBottom.Size = new Size(260, 35);
+            panelGridBottom.TabIndex = 2;
             // 
             // btnDeleteAsset
             // 
-            this.btnDeleteAsset.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnDeleteAsset.Enabled = false;
-            this.btnDeleteAsset.Location = new System.Drawing.Point(222, 6);
-            this.btnDeleteAsset.Name = "btnDeleteAsset";
-            this.btnDeleteAsset.Size = new System.Drawing.Size(75, 23);
-            this.btnDeleteAsset.TabIndex = 2;
-            this.btnDeleteAsset.Text = "Delete";
-            this.btnDeleteAsset.UseVisualStyleBackColor = true;
+            btnDeleteAsset.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnDeleteAsset.Enabled = false;
+            btnDeleteAsset.Location = new Point(182, 6);
+            btnDeleteAsset.Name = "btnDeleteAsset";
+            btnDeleteAsset.Size = new Size(75, 23);
+            btnDeleteAsset.TabIndex = 2;
+            btnDeleteAsset.Text = "Delete";
+            btnDeleteAsset.UseVisualStyleBackColor = true;
             // 
             // btnDuplicateAsset
             // 
-            this.btnDuplicateAsset.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnDuplicateAsset.Enabled = false;
-            this.btnDuplicateAsset.Location = new System.Drawing.Point(141, 6);
-            this.btnDuplicateAsset.Name = "btnDuplicateAsset";
-            this.btnDuplicateAsset.Size = new System.Drawing.Size(75, 23);
-            this.btnDuplicateAsset.TabIndex = 1;
-            this.btnDuplicateAsset.Text = "Duplicate";
-            this.btnDuplicateAsset.UseVisualStyleBackColor = true;
+            btnDuplicateAsset.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnDuplicateAsset.Enabled = false;
+            btnDuplicateAsset.Location = new Point(101, 6);
+            btnDuplicateAsset.Name = "btnDuplicateAsset";
+            btnDuplicateAsset.Size = new Size(75, 23);
+            btnDuplicateAsset.TabIndex = 1;
+            btnDuplicateAsset.Text = "Duplicate";
+            btnDuplicateAsset.UseVisualStyleBackColor = true;
             // 
             // btnAddAsset
             // 
-            this.btnAddAsset.Location = new System.Drawing.Point(3, 6);
-            this.btnAddAsset.Name = "btnAddAsset";
-            this.btnAddAsset.Size = new System.Drawing.Size(73, 23);
-            this.btnAddAsset.TabIndex = 0;
-            this.btnAddAsset.Text = "Add";
-            this.btnAddAsset.UseVisualStyleBackColor = true;
+            btnAddAsset.Location = new Point(3, 6);
+            btnAddAsset.Name = "btnAddAsset";
+            btnAddAsset.Size = new Size(73, 23);
+            btnAddAsset.TabIndex = 0;
+            btnAddAsset.Text = "Add";
+            btnAddAsset.UseVisualStyleBackColor = true;
             // 
             // panelGridTop
             // 
-            this.panelGridTop.Controls.Add(this.cmbSource);
-            this.panelGridTop.Controls.Add(this.cmbAssetType);
-            this.panelGridTop.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelGridTop.Location = new System.Drawing.Point(0, 0);
-            this.panelGridTop.Name = "panelGridTop";
-            this.panelGridTop.Size = new System.Drawing.Size(300, 30);
-            this.panelGridTop.TabIndex = 1;
+            panelGridTop.Controls.Add(cmbSource);
+            panelGridTop.Controls.Add(cmbAssetType);
+            panelGridTop.Dock = DockStyle.Top;
+            panelGridTop.Location = new Point(0, 0);
+            panelGridTop.Name = "panelGridTop";
+            panelGridTop.Size = new Size(260, 30);
+            panelGridTop.TabIndex = 1;
             // 
             // cmbSource
             // 
-            this.cmbSource.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbSource.FormattingEnabled = true;
-            this.cmbSource.Items.AddRange(new object[] {
-            "Local",
-            "JSON",
-            "New"});
-            this.cmbSource.Location = new System.Drawing.Point(149, 3);
-            this.cmbSource.Name = "cmbSource";
-            this.cmbSource.Size = new System.Drawing.Size(80, 23);
-            this.cmbSource.TabIndex = 1;
+            cmbSource.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbSource.FormattingEnabled = true;
+            cmbSource.Items.AddRange(new object[] { "Local", "JSON", "New" });
+            cmbSource.Location = new Point(149, 3);
+            cmbSource.Name = "cmbSource";
+            cmbSource.Size = new Size(80, 23);
+            cmbSource.TabIndex = 1;
             // 
             // cmbAssetType
             // 
-            this.cmbAssetType.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbAssetType.FormattingEnabled = true;
-            this.cmbAssetType.Items.AddRange(new object[] {
-            "Achievements",
-            "Leaderboards"});
-            this.cmbAssetType.Location = new System.Drawing.Point(3, 3);
-            this.cmbAssetType.Name = "cmbAssetType";
-            this.cmbAssetType.Size = new System.Drawing.Size(140, 23);
-            this.cmbAssetType.TabIndex = 0;
+            cmbAssetType.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbAssetType.FormattingEnabled = true;
+            cmbAssetType.Items.AddRange(new object[] { "Achievements", "Leaderboards" });
+            cmbAssetType.Location = new Point(3, 3);
+            cmbAssetType.Name = "cmbAssetType";
+            cmbAssetType.Size = new Size(140, 23);
+            cmbAssetType.TabIndex = 0;
             // 
             // splitEditor
             // 
-            this.splitEditor.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.splitEditor.Location = new System.Drawing.Point(0, 0);
-            this.splitEditor.Name = "splitEditor";
+            splitEditor.Dock = DockStyle.Fill;
+            splitEditor.Location = new Point(0, 0);
+            splitEditor.Name = "splitEditor";
             // 
             // splitEditor.Panel1
             // 
-            this.splitEditor.Panel1.Controls.Add(this.triggerEditor);
+            splitEditor.Panel1.Controls.Add(triggerEditor);
+            splitEditor.Panel1MinSize = 400;
             // 
             // splitEditor.Panel2
             // 
-            this.splitEditor.Panel2.Controls.Add(this.codeNoteEditor);
-            this.splitEditor.Size = new System.Drawing.Size(896, 650);
-            this.splitEditor.SplitterDistance = 600;
-            this.splitEditor.TabIndex = 0;
+            splitEditor.Panel2.Controls.Add(codeNoteEditor);
+            splitEditor.Panel2MinSize = 200;
+            splitEditor.Size = new Size(936, 650);
+            splitEditor.SplitterDistance = 703;
+            splitEditor.TabIndex = 0;
             // 
             // triggerEditor
             // 
-            this.triggerEditor.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.triggerEditor.GroupSeparator = 'S';
-            this.triggerEditor.Location = new System.Drawing.Point(0, 0);
-            this.triggerEditor.Name = "triggerEditor";
-            this.triggerEditor.Size = new System.Drawing.Size(600, 650);
-            this.triggerEditor.TabIndex = 0;
+            triggerEditor.Dock = DockStyle.Fill;
+            triggerEditor.GroupSeparator = 'S';
+            triggerEditor.Location = new Point(0, 0);
+            triggerEditor.Name = "triggerEditor";
+            triggerEditor.Size = new Size(703, 650);
+            triggerEditor.TabIndex = 0;
             // 
             // codeNoteEditor
             // 
-            this.codeNoteEditor.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.codeNoteEditor.Location = new System.Drawing.Point(0, 0);
-            this.codeNoteEditor.Name = "codeNoteEditor";
-            this.codeNoteEditor.Size = new System.Drawing.Size(292, 650);
-            this.codeNoteEditor.TabIndex = 0;
+            codeNoteEditor.Dock = DockStyle.Fill;
+            codeNoteEditor.Location = new Point(0, 0);
+            codeNoteEditor.Name = "codeNoteEditor";
+            codeNoteEditor.Size = new Size(229, 650);
+            codeNoteEditor.TabIndex = 0;
             // 
             // MainForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1200, 674);
-            this.Controls.Add(this.splitMain);
-            this.Controls.Add(this.mainMenu);
-            this.MainMenuStrip = this.mainMenu;
-            this.Text = "RA Logic Editor";
-            this.mainMenu.ResumeLayout(false);
-            this.mainMenu.PerformLayout();
-            this.splitMain.Panel1.ResumeLayout(false);
-            this.splitMain.Panel2.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.splitMain)).EndInit();
-            this.splitMain.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.achievementGrid)).EndInit();
-            this.assetContextMenu.ResumeLayout(false);
-            this.panelGridBottom.ResumeLayout(false);
-            this.panelGridTop.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.splitEditor)).EndInit();
-            this.splitEditor.Panel1.ResumeLayout(false);
-            this.splitEditor.Panel2.ResumeLayout(false);
-            this.splitEditor.ResumeLayout(false);
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(1200, 674);
+            Controls.Add(splitMain);
+            Controls.Add(mainMenu);
+            MainMenuStrip = mainMenu;
+            MinimumSize = new Size(1000, 650);
+            Name = "MainForm";
+            Text = "RA Logic Editor";
+            mainMenu.ResumeLayout(false);
+            mainMenu.PerformLayout();
+            splitMain.Panel1.ResumeLayout(false);
+            splitMain.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)splitMain).EndInit();
+            splitMain.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)achievementGrid).EndInit();
+            assetContextMenu.ResumeLayout(false);
+            panelGridBottom.ResumeLayout(false);
+            panelGridTop.ResumeLayout(false);
+            splitEditor.Panel1.ResumeLayout(false);
+            splitEditor.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)splitEditor).EndInit();
+            splitEditor.ResumeLayout(false);
+            ResumeLayout(false);
+            PerformLayout();
 
         }
 

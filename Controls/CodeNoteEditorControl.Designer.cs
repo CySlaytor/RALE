@@ -19,6 +19,7 @@
             panelRowVariable = new Panel();
             cmbVariables = new ComboBox();
             lblVariable = new Label();
+            chkShowLeafsOnly = new CheckBox();
             panelRowAddress = new Panel();
             cmbNotes = new ComboBox();
             lblSelect = new Label();
@@ -49,6 +50,7 @@
             // 
             // panelRowVariable
             // 
+            panelRowVariable.Controls.Add(chkShowLeafsOnly);
             panelRowVariable.Controls.Add(cmbVariables);
             panelRowVariable.Controls.Add(lblVariable);
             panelRowVariable.Dock = DockStyle.Top;
@@ -65,9 +67,23 @@
             cmbVariables.FormattingEnabled = true;
             cmbVariables.Location = new Point(59, 2);
             cmbVariables.Name = "cmbVariables";
-            cmbVariables.Size = new Size(236, 23);
+            cmbVariables.Size = new Size(140, 23);
             cmbVariables.TabIndex = 1;
             cmbVariables.SelectedIndexChanged += cmbVariables_SelectedIndexChanged;
+            // IMPORTANT: Hook Format Event
+            cmbVariables.Format += cmbVariables_Format;
+            // 
+            // chkShowLeafsOnly
+            // 
+            chkShowLeafsOnly.Dock = DockStyle.Right;
+            chkShowLeafsOnly.AutoSize = true;
+            chkShowLeafsOnly.Location = new Point(200, 2);
+            chkShowLeafsOnly.Name = "chkShowLeafsOnly";
+            chkShowLeafsOnly.Padding = new Padding(5, 0, 0, 0);
+            chkShowLeafsOnly.Size = new Size(95, 23);
+            chkShowLeafsOnly.TabIndex = 2;
+            chkShowLeafsOnly.Text = "Show Leafs Only";
+            chkShowLeafsOnly.UseVisualStyleBackColor = true;
             // 
             // lblVariable
             // 
@@ -225,5 +241,6 @@
         private System.Windows.Forms.TextBox txtSearch;
         private System.Windows.Forms.Label lblSearch;
         private System.Windows.Forms.Button btnReload;
+        private System.Windows.Forms.CheckBox chkShowLeafsOnly;
     }
 }
