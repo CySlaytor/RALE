@@ -64,7 +64,7 @@ namespace RALogicEditor.Helpers
             row.Cells[8].Value = FormatOperandDisplay(cond.RightOperand, showDecimal, showAliases, notesLookup, group, rowIndex, false, rightSizeRef);
 
             // Apply visual styling (graying out invalid cells)
-            ApplyCellFormatting(row, cond, readOnlyMode);
+            ApplyCellFormatting(row, cond, readOnlyMode, showAliases);
         }
 
         private static string FormatOperandDisplay(Operand op, bool showDecimal, bool showAliases, Dictionary<string, List<NoteNode>>? notesLookup, AchievementConditionGroup? group, int rowIndex, bool isLeft, string sizeRef = "")
@@ -180,7 +180,7 @@ namespace RALogicEditor.Helpers
             return "";
         }
 
-        private static void ApplyCellFormatting(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode)
+        private static void ApplyCellFormatting(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode, bool showAliases)
         {
             // Define colors
             Color editableColor = readOnlyMode ? SystemColors.Control : SystemColors.Window;
@@ -223,8 +223,20 @@ namespace RALogicEditor.Helpers
                     lSizeCell.Style.BackColor = editableColor;
                     lSizeCell.ToolTipText = "";
                 }
-                lValueCell.ReadOnly = readOnlyMode;
-                lValueCell.Style.BackColor = editableColor;
+
+                // If Alias mode is active and this is a memory type, disable editing to prevent string corruption
+                // LogicFormatter checks RaLogicSyntax.MemoryTypes for alias support, so we do too.
+                if (showAliases && RaLogicSyntax.MemoryTypes.Contains(cond.LeftOperand.Type))
+                {
+                    lValueCell.ReadOnly = true;
+                    // Use a slightly different color (staticColor) to indicate non-editable state visually
+                    lValueCell.Style.BackColor = staticColor;
+                }
+                else
+                {
+                    lValueCell.ReadOnly = readOnlyMode;
+                    lValueCell.Style.BackColor = editableColor;
+                }
             }
 
             // -- Right Operand Formatting --
@@ -284,8 +296,18 @@ namespace RALogicEditor.Helpers
                         rSizeCell.Style.BackColor = editableColor;
                         rSizeCell.ToolTipText = "";
                     }
-                    rValueCell.ReadOnly = readOnlyMode;
-                    rValueCell.Style.BackColor = editableColor;
+
+                    // Alias Lock for Right Operand
+                    if (showAliases && RaLogicSyntax.MemoryTypes.Contains(cond.RightOperand.Type))
+                    {
+                        rValueCell.ReadOnly = true;
+                        rValueCell.Style.BackColor = staticColor;
+                    }
+                    else
+                    {
+                        rValueCell.ReadOnly = readOnlyMode;
+                        rValueCell.Style.BackColor = editableColor;
+                    }
                 }
             }
 

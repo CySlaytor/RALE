@@ -26,6 +26,8 @@ namespace RALogicEditor.Parsers
                 stack.Push(logicalRoot);
                 NoteNode? lastAddedNode = null;
 
+                // Regex to capture indentation, offset, and description
+                // Added capturing group for separator check if needed, but logic below handles it
                 var offsetRegex = new Regex(@"^([.\+]*)\s*([-+]?0x[0-9A-Fa-f]+)\s*(?:[|=:]\s*)?(.*)$");
                 var prefixStripRegex = new Regex(@"^([.\+]+)");
 
@@ -35,7 +37,24 @@ namespace RALogicEditor.Parsers
                     if (string.IsNullOrWhiteSpace(line)) continue;
 
                     var match = offsetRegex.Match(line.Trim());
+                    bool isNode = false;
+
+                    // Heuristic: A line is a Pointer Node if it matches the regex AND:
+                    // 1. It has explicit indentation (+ or .)
+                    // 2. OR it has a standard separator (| or :)
+                    // Lines like "0x2f = Intro" have no indent and '=' separator, so they are treated as content.
                     if (match.Success)
+                    {
+                        bool hasIndent = match.Groups[1].Length > 0;
+                        bool hasStandardSeparator = line.Contains("|") || line.Contains(":");
+
+                        if (hasIndent || hasStandardSeparator)
+                        {
+                            isNode = true;
+                        }
+                    }
+
+                    if (isNode)
                     {
                         int indent = match.Groups[1].Length;
                         string offset = match.Groups[2].Value;
@@ -43,16 +62,28 @@ namespace RALogicEditor.Parsers
                         if (!offset.StartsWith("+") && !offset.StartsWith("-")) offset = "+" + offset;
 
                         var node = new NoteNode { Offset = offset, Description = desc, RawLineIndex = i, IndentLevel = indent };
-                        while (stack.Peek().IndentLevel >= indent) stack.Pop();
+
+                        // Pop stack until we find the parent (indent level must be less than current)
+                        while (stack.Count > 0 && stack.Peek().IndentLevel >= indent)
+                            stack.Pop();
+
+                        // Safety check if stack somehow empty (shouldn't happen with logicalRoot)
+                        if (stack.Count == 0) stack.Push(logicalRoot);
+
                         var parent = stack.Peek();
-                        node.Parent = parent; parent.Children.Add(node); stack.Push(node);
+                        node.Parent = parent;
+                        parent.Children.Add(node);
+                        stack.Push(node);
+
                         lastAddedNode = node;
                     }
                     else
                     {
+                        // Treat as content for the last added node (or root if none)
                         if (lastAddedNode != null)
                         {
                             if (lastAddedNode.Content.Length > 0) lastAddedNode.Content += "\r\n";
+                            // Strip indentation markers if they exist (unlikely for content but safe to do)
                             string cleanContentLine = prefixStripRegex.Replace(line.Trim(), "");
                             lastAddedNode.Content += cleanContentLine;
                         }

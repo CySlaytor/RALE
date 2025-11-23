@@ -880,6 +880,22 @@ namespace RALogicEditor.Controls
         {
             if (conditionGrid.Tag is AchievementConditionGroup group)
             {
+                // Capture State
+                int savedScroll = conditionGrid.FirstDisplayedScrollingRowIndex;
+                List<int> selectedIndices = new List<int>();
+                foreach (DataGridViewRow row in conditionGrid.SelectedRows)
+                {
+                    selectedIndices.Add(row.Index);
+                }
+
+                int focusedRowIndex = -1;
+                int focusedColIndex = 0;
+                if (conditionGrid.CurrentCell != null)
+                {
+                    focusedRowIndex = conditionGrid.CurrentCell.RowIndex;
+                    focusedColIndex = conditionGrid.CurrentCell.ColumnIndex;
+                }
+
                 int index = _activeGroups.IndexOf(group);
                 bool isGenerated = false;
                 if (index >= 0)
@@ -895,6 +911,32 @@ namespace RALogicEditor.Controls
                 }
                 // Passed _showDecimal and _showAliases and the Notes Lookup
                 ConditionGridHelper.PopulateGridRows(conditionGrid, group, isGenerated, _showDecimal, _showAliases, _notesLookup);
+
+                // Restore State
+                if (conditionGrid.Rows.Count > 0)
+                {
+                    // Restore Selection
+                    conditionGrid.ClearSelection();
+                    foreach (int idx in selectedIndices)
+                    {
+                        if (idx >= 0 && idx < conditionGrid.Rows.Count)
+                        {
+                            conditionGrid.Rows[idx].Selected = true;
+                        }
+                    }
+
+                    // Restore Focus
+                    if (focusedRowIndex >= 0 && focusedRowIndex < conditionGrid.Rows.Count)
+                    {
+                        conditionGrid.CurrentCell = conditionGrid.Rows[focusedRowIndex].Cells[focusedColIndex];
+                    }
+
+                    // Restore Scroll
+                    if (savedScroll >= 0 && savedScroll < conditionGrid.Rows.Count)
+                    {
+                        try { conditionGrid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
+                    }
+                }
             }
         }
 

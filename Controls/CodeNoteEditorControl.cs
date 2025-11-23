@@ -90,9 +90,6 @@ namespace RALogicEditor.Controls
             if (string.IsNullOrWhiteSpace(filter))
             {
                 // Always create a new list from _allNotes.
-                // Previously, this checked (Count != Count) to skip allocation, but
-                // reloading often keeps the same count while changing content.
-                // We must force a refresh to drop references to old objects.
                 _filteredNotes = new List<CodeNote>(_allNotes);
             }
             else
@@ -120,7 +117,10 @@ namespace RALogicEditor.Controls
             }
         }
 
-        private void txtSearch_TextChanged(object sender, EventArgs e) { if (!_isInternalUpdate) ApplyFilter(true); }
+        private void txtSearch_TextChanged(object sender, EventArgs e)
+        {
+            if (!_isInternalUpdate) ApplyFilter(true);
+        }
 
         // Parses the selected note text to find pointer offsets
         private void LoadNoteToTextBox(CodeNote note)
@@ -147,15 +147,30 @@ namespace RALogicEditor.Controls
             // Delegate heavy parsing to PointerTreeParser
             var flatList = PointerTreeParser.ParseNoteText(_fullNoteCache);
 
+            IEnumerable<NoteNode> query = flatList;
+
+            // Apply Search Filter to Variable Tree as well
+            string filter = txtSearch.Text.Trim();
+            if (!string.IsNullOrEmpty(filter))
+            {
+                query = query.Where(n =>
+                    n.Description.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                    n.Offset.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                    (n.IndentLevel == -2 && n.Content.Contains(filter, StringComparison.OrdinalIgnoreCase)) // Keep root if content matches
+                );
+            }
+
             // Filter view if "Show Leafs Only" is checked
             if (chkShowLeafsOnly.Checked)
             {
-                var leafList = flatList.Where(n => n.IndentLevel == -2 || (n.Children.Count == 0 && n.IndentLevel != -1)).ToList();
-                cmbVariables.DataSource = leafList;
+                // Leafs = Root (-2) OR Nodes with no children
+                query = query.Where(n => n.IndentLevel == -2 || (n.Children.Count == 0 && n.IndentLevel != -1));
             }
-            else cmbVariables.DataSource = flatList;
 
-            cmbVariables.Enabled = flatList.Count > 1;
+            var finalList = query.ToList();
+            cmbVariables.DataSource = finalList;
+
+            cmbVariables.Enabled = finalList.Count > 1;
         }
 
         // Renders indentation in the dropdown list
