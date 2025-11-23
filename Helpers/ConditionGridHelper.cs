@@ -164,7 +164,7 @@ namespace RALogicEditor.Helpers
 
                     string desc = main.Description;
 
-                    // FIX: "Full Note" is a generic placeholder from the PointerTreeParser. 
+                    // "Full Note" is a generic placeholder from the PointerTreeParser. 
                     // If we see it, we must extract the first line of the content instead.
                     if (string.IsNullOrEmpty(desc) || desc.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
                     {

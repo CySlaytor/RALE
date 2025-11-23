@@ -1,4 +1,5 @@
-﻿namespace RALogicEditor.Controls
+﻿#nullable enable
+namespace RALogicEditor.Controls
 {
     partial class TriggerEditorControl
     {
@@ -14,6 +15,7 @@
         {
             components = new System.ComponentModel.Container();
             panelHeader = new Panel();
+            lblAssetState = new Label();
             btnTools = new Button();
             btnAddNote = new Button();
             btnReset = new Button();
@@ -76,6 +78,7 @@
             // panelHeader
             // 
             panelHeader.BackColor = SystemColors.Control;
+            panelHeader.Controls.Add(lblAssetState);
             panelHeader.Controls.Add(btnTools);
             panelHeader.Controls.Add(btnAddNote);
             panelHeader.Controls.Add(btnReset);
@@ -92,6 +95,17 @@
             panelHeader.Padding = new Padding(5);
             panelHeader.Size = new Size(700, 85);
             panelHeader.TabIndex = 0;
+            // 
+            // lblAssetState
+            // 
+            lblAssetState.AutoSize = true;
+            lblAssetState.Font = new Font("Segoe UI", 9F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            lblAssetState.ForeColor = Color.DimGray;
+            lblAssetState.Location = new Point(350, 63);
+            lblAssetState.Name = "lblAssetState";
+            lblAssetState.Size = new Size(32, 15);
+            lblAssetState.TabIndex = 10;
+            lblAssetState.Text = "Core";
             // 
             // btnTools
             // 
@@ -135,7 +149,7 @@
             lvLeaderboardComponents.MultiSelect = false;
             lvLeaderboardComponents.Name = "lvLeaderboardComponents";
             lvLeaderboardComponents.Scrollable = false;
-            lvLeaderboardComponents.Size = new Size(64, 75);
+            lvLeaderboardComponents.Size = new Size(88, 100);
             lvLeaderboardComponents.TabIndex = 6;
             lvLeaderboardComponents.UseCompatibleStateImageBehavior = false;
             lvLeaderboardComponents.View = View.Details;
@@ -144,7 +158,7 @@
             // colLbComp
             // 
             colLbComp.Text = "Type";
-            colLbComp.Width = 76;
+            colLbComp.Width = 84;
             // 
             // lblAuthor
             // 
@@ -181,7 +195,6 @@
             // 
             txtDescription.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             txtDescription.Location = new Point(75, 34);
-            txtDescription.Multiline = true;
             txtDescription.Name = "txtDescription";
             txtDescription.Size = new Size(617, 23);
             txtDescription.TabIndex = 2;
@@ -520,51 +533,52 @@
 
         }
 
-        private System.Windows.Forms.Panel panelHeader;
-        private System.Windows.Forms.PictureBox pbBadge;
-        private System.Windows.Forms.TextBox txtTitle;
-        private System.Windows.Forms.TextBox txtDescription;
-        private System.Windows.Forms.ComboBox cmbPoints;
-        private System.Windows.Forms.ComboBox cmbType;
-        private System.Windows.Forms.Label lblAuthor;
-        private System.Windows.Forms.SplitContainer splitGroups;
-        private System.Windows.Forms.ListView groupsList;
-        private System.Windows.Forms.ColumnHeader colGroups;
-        private RALogicEditor.Controls.DoubleBufferedDataGridView conditionGrid;
-        private System.Windows.Forms.ContextMenuStrip gridContextMenu;
-        private System.Windows.Forms.ToolStripMenuItem moveUpToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem moveDownToolStripMenuItem;
-        private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
-        private System.Windows.Forms.ToolStripMenuItem addConditionToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem duplicateToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem deleteToolStripMenuItem;
-        private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
-        private System.Windows.Forms.ToolStripMenuItem copyLogicToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem copyRowToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem pasteToolStripMenuItem;
-        private System.Windows.Forms.ContextMenuStrip groupsContextMenu;
-        private System.Windows.Forms.ToolStripMenuItem addGroupToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem removeGroupToolStripMenuItem;
-        private System.Windows.Forms.ListView lvLeaderboardComponents;
-        private System.Windows.Forms.ColumnHeader colLbComp;
-        private System.Windows.Forms.Button btnReset;
-        private System.Windows.Forms.Button btnAddNote;
-        private System.Windows.Forms.StatusStrip statusStripEditor;
-        private System.Windows.Forms.ToolStripStatusLabel lblEditorStatus;
-        private System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
-        private System.Windows.Forms.ToolStripMenuItem createGeneratorToolStripMenuItem;
-        private System.Windows.Forms.CheckBox chkShowDecimal;
-        private System.Windows.Forms.ToolStripSeparator toolStripSeparator4;
-        private System.Windows.Forms.ToolStripMenuItem removeAllAltGroupsToolStripMenuItem;
-        private System.Windows.Forms.Panel panelGroupButtons;
-        private System.Windows.Forms.Button btnRemoveGroup;
-        private System.Windows.Forms.Button btnAddGroup;
-        private System.Windows.Forms.CheckBox chkAliasMode;
-        private System.Windows.Forms.Button btnTools;
-        private System.Windows.Forms.ContextMenuStrip toolsContextMenu;
-        private System.Windows.Forms.ToolStripMenuItem pointerCalculatorToolStripMenuItem;
-        private System.Windows.Forms.ToolStripSeparator toolStripSeparator5;
-        private System.Windows.Forms.ToolStripMenuItem saveAsSnippetToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem insertSnippetToolStripMenuItem;
+        private System.Windows.Forms.Panel panelHeader = null!;
+        private System.Windows.Forms.PictureBox pbBadge = null!;
+        private System.Windows.Forms.TextBox txtTitle = null!;
+        private System.Windows.Forms.TextBox txtDescription = null!;
+        private System.Windows.Forms.ComboBox cmbPoints = null!;
+        private System.Windows.Forms.ComboBox cmbType = null!;
+        private System.Windows.Forms.Label lblAuthor = null!;
+        private System.Windows.Forms.Label lblAssetState = null!;
+        private System.Windows.Forms.SplitContainer splitGroups = null!;
+        private System.Windows.Forms.ListView groupsList = null!;
+        private System.Windows.Forms.ColumnHeader colGroups = null!;
+        private RALogicEditor.Controls.DoubleBufferedDataGridView conditionGrid = null!;
+        private System.Windows.Forms.ContextMenuStrip gridContextMenu = null!;
+        private System.Windows.Forms.ToolStripMenuItem moveUpToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem moveDownToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator1 = null!;
+        private System.Windows.Forms.ToolStripMenuItem addConditionToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem duplicateToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem deleteToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator2 = null!;
+        private System.Windows.Forms.ToolStripMenuItem copyLogicToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem copyRowToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem pasteToolStripMenuItem = null!;
+        private System.Windows.Forms.ContextMenuStrip groupsContextMenu = null!;
+        private System.Windows.Forms.ToolStripMenuItem addGroupToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem removeGroupToolStripMenuItem = null!;
+        private System.Windows.Forms.ListView lvLeaderboardComponents = null!;
+        private System.Windows.Forms.ColumnHeader colLbComp = null!;
+        private System.Windows.Forms.Button btnReset = null!;
+        private System.Windows.Forms.Button btnAddNote = null!;
+        private System.Windows.Forms.StatusStrip statusStripEditor = null!;
+        private System.Windows.Forms.ToolStripStatusLabel lblEditorStatus = null!;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator3 = null!;
+        private System.Windows.Forms.ToolStripMenuItem createGeneratorToolStripMenuItem = null!;
+        private System.Windows.Forms.CheckBox chkShowDecimal = null!;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator4 = null!;
+        private System.Windows.Forms.ToolStripMenuItem removeAllAltGroupsToolStripMenuItem = null!;
+        private System.Windows.Forms.Panel panelGroupButtons = null!;
+        private System.Windows.Forms.Button btnRemoveGroup = null!;
+        private System.Windows.Forms.Button btnAddGroup = null!;
+        private System.Windows.Forms.CheckBox chkAliasMode = null!;
+        private System.Windows.Forms.Button btnTools = null!;
+        private System.Windows.Forms.ContextMenuStrip toolsContextMenu = null!;
+        private System.Windows.Forms.ToolStripMenuItem pointerCalculatorToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator5 = null!;
+        private System.Windows.Forms.ToolStripMenuItem saveAsSnippetToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem insertSnippetToolStripMenuItem = null!;
     }
 }

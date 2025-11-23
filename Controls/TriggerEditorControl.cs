@@ -175,7 +175,7 @@ namespace RALogicEditor.Controls
 
             foreach (var note in notes)
             {
-                // Use LogicFormatter to get canonical key (e.g. "0x1234" instead of "0x001234")
+                // Use LogicFormatter to get canonical key (e.g. "0x1234" instead of "0x1234")
                 string key = LogicFormatter.NormalizeAddress(note.Address);
 
                 // Parse note for tree structure
@@ -343,6 +343,7 @@ namespace RALogicEditor.Controls
             cmbPoints.Visible = true;
             cmbType.Visible = true;
             lblAuthor.Visible = true;
+            lblAssetState.Visible = false;
             pbBadge.Visible = true;
             lvLeaderboardComponents.Visible = false;
             btnReset.Visible = false;
@@ -371,6 +372,18 @@ namespace RALogicEditor.Controls
                 SetupLeaderboardUI();
             }
 
+            // Set Asset State Label
+            if (asset.State == AssetState.Local)
+            {
+                lblAssetState.Text = "Local";
+                lblAssetState.ForeColor = Color.Green;
+            }
+            else
+            {
+                lblAssetState.Text = setType;
+                lblAssetState.ForeColor = Color.DimGray;
+            }
+
             btnReset.Visible = asset.State != AssetState.Local;
             SetStatus("Asset loaded.");
             RunValidation();
@@ -381,13 +394,18 @@ namespace RALogicEditor.Controls
             cmbPoints.Visible = true;
             cmbType.Visible = true;
             lblAuthor.Visible = true;
+            lblAssetState.Visible = true;
             pbBadge.Visible = true;
             lvLeaderboardComponents.Visible = false;
 
             txtTitle.Left = 75;
-            txtTitle.Width = panelHeader.Width - 75 - 165;
+            txtTitle.Width = panelHeader.Width - 75 - 10;
             txtDescription.Left = 75;
-            txtDescription.Width = panelHeader.Width - 75 - 165;
+            txtDescription.Width = panelHeader.Width - 75 - 10;
+
+            // Reset labels positions for Achievement mode
+            lblAuthor.Location = new Point(232, 63);
+            lblAssetState.Location = new Point(350, 63);
 
             cmbPoints.Text = cheevo.Points.ToString();
             lblAuthor.Text = $"Author: {cheevo.Author}";
@@ -410,17 +428,27 @@ namespace RALogicEditor.Controls
         {
             cmbPoints.Visible = false;
             cmbType.Visible = false;
-            lblAuthor.Visible = false;
             pbBadge.Visible = false;
+
+            // Show Author/State now
+            lblAuthor.Visible = true;
+            lblAssetState.Visible = true;
+
             lvLeaderboardComponents.Visible = true;
 
             lvLeaderboardComponents.Location = new Point(5, 5);
+            // With wider ListView (80 vs 64), textLeft shifts.
             int textLeft = lvLeaderboardComponents.Right + 10;
 
             txtTitle.Left = textLeft;
-            txtTitle.Width = panelHeader.Width - textLeft - 165;
+            txtTitle.Width = panelHeader.Width - textLeft - 10;
             txtDescription.Left = textLeft;
-            txtDescription.Width = panelHeader.Width - textLeft - 165;
+            txtDescription.Width = panelHeader.Width - textLeft - 10;
+
+            // Align Author and State for Leaderboard mode
+            lblAuthor.Location = new Point(textLeft, 63);
+            lblAuthor.Text = "Author: Unknown";
+            lblAssetState.Location = new Point(textLeft + 150, 63);
 
             if (lvLeaderboardComponents.SelectedItems.Count == 0 && lvLeaderboardComponents.Items.Count > 0)
                 lvLeaderboardComponents.Items[0].Selected = true;
@@ -444,8 +472,8 @@ namespace RALogicEditor.Controls
 
         // -- UI Event Handlers (Named to match Designer) --
 
-        private void btnReset_Click(object sender, EventArgs e) => AssetResetRequested?.Invoke(this, EventArgs.Empty);
-        private void btnAddNote_Click(object sender, EventArgs e) => AddFromCodeNoteRequested?.Invoke(this, EventArgs.Empty);
+        private void btnReset_Click(object? sender, EventArgs e) => AssetResetRequested?.Invoke(this, EventArgs.Empty);
+        private void btnAddNote_Click(object? sender, EventArgs e) => AddFromCodeNoteRequested?.Invoke(this, EventArgs.Empty);
 
         private void TxtTitle_TextChanged(object? sender, EventArgs e) => NotifyAssetDataChanged(a => a.Title = txtTitle.Text);
         private void TxtDescription_TextChanged(object? sender, EventArgs e) => NotifyAssetDataChanged(a => a.Description = txtDescription.Text);
@@ -497,16 +525,16 @@ namespace RALogicEditor.Controls
         }
 
         // Proxy calls to Grid Manager
-        private void moveUpToolStripMenuItem_Click(object sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.MoveSelected(-1); }
-        private void moveDownToolStripMenuItem_Click(object sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.MoveSelected(1); }
-        private void duplicateToolStripMenuItem_Click(object sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.DuplicateSelected(); }
-        private void deleteToolStripMenuItem_Click(object sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.DeleteSelected(); }
-        private void addConditionToolStripMenuItem_Click(object sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.AddCondition(); }
-        private void copyRowToolStripMenuItem_Click(object sender, EventArgs e) => _gridManager.CopySelectedRows();
-        private void copyLogicToolStripMenuItem_Click(object sender, EventArgs e) => _gridManager.CopySelectedLogic();
-        private void pasteToolStripMenuItem_Click(object sender, EventArgs e) { if (Clipboard.ContainsText()) GridManager_PasteRequested(sender, Clipboard.GetText()); }
+        private void moveUpToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.MoveSelected(-1); }
+        private void moveDownToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.MoveSelected(1); }
+        private void duplicateToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.DuplicateSelected(); }
+        private void deleteToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.DeleteSelected(); }
+        private void addConditionToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.AddCondition(); }
+        private void copyRowToolStripMenuItem_Click(object? sender, EventArgs e) => _gridManager.CopySelectedRows();
+        private void copyLogicToolStripMenuItem_Click(object? sender, EventArgs e) => _gridManager.CopySelectedLogic();
+        private void pasteToolStripMenuItem_Click(object? sender, EventArgs e) { if (Clipboard.ContainsText()) GridManager_PasteRequested(sender, Clipboard.GetText()); }
 
-        private void addGroupToolStripMenuItem_Click(object sender, EventArgs e)
+        private void addGroupToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             _history.PushState(_triggerText);
             string newName = _activeGroups.Count == 0 ? "Core" : (GroupSeparator == 'S' ? "Alt " + _activeGroups.Count : "Group " + (_activeGroups.Count + 1));
@@ -518,7 +546,7 @@ namespace RALogicEditor.Controls
             BuildTriggerAndNotify();
         }
 
-        private void removeGroupToolStripMenuItem_Click(object sender, EventArgs e)
+        private void removeGroupToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (groupsList.SelectedItems.Count == 0) return;
             int idx = groupsList.SelectedItems[0].Index;
@@ -556,7 +584,7 @@ namespace RALogicEditor.Controls
             BuildTriggerAndNotify();
         }
 
-        private void removeAllAltGroupsToolStripMenuItem_Click(object sender, EventArgs e)
+        private void removeAllAltGroupsToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (_activeGroups.Count <= 1) return;
 
@@ -577,7 +605,7 @@ namespace RALogicEditor.Controls
             BuildTriggerAndNotify();
         }
 
-        private void createGeneratorToolStripMenuItem_Click(object sender, EventArgs e)
+        private void createGeneratorToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (conditionGrid.SelectedRows.Count != 1) return;
             var group = conditionGrid.Tag as AchievementConditionGroup;
@@ -920,12 +948,12 @@ namespace RALogicEditor.Controls
 
         // -- Snippet and Tools Events --
 
-        private void btnTools_Click(object sender, EventArgs e)
+        private void btnTools_Click(object? sender, EventArgs e)
         {
             toolsContextMenu.Show(btnTools, 0, btnTools.Height);
         }
 
-        private void pointerCalculatorToolStripMenuItem_Click(object sender, EventArgs e)
+        private void pointerCalculatorToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             using (var form = new PointerCalculatorForm())
             {
@@ -933,7 +961,7 @@ namespace RALogicEditor.Controls
             }
         }
 
-        private void saveAsSnippetToolStripMenuItem_Click(object sender, EventArgs e)
+        private void saveAsSnippetToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (conditionGrid.SelectedRows.Count == 0) return;
 
@@ -958,7 +986,7 @@ namespace RALogicEditor.Controls
             }
         }
 
-        private void insertSnippetToolStripMenuItem_Click(object sender, EventArgs e)
+        private void insertSnippetToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (conditionGrid.ReadOnly) return;
 

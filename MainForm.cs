@@ -65,7 +65,6 @@ namespace RALogicEditor
             achievementGrid.ContextMenuStrip.Opening += AchievementContextMenu_Opening;
 
             // -- Toolbar Setup --
-            // Ensure "JSON" is the first option as requested
             cmbSource.Items.Clear();
             cmbSource.Items.AddRange(new object[] { "JSON", "Local", "New" });
 

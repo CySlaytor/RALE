@@ -535,7 +535,7 @@ namespace RALogicEditor.Helpers
         {
             if (colIndex != 4 && colIndex != 8) return;
 
-            // FIX: Get underlying value directly from Model tag, ignoring Visual Cell value (alias)
+            // Get underlying value directly from Model tag, ignoring Visual Cell value (alias)
             string val = "";
             if (_grid.Rows[rowIndex].Tag is AchievementCondition cond)
             {
