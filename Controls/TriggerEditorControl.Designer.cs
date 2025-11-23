@@ -14,6 +14,9 @@
         {
             components = new System.ComponentModel.Container();
             panelHeader = new Panel();
+            btnTools = new Button();
+            toolsContextMenu = new ContextMenuStrip(components);
+            pointerCalculatorToolStripMenuItem = new ToolStripMenuItem();
             btnAddNote = new Button();
             btnReset = new Button();
             lvLeaderboardComponents = new ListView();
@@ -52,7 +55,12 @@
             statusStripEditor = new StatusStrip();
             lblEditorStatus = new ToolStripStatusLabel();
             chkShowDecimal = new CheckBox();
+            chkAliasMode = new CheckBox();
+            toolStripSeparator5 = new ToolStripSeparator();
+            saveAsSnippetToolStripMenuItem = new ToolStripMenuItem();
+            insertSnippetToolStripMenuItem = new ToolStripMenuItem();
             panelHeader.SuspendLayout();
+            toolsContextMenu.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pbBadge).BeginInit();
             ((System.ComponentModel.ISupportInitialize)splitGroups).BeginInit();
             splitGroups.Panel1.SuspendLayout();
@@ -68,6 +76,7 @@
             // panelHeader
             // 
             panelHeader.BackColor = SystemColors.Control;
+            panelHeader.Controls.Add(btnTools);
             panelHeader.Controls.Add(btnAddNote);
             panelHeader.Controls.Add(btnReset);
             panelHeader.Controls.Add(lvLeaderboardComponents);
@@ -83,6 +92,30 @@
             panelHeader.Padding = new Padding(5);
             panelHeader.Size = new Size(700, 85);
             panelHeader.TabIndex = 0;
+            // 
+            // btnTools
+            // 
+            btnTools.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnTools.Location = new Point(456, 58);
+            btnTools.Name = "btnTools";
+            btnTools.Size = new Size(75, 23);
+            btnTools.TabIndex = 9;
+            btnTools.Text = "Tools ▼";
+            btnTools.UseVisualStyleBackColor = true;
+            btnTools.Click += btnTools_Click;
+            // 
+            // toolsContextMenu
+            // 
+            toolsContextMenu.Items.AddRange(new ToolStripItem[] { pointerCalculatorToolStripMenuItem });
+            toolsContextMenu.Name = "toolsContextMenu";
+            toolsContextMenu.Size = new Size(169, 26);
+            // 
+            // pointerCalculatorToolStripMenuItem
+            // 
+            pointerCalculatorToolStripMenuItem.Name = "pointerCalculatorToolStripMenuItem";
+            pointerCalculatorToolStripMenuItem.Size = new Size(168, 22);
+            pointerCalculatorToolStripMenuItem.Text = "Pointer Calculator";
+            pointerCalculatorToolStripMenuItem.Click += pointerCalculatorToolStripMenuItem_Click;
             // 
             // btnAddNote
             // 
@@ -308,9 +341,9 @@
             // 
             // gridContextMenu
             // 
-            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, createGeneratorToolStripMenuItem });
+            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, createGeneratorToolStripMenuItem, toolStripSeparator5, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
             gridContextMenu.Name = "gridContextMenu";
-            gridContextMenu.Size = new Size(209, 220);
+            gridContextMenu.Size = new Size(209, 286);
             // 
             // moveUpToolStripMenuItem
             // 
@@ -425,10 +458,43 @@
             chkShowDecimal.Text = "Show Decimal";
             chkShowDecimal.UseVisualStyleBackColor = true;
             // 
+            // chkAliasMode
+            // 
+            chkAliasMode.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            chkAliasMode.AutoSize = true;
+            chkAliasMode.BackColor = SystemColors.Control;
+            chkAliasMode.Location = new Point(480, 381);
+            chkAliasMode.Name = "chkAliasMode";
+            chkAliasMode.Size = new Size(95, 19);
+            chkAliasMode.TabIndex = 10;
+            chkAliasMode.Text = "Show Aliases";
+            chkAliasMode.UseVisualStyleBackColor = true;
+            // 
+            // toolStripSeparator5
+            // 
+            toolStripSeparator5.Name = "toolStripSeparator5";
+            toolStripSeparator5.Size = new Size(205, 6);
+            // 
+            // saveAsSnippetToolStripMenuItem
+            // 
+            saveAsSnippetToolStripMenuItem.Name = "saveAsSnippetToolStripMenuItem";
+            saveAsSnippetToolStripMenuItem.Size = new Size(208, 22);
+            saveAsSnippetToolStripMenuItem.Text = "Save Selection as Snippet";
+            saveAsSnippetToolStripMenuItem.Click += saveAsSnippetToolStripMenuItem_Click;
+            // 
+            // insertSnippetToolStripMenuItem
+            // 
+            insertSnippetToolStripMenuItem.Name = "insertSnippetToolStripMenuItem";
+            insertSnippetToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.I;
+            insertSnippetToolStripMenuItem.Size = new Size(208, 22);
+            insertSnippetToolStripMenuItem.Text = "Insert Snippet...";
+            insertSnippetToolStripMenuItem.Click += insertSnippetToolStripMenuItem_Click;
+            // 
             // TriggerEditorControl
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
+            Controls.Add(chkAliasMode);
             Controls.Add(chkShowDecimal);
             Controls.Add(splitGroups);
             Controls.Add(statusStripEditor);
@@ -437,6 +503,7 @@
             Size = new Size(700, 400);
             panelHeader.ResumeLayout(false);
             panelHeader.PerformLayout();
+            toolsContextMenu.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)pbBadge).EndInit();
             splitGroups.Panel1.ResumeLayout(false);
             splitGroups.Panel2.ResumeLayout(false);
@@ -492,5 +559,12 @@
         private System.Windows.Forms.Panel panelGroupButtons;
         private System.Windows.Forms.Button btnRemoveGroup;
         private System.Windows.Forms.Button btnAddGroup;
+        private System.Windows.Forms.CheckBox chkAliasMode;
+        private System.Windows.Forms.Button btnTools;
+        private System.Windows.Forms.ContextMenuStrip toolsContextMenu;
+        private System.Windows.Forms.ToolStripMenuItem pointerCalculatorToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator5;
+        private System.Windows.Forms.ToolStripMenuItem saveAsSnippetToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem insertSnippetToolStripMenuItem;
     }
 }

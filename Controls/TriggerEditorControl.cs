@@ -29,6 +29,7 @@ namespace RALogicEditor.Controls
         private string _triggerText = ""; // The current raw logic string
         private bool _isLeaderboardMode;
         private bool _showDecimal = false;
+        private bool _showAliases = false;
         private IAssetItem? _boundAsset; // The Asset object currently being edited
 
         // -- Data Models --
@@ -37,6 +38,10 @@ namespace RALogicEditor.Controls
         private Dictionary<string, List<AchievementConditionGroup>> _leaderboardSegments = new();
         // Stores Generator rules (Copies, Strides) keyed by Group Index
         private Dictionary<int, GeneratorDefinition> _generatorRules = new();
+
+        // Cache for Code Notes for Tooltips/Aliases
+        // Key: Normalized Address "0x1234", Value: Note Title
+        private Dictionary<string, string> _notesLookup = new();
 
         public char GroupSeparator { get; set; } = 'S'; // 'S' for achievements, '::' handled internally for LBs
 
@@ -89,6 +94,9 @@ namespace RALogicEditor.Controls
             _gridManager.AddressSelected += (s, addr) => AddressSelected?.Invoke(this, addr);
             _gridManager.PointerChainSelected += (s, args) => PointerChainSelected?.Invoke(this, args);
 
+            // Hook Paste for Smart Paste Logic
+            _gridManager.PasteRequested += GridManager_PasteRequested;
+
             // Input field wiring
             txtTitle.TextChanged += TxtTitle_TextChanged;
             txtDescription.TextChanged += TxtDescription_TextChanged;
@@ -96,6 +104,7 @@ namespace RALogicEditor.Controls
             cmbPoints.TextChanged += CmbPoints_Changed;
             cmbType.SelectedIndexChanged += CmbType_SelectedIndexChanged;
             chkShowDecimal.CheckedChanged += ChkShowDecimal_CheckedChanged;
+            chkAliasMode.CheckedChanged += ChkAliasMode_CheckedChanged;
 
             conditionGrid.ContextMenuStrip.Opening += ConditionGrid_ContextMenuStrip_Opening;
         }
@@ -158,10 +167,152 @@ namespace RALogicEditor.Controls
                 lvLeaderboardComponents.Items[0].Selected = true;
         }
 
+        // Updates the local note cache for Alias/Tooltip lookup
+        public void SetNotes(List<CodeNote> notes)
+        {
+            _notesLookup.Clear();
+            if (notes == null) return;
+
+            foreach (var note in notes)
+            {
+                if (string.IsNullOrEmpty(note.Address)) continue;
+                string addr = note.Address.Trim();
+                // Ensure uniform hex format for lookup
+                if (!addr.StartsWith("0x")) addr = "0x" + addr;
+
+                // Extract first line or title for the alias
+                string title = note.Note.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "Note";
+
+                // Add to dictionary (latest note wins if duplicate)
+                _notesLookup[addr] = title;
+            }
+
+            // Push map to Grid Manager for Tooltips
+            _gridManager.NotesLookup = _notesLookup;
+
+            // Refresh grid to update aliases if enabled
+            RefreshCurrentGridDisplay();
+        }
+
         private void GridManager_LogicChanged(object? sender, EventArgs e)
         {
             _history.PushState(_triggerText);
             BuildTriggerAndNotify();
+            RunValidation();
+        }
+
+        private void RunValidation()
+        {
+            // Only validate current group to save perf
+            if (conditionGrid.Tag is AchievementConditionGroup group)
+            {
+                var warnings = LogicValidator.ValidateGroup(group);
+                if (warnings.Count > 0)
+                {
+                    SetStatus("⚠️ Warning: " + warnings[0]);
+                    // Could update UI color here if desired
+                }
+                else
+                {
+                    SetStatus("Ready");
+                }
+            }
+        }
+
+        private void GridManager_PasteRequested(object? sender, string clipboardText)
+        {
+            if (string.IsNullOrWhiteSpace(clipboardText)) return;
+
+            // Smart Paste Check: Is this a full achievement string?
+            // ID:"Logic":Title:Desc:Type:Author:Points...
+            // Matches format like: 12345:"0xH...":MyTitle...
+
+            // Crude check for colon count and ID start
+            if (char.IsDigit(clipboardText[0]) && clipboardText.Contains(":\"") && clipboardText.Count(c => c == ':') > 5)
+            {
+                var result = MessageBox.Show("Detected full achievement data in clipboard.\nDo you want to update Title, Points, and Description as well?",
+                    "Smart Paste", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+                if (result == DialogResult.Cancel) return;
+
+                if (result == DialogResult.Yes)
+                {
+                    ParseAndApplySmartPaste(clipboardText);
+                    return; // Handled completely
+                }
+            }
+
+            // Fallback to normal logic paste
+            _history.PushState(_triggerText);
+            _gridManager.PasteLogic();
+        }
+
+        private void ParseAndApplySmartPaste(string raw)
+        {
+            try
+            {
+                // Re-use UserTextParser logic partially by creating a dummy file structure in memory
+                // Or simple manual parse
+
+                // ID:"Logic":Title:Desc...
+                int firstColon = raw.IndexOf(':');
+                if (firstColon == -1) return;
+
+                string content = raw.Substring(firstColon + 1);
+                var parts = new List<string>();
+
+                // Simple CSV-like parse for colons respecting quotes
+                bool inQuote = false;
+                int start = 0;
+                for (int i = 0; i < content.Length; i++)
+                {
+                    if (content[i] == '"') inQuote = !inQuote;
+                    else if (content[i] == ':' && !inQuote)
+                    {
+                        string val = content.Substring(start, i - start);
+                        if (val.StartsWith("\"") && val.EndsWith("\"")) val = val.Substring(1, val.Length - 2).Replace("\\\"", "\"");
+                        parts.Add(val);
+                        start = i + 1;
+                    }
+                }
+                if (start <= content.Length)
+                {
+                    string val = content.Substring(start);
+                    if (val.StartsWith("\"") && val.EndsWith("\"")) val = val.Substring(1, val.Length - 2).Replace("\\\"", "\"");
+                    parts.Add(val);
+                }
+
+                if (parts.Count >= 3)
+                {
+                    // Apply Logic
+                    this.TriggerText = parts[0];
+
+                    // Apply Metadata (suppressing events if needed, but we want propagation)
+                    txtTitle.Text = parts[1];
+                    txtDescription.Text = parts[2];
+
+                    if (parts.Count > 5 && !string.IsNullOrEmpty(parts[5])) // Type
+                    {
+                        // Convert raw type to UI
+                        string t = parts[5].ToLower();
+                        if (t.Contains("prog")) cmbType.Text = "Progression";
+                        else if (t.Contains("win")) cmbType.Text = "Win";
+                        else if (t.Contains("miss")) cmbType.Text = "Missable";
+                        else cmbType.SelectedItem = null;
+                    }
+
+                    if (parts.Count > 7 && int.TryParse(parts[7], out int pts))
+                    {
+                        cmbPoints.Text = pts.ToString();
+                    }
+
+                    SetStatus("Smart Paste applied successfully.");
+                }
+            }
+            catch
+            {
+                MessageBox.Show("Failed to parse smart paste data.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void NotifyAssetDataChanged(Action<IAssetItem> updateAction)
@@ -231,6 +382,7 @@ namespace RALogicEditor.Controls
 
             btnReset.Visible = asset.State != AssetState.Local;
             SetStatus("Asset loaded.");
+            RunValidation();
         }
 
         private void SetupAchievementUI(RaAchievement cheevo)
@@ -316,6 +468,13 @@ namespace RALogicEditor.Controls
             RefreshCurrentGridDisplay();
         }
 
+        private void ChkAliasMode_CheckedChanged(object? sender, EventArgs e)
+        {
+            _showAliases = chkAliasMode.Checked;
+            _gridManager.ShowAliases = _showAliases;
+            RefreshCurrentGridDisplay();
+        }
+
         private void CmbType_SelectedIndexChanged(object? sender, EventArgs e)
         {
             if (_boundAsset is RaAchievement cheevo)
@@ -343,6 +502,7 @@ namespace RALogicEditor.Controls
             copyLogicToolStripMenuItem.Enabled = any;
             pasteToolStripMenuItem.Enabled = Clipboard.ContainsText();
             createGeneratorToolStripMenuItem.Enabled = any && conditionGrid.SelectedRows.Count == 1;
+            saveAsSnippetToolStripMenuItem.Enabled = any;
         }
 
         // Proxy calls to Grid Manager
@@ -353,7 +513,12 @@ namespace RALogicEditor.Controls
         private void addConditionToolStripMenuItem_Click(object sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.AddCondition(); }
         private void copyRowToolStripMenuItem_Click(object sender, EventArgs e) => _gridManager.CopySelectedRows();
         private void copyLogicToolStripMenuItem_Click(object sender, EventArgs e) => _gridManager.CopySelectedLogic();
-        private void pasteToolStripMenuItem_Click(object sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.PasteLogic(); }
+        // Paste logic handled by GridManager event now for Smart Paste support
+        private void pasteToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (Clipboard.ContainsText())
+                GridManager_PasteRequested(sender, Clipboard.GetText());
+        }
 
         private void addGroupToolStripMenuItem_Click(object sender, EventArgs e)
         {
@@ -440,8 +605,17 @@ namespace RALogicEditor.Controls
             string lVal = row.Cells["ColLValue"].Value?.ToString() ?? "";
             string rVal = row.Cells["ColRValue"].Value?.ToString() ?? "";
 
-            if (lVal.StartsWith("0x")) target = lVal;
-            else if (rVal.StartsWith("0x")) target = rVal;
+            if (lVal.StartsWith("0x") || lVal.StartsWith("[")) // Handle alias bracket start
+            {
+                // In Alias mode, we must retrieve raw value from tag
+                if (row.Tag is AchievementCondition cond) target = cond.LeftOperand.Value;
+                else target = lVal;
+            }
+            else if (rVal.StartsWith("0x") || rVal.StartsWith("["))
+            {
+                if (row.Tag is AchievementCondition cond) target = cond.RightOperand.Value;
+                else target = rVal;
+            }
 
             if (string.IsNullOrEmpty(target)) return;
 
@@ -685,6 +859,7 @@ namespace RALogicEditor.Controls
                 var group = _activeGroups[index];
                 conditionGrid.Tag = group;
                 RefreshCurrentGridDisplay();
+                RunValidation();
             }
         }
 
@@ -705,8 +880,8 @@ namespace RALogicEditor.Controls
                         }
                     }
                 }
-                // Passed _showDecimal
-                ConditionGridHelper.PopulateGridRows(conditionGrid, group, isGenerated, _showDecimal);
+                // Passed _showDecimal and _showAliases and the Notes Lookup
+                ConditionGridHelper.PopulateGridRows(conditionGrid, group, isGenerated, _showDecimal, _showAliases, _notesLookup);
             }
         }
 
@@ -756,6 +931,67 @@ namespace RALogicEditor.Controls
                 }
             }
             return sb.ToString();
+        }
+
+        // -- Snippet and Tools Events --
+
+        private void btnTools_Click(object sender, EventArgs e)
+        {
+            toolsContextMenu.Show(btnTools, 0, btnTools.Height);
+        }
+
+        private void pointerCalculatorToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            using (var form = new PointerCalculatorForm())
+            {
+                form.ShowDialog();
+            }
+        }
+
+        private void saveAsSnippetToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (conditionGrid.SelectedRows.Count == 0) return;
+
+            // Generate Logic String for selection
+            var sb = new StringBuilder();
+            foreach (DataGridViewRow row in conditionGrid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index))
+            {
+                if (row.Tag is AchievementCondition cond)
+                {
+                    if (sb.Length > 0) sb.Append('_');
+                    sb.Append(LogicFormatter.ConditionToString(cond));
+                }
+            }
+            string logic = sb.ToString();
+
+            // Simple input dialog for name (using standard InputBox style or custom if preferred, simplified here)
+            string name = Microsoft.VisualBasic.Interaction.InputBox("Enter name for this snippet:", "Save Snippet", "My Snippet");
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                SnippetManager.SaveSnippet(name, logic);
+                MessageBox.Show("Snippet saved!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private void insertSnippetToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (conditionGrid.ReadOnly) return;
+
+            using (var form = new SnippetSelectForm())
+            {
+                if (form.ShowDialog() == DialogResult.OK && form.SelectedSnippet != null)
+                {
+                    // Copy to clipboard internally to reuse PasteLogic
+                    string oldClip = Clipboard.ContainsText() ? Clipboard.GetText() : "";
+                    Clipboard.SetText(form.SelectedSnippet.LogicCode);
+
+                    _history.PushState(_triggerText);
+                    _gridManager.PasteLogic();
+
+                    // Restore clipboard if desired, or leave it for repeated pasting
+                    // Clipboard.SetText(oldClip);
+                }
+            }
         }
     }
 }

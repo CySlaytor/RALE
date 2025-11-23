@@ -4,6 +4,8 @@ using RALogicEditor.Utilities;
 using RALogicEditor.Models;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Collections.Generic;
+using System.Globalization;
 
 namespace RALogicEditor.Helpers
 {
@@ -12,8 +14,8 @@ namespace RALogicEditor.Helpers
     public static class ConditionGridHelper
     {
         // Clears the grid and repopulates it with the conditions from the provided group.
-        // Handles read-only state (for generated groups) and decimal display preference.
-        public static void PopulateGridRows(DoubleBufferedDataGridView grid, AchievementConditionGroup group, bool readOnlyMode, bool showDecimal = false)
+        // Handles read-only state, decimal display, and now Alias Mode.
+        public static void PopulateGridRows(DoubleBufferedDataGridView grid, AchievementConditionGroup group, bool readOnlyMode, bool showDecimal, bool showAliases, Dictionary<string, string>? notesLookup)
         {
             grid.Rows.Clear();
             if (group == null || group.Conditions == null) return;
@@ -32,33 +34,57 @@ namespace RALogicEditor.Helpers
                 row.CreateCells(grid);
                 row.Tag = cond; // Link the row to the model object
 
-                SetRowValues(row, cond, readOnlyMode, showDecimal);
+                SetRowValues(row, cond, readOnlyMode, showDecimal, showAliases, notesLookup);
                 grid.Rows.Add(row);
             }
         }
 
         // Maps the properties of an AchievementCondition to the specific cells in a DataGridViewRow.
-        public static void SetRowValues(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode, bool showDecimal = false)
+        public static void SetRowValues(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode, bool showDecimal, bool showAliases, Dictionary<string, string>? notesLookup)
         {
             row.Cells[0].Value = cond.ID;
             row.Cells[1].Value = cond.Flag;
             row.Cells[2].Value = cond.LeftOperand.Type;
             row.Cells[3].Value = cond.LeftOperand.Size;
 
-            // Format Left Value (convert Hex to Decimal if requested)
-            row.Cells[4].Value = LogicFormatter.FormatDisplayValue(cond.LeftOperand, showDecimal);
+            // Format Left Value (Alias check for Memory, Decimal check for Values)
+            row.Cells[4].Value = FormatOperandDisplay(cond.LeftOperand, showDecimal, showAliases, notesLookup);
 
             row.Cells[5].Value = cond.Operator;
 
             row.Cells[6].Value = cond.RightOperand.Type;
             row.Cells[7].Value = cond.RightOperand.Size;
 
-            // Format Right Value (needs reference size from Left operand for accurate masking)
+            // Format Right Value (Alias check for Memory, Decimal check for Values)
+            // Needs reference size from Left operand for accurate masking if it is a Value
             string rightSizeRef = LogicFormatter.GetRightOperandSizeReference(cond);
-            row.Cells[8].Value = LogicFormatter.FormatDisplayValue(cond.RightOperand, showDecimal, rightSizeRef);
+            // We pass the operand itself, but we handle the formatting logic manually if needed or delegate
+            row.Cells[8].Value = FormatOperandDisplay(cond.RightOperand, showDecimal, showAliases, notesLookup, rightSizeRef);
 
             // Apply visual styling (graying out invalid cells)
             ApplyCellFormatting(row, cond, readOnlyMode);
+        }
+
+        private static string FormatOperandDisplay(Operand op, bool showDecimal, bool showAliases, Dictionary<string, string>? notesLookup, string sizeRef = "")
+        {
+            // If Alias Mode is ON and this is a Memory type, try to find the note
+            if (showAliases && RaLogicSyntax.MemoryTypes.Contains(op.Type) && notesLookup != null)
+            {
+                // Normalize address (ensure 0x prefix)
+                string addr = op.Value.Trim();
+                if (!addr.StartsWith("0x") && long.TryParse(addr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                {
+                    addr = "0x" + addr;
+                }
+
+                if (notesLookup.ContainsKey(addr))
+                {
+                    return $"[{notesLookup[addr]}]";
+                }
+            }
+
+            // Fallback to standard formatting (Hex/Decimal/Float)
+            return LogicFormatter.FormatDisplayValue(op, showDecimal, sizeRef);
         }
 
         // Applies specific background colors and read-only states to cells based on logic rules.

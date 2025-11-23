@@ -1,5 +1,6 @@
 #nullable enable
 using RALogicEditor.Controls;
+using RALogicEditor.Forms;
 using RALogicEditor.Helpers;
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
@@ -72,6 +73,9 @@ namespace RALogicEditor
             cmbSource.SelectedIndex = 0;    // Default to JSON view
             cmbAssetType.SelectedIndexChanged += (s, e) => ReloadDataView();
             cmbSource.SelectedIndexChanged += (s, e) => ReloadDataView();
+
+            // Search Box Wiring
+            txtAssetSearch.TextChanged += (s, e) => ReloadDataView();
 
             // -- Menu Item Wiring --
             newAssetToolStripMenuItem.Click += NewAsset_Click;
@@ -264,7 +268,10 @@ namespace RALogicEditor
             ReloadDataView();
 
             // Ensure notes are set or cleared
-            codeNoteEditor.SetNotes(_projectRepo.LocalData?.Notes ?? new List<CodeNote>());
+            var notes = _projectRepo.LocalData?.Notes ?? new List<CodeNote>();
+            codeNoteEditor.SetNotes(notes);
+            // Pass notes to Trigger Editor for Tooltips and Alias Mode
+            triggerEditor.SetNotes(notes);
         }
 
         private void saveToolStripMenuItem_Click(object sender, EventArgs e)
@@ -278,6 +285,23 @@ namespace RALogicEditor
                 if (sfd.ShowDialog() != DialogResult.OK) return;
                 savePath = sfd.FileName;
             }
+
+            // -- Auto-Backup Strategy --
+            try
+            {
+                if (File.Exists(savePath))
+                {
+                    string backupDir = Path.Combine(Path.GetDirectoryName(savePath) ?? "", "Backups");
+                    if (!Directory.Exists(backupDir)) Directory.CreateDirectory(backupDir);
+
+                    string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    string fileName = Path.GetFileName(savePath);
+                    string backupPath = Path.Combine(backupDir, $"{fileName}.{timestamp}.bak");
+
+                    File.Copy(savePath, backupPath, true);
+                }
+            }
+            catch { /* Ignore backup failures, proceed with save */ }
 
             try
             {
@@ -363,6 +387,7 @@ namespace RALogicEditor
 
             bool showLeaderboards = cmbAssetType.SelectedIndex == 1;
             string sourceMode = cmbSource.SelectedItem?.ToString() ?? "Local";
+            string filterText = txtAssetSearch.Text.Trim();
 
             if (sourceMode == "New")
             {
@@ -376,7 +401,7 @@ namespace RALogicEditor
                     foreach (var item in list)
                     {
                         UpdateAssetState(item);
-                        if (item.State == AssetState.Local) AddGridRow(item);
+                        if (item.State == AssetState.Local) AddFilteredGridRow(item, filterText);
                     }
                 }
             }
@@ -395,9 +420,22 @@ namespace RALogicEditor
                     // Keep Local view focused on changes: Hide perfectly synced items
                     if (sourceMode == "Local" && item.State == AssetState.Synced) continue;
 
-                    AddGridRow(item);
+                    AddFilteredGridRow(item, filterText);
                 }
             }
+        }
+
+        private void AddFilteredGridRow(IAssetItem item, string filter)
+        {
+            // Apply text filter
+            if (!string.IsNullOrEmpty(filter))
+            {
+                bool matchesId = item.ID.ToString().Contains(filter);
+                bool matchesTitle = item.Title.Contains(filter, StringComparison.OrdinalIgnoreCase);
+                if (!matchesId && !matchesTitle) return;
+            }
+
+            AddGridRow(item);
         }
 
         private void AddGridRow(IAssetItem item)
@@ -502,30 +540,78 @@ namespace RALogicEditor
         {
             if (_isLoading || _selectedAsset == null) return;
             _projectRepo.EnsureLocalDataExists();
-            EnsureAssetIsLocal();
+
+            // Bulk Edit Logic
+            if (achievementGrid.SelectedRows.Count > 1)
+            {
+                ApplyBulkEdit(_selectedAsset);
+            }
+            else
+            {
+                EnsureAssetIsLocal();
+                UpdateAssetState(_selectedAsset);
+            }
+
+            // Visual update
             foreach (DataGridViewRow row in achievementGrid.Rows)
             {
-                if (row.Tag == _selectedAsset) { row.Cells[1].Value = _selectedAsset.Title; break; }
+                if (row.Tag is IAssetItem asset && asset.ID == _selectedAsset.ID)
+                {
+                    row.Cells[1].Value = _selectedAsset.Title;
+                    UpdateRowColor(row, asset);
+                    break;
+                }
             }
-            UpdateAssetState(_selectedAsset);
+        }
+
+        private void ApplyBulkEdit(IAssetItem sourceTemplate)
+        {
+            // Propagate metadata changes to all selected rows
+            // We do NOT propagate Logic or Description usually, just Type/Author/Points as those are common batch ops
+            // But since this event fires for ANY change in TriggerEditor including Title/Desc, we need to be careful.
+
+            // For now, let's strictly limit bulk edit to Points, Author, and Type.
+            // Detecting exactly which field changed is hard without more complex event args.
+            // As a safe approach, we apply Points/Type/Author from the source.
+
+            if (sourceTemplate is not RaAchievement srcAch) return;
+
+            foreach (DataGridViewRow row in achievementGrid.SelectedRows)
+            {
+                if (row.Tag is RaAchievement target && target != sourceTemplate)
+                {
+                    EnsureAssetIsLocal(target);
+                    target.Points = srcAch.Points;
+                    target.Type = srcAch.Type;
+                    // target.Author = srcAch.Author; // Author isn't editable in UI currently for existing assets easily, but if added later:
+
+                    UpdateAssetState(target);
+                }
+            }
+        }
+
+        // Overload to force a specific asset to local
+        private void EnsureAssetIsLocal(IAssetItem asset)
+        {
+            if (asset == null || _projectRepo.LocalData == null) return;
+            if (asset.State == AssetState.Local || asset.State == AssetState.Modified) return;
+
+            if (asset is RaAchievement ra)
+            {
+                if (!_projectRepo.LocalData.Achievements.Any(a => a.ID == ra.ID))
+                    _projectRepo.LocalData.Achievements.Add(ra);
+            }
+            else if (asset is RaLeaderboard rl)
+            {
+                if (!_projectRepo.LocalData.Leaderboards.Any(l => l.ID == rl.ID))
+                    _projectRepo.LocalData.Leaderboards.Add(rl);
+            }
         }
 
         // Adds the asset to LocalData list if it isn't there already (promotes from Synced to Modified)
         private void EnsureAssetIsLocal()
         {
-            if (_selectedAsset == null || _projectRepo.LocalData == null) return;
-            if (_selectedAsset.State == AssetState.Local || _selectedAsset.State == AssetState.Modified) return;
-
-            if (_selectedAsset is RaAchievement ra)
-            {
-                if (!_projectRepo.LocalData.Achievements.Any(a => a.ID == ra.ID))
-                    _projectRepo.LocalData.Achievements.Add(ra);
-            }
-            else if (_selectedAsset is RaLeaderboard rl)
-            {
-                if (!_projectRepo.LocalData.Leaderboards.Any(l => l.ID == rl.ID))
-                    _projectRepo.LocalData.Leaderboards.Add(rl);
-            }
+            EnsureAssetIsLocal(_selectedAsset!);
         }
 
         // Resets a Modified asset back to Synced state (removes from LocalData)
@@ -866,6 +952,9 @@ namespace RALogicEditor
             moveUpAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
             moveDownAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
 
+            // Diff is only valid for Modified assets (1 item selected)
+            viewDiffToolStripMenuItem.Enabled = achievementGrid.SelectedRows.Count == 1 && anyModified;
+
             bool hasAnyLocal = _projectRepo.LocalData != null &&
                               (_projectRepo.LocalData.Achievements.Count > 0 || _projectRepo.LocalData.Leaderboards.Count > 0);
             renumberContextToolStripMenuItem.Enabled = hasAnyLocal;
@@ -891,6 +980,33 @@ namespace RALogicEditor
                 var item = new ToolStripMenuItem(file);
                 item.Click += (s, args) => LoadFiles(file);
                 recentToolStripMenuItem.DropDownItems.Add(item);
+            }
+        }
+
+        private void viewDiffToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (achievementGrid.SelectedRows.Count != 1) return;
+            var row = achievementGrid.SelectedRows[0];
+            if (row.Tag is IAssetItem localItem && localItem.State == AssetState.Modified)
+            {
+                // Find server equivalent
+                if (_projectRepo.ServerData == null) return;
+
+                IAssetItem? serverItem = null;
+                foreach (var s in _projectRepo.ServerData.Sets)
+                {
+                    if (localItem.IsLeaderboard) serverItem = s.Leaderboards.FirstOrDefault(x => x.ID == localItem.ID);
+                    else serverItem = s.Achievements.FirstOrDefault(x => x.ID == localItem.ID);
+                    if (serverItem != null) break;
+                }
+
+                if (serverItem != null)
+                {
+                    using (var diff = new AssetDiffForm(serverItem, localItem))
+                    {
+                        diff.ShowDialog();
+                    }
+                }
             }
         }
     }

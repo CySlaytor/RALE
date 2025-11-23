@@ -36,11 +36,14 @@
             moveDownAssetToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparatorRenumber = new ToolStripSeparator();
             renumberContextToolStripMenuItem = new ToolStripMenuItem();
+            viewDiffToolStripMenuItem = new ToolStripMenuItem();
             panelGridBottom = new Panel();
             btnDeleteAsset = new Button();
             btnDuplicateAsset = new Button();
             btnAddAsset = new Button();
             panelGridTop = new Panel();
+            txtAssetSearch = new TextBox();
+            lblAssetSearch = new Label();
             cmbSource = new ComboBox();
             cmbAssetType = new ComboBox();
             splitEditor = new SplitContainer();
@@ -157,12 +160,12 @@
             achievementGrid.Columns.AddRange(new DataGridViewColumn[] { colID, colTitle });
             achievementGrid.ContextMenuStrip = assetContextMenu;
             achievementGrid.Dock = DockStyle.Fill;
-            achievementGrid.Location = new Point(0, 30);
+            achievementGrid.Location = new Point(0, 60);
             achievementGrid.Name = "achievementGrid";
             achievementGrid.ReadOnly = true;
             achievementGrid.RowHeadersVisible = false;
             achievementGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            achievementGrid.Size = new Size(260, 585);
+            achievementGrid.Size = new Size(260, 555);
             achievementGrid.TabIndex = 0;
             achievementGrid.SelectionChanged += achievementGrid_SelectionChanged;
             // 
@@ -182,9 +185,9 @@
             // 
             // assetContextMenu
             // 
-            assetContextMenu.Items.AddRange(new ToolStripItem[] { newAssetToolStripMenuItem, cloneAssetToolStripMenuItem, deleteAssetToolStripMenuItem, resetAssetToolStripMenuItem, toolStripSeparatorAsset, moveUpAssetToolStripMenuItem, moveDownAssetToolStripMenuItem, toolStripSeparatorRenumber, renumberContextToolStripMenuItem });
+            assetContextMenu.Items.AddRange(new ToolStripItem[] { newAssetToolStripMenuItem, cloneAssetToolStripMenuItem, deleteAssetToolStripMenuItem, resetAssetToolStripMenuItem, toolStripSeparatorAsset, moveUpAssetToolStripMenuItem, moveDownAssetToolStripMenuItem, toolStripSeparatorRenumber, renumberContextToolStripMenuItem, viewDiffToolStripMenuItem });
             assetContextMenu.Name = "assetContextMenu";
-            assetContextMenu.Size = new Size(200, 186);
+            assetContextMenu.Size = new Size(200, 208);
             // 
             // newAssetToolStripMenuItem
             // 
@@ -242,6 +245,13 @@
             renumberContextToolStripMenuItem.Size = new Size(199, 22);
             renumberContextToolStripMenuItem.Text = "Renumber Local IDs";
             // 
+            // viewDiffToolStripMenuItem
+            // 
+            viewDiffToolStripMenuItem.Name = "viewDiffToolStripMenuItem";
+            viewDiffToolStripMenuItem.Size = new Size(199, 22);
+            viewDiffToolStripMenuItem.Text = "View Diff (Server/Local)";
+            viewDiffToolStripMenuItem.Click += viewDiffToolStripMenuItem_Click;
+            // 
             // panelGridBottom
             // 
             panelGridBottom.Controls.Add(btnDeleteAsset);
@@ -286,13 +296,32 @@
             // 
             // panelGridTop
             // 
+            panelGridTop.Controls.Add(txtAssetSearch);
+            panelGridTop.Controls.Add(lblAssetSearch);
             panelGridTop.Controls.Add(cmbSource);
             panelGridTop.Controls.Add(cmbAssetType);
             panelGridTop.Dock = DockStyle.Top;
             panelGridTop.Location = new Point(0, 0);
             panelGridTop.Name = "panelGridTop";
-            panelGridTop.Size = new Size(260, 30);
+            panelGridTop.Size = new Size(260, 60);
             panelGridTop.TabIndex = 1;
+            // 
+            // txtAssetSearch
+            // 
+            txtAssetSearch.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtAssetSearch.Location = new Point(55, 32);
+            txtAssetSearch.Name = "txtAssetSearch";
+            txtAssetSearch.Size = new Size(174, 23);
+            txtAssetSearch.TabIndex = 3;
+            // 
+            // lblAssetSearch
+            // 
+            lblAssetSearch.AutoSize = true;
+            lblAssetSearch.Location = new Point(3, 35);
+            lblAssetSearch.Name = "lblAssetSearch";
+            lblAssetSearch.Size = new Size(45, 15);
+            lblAssetSearch.TabIndex = 2;
+            lblAssetSearch.Text = "Search:";
             // 
             // cmbSource
             // 
@@ -371,6 +400,7 @@
             assetContextMenu.ResumeLayout(false);
             panelGridBottom.ResumeLayout(false);
             panelGridTop.ResumeLayout(false);
+            panelGridTop.PerformLayout();
             splitEditor.Panel1.ResumeLayout(false);
             splitEditor.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)splitEditor).EndInit();
@@ -413,5 +443,8 @@
         private System.Windows.Forms.Button btnAddAsset;
         private System.Windows.Forms.Button btnDuplicateAsset;
         private System.Windows.Forms.Button btnDeleteAsset;
+        private System.Windows.Forms.Label lblAssetSearch;
+        private System.Windows.Forms.TextBox txtAssetSearch;
+        private System.Windows.Forms.ToolStripMenuItem viewDiffToolStripMenuItem;
     }
 }

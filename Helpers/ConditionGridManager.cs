@@ -33,8 +33,16 @@ namespace RALogicEditor.Helpers
         public event EventHandler<string>? AddressSelected;
         public event EventHandler<PointerChainArgs>? PointerChainSelected;
 
+        // New Event for Smart Paste
+        public event EventHandler<string>? PasteRequested;
+
         // Property to track display preference (Hex vs Decimal)
         public bool ShowDecimal { get; set; } = false;
+        // Property to track Alias display
+        public bool ShowAliases { get; set; } = false;
+
+        // Dictionary to lookup note descriptions by address (e.g. "0x1234" -> "Player HP")
+        public Dictionary<string, string> NotesLookup { get; set; } = new();
 
         public ConditionGridManager(DoubleBufferedDataGridView grid)
         {
@@ -51,6 +59,9 @@ namespace RALogicEditor.Helpers
             _grid.EditingControlShowing += Grid_EditingControlShowing;
             _grid.CellEndEdit += Grid_CellEndEdit;
             _grid.KeyDown += Grid_KeyDown;
+
+            // Wiring up Tooltips
+            _grid.CellToolTipTextNeeded += Grid_CellToolTipTextNeeded;
         }
 
         // Dynamically creates context menus based on definitions in RaLogicSyntax
@@ -91,7 +102,12 @@ namespace RALogicEditor.Helpers
 
             if (e.Control && e.KeyCode == Keys.C) { CopySelectedRows(); e.Handled = true; }
             else if (e.Control && e.Shift && e.KeyCode == Keys.C) { CopySelectedLogic(); e.Handled = true; }
-            else if (e.Control && e.KeyCode == Keys.V) { PasteLogic(); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.V)
+            {
+                if (Clipboard.ContainsText())
+                    PasteRequested?.Invoke(this, Clipboard.GetText());
+                e.Handled = true;
+            }
         }
 
         // Handles Right-Click context menus
@@ -124,6 +140,34 @@ namespace RALogicEditor.Helpers
         private void Grid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex >= 0) Grid_CellMouseDown(sender, new DataGridViewCellMouseEventArgs(e.ColumnIndex, e.RowIndex, 0, 0, new MouseEventArgs(MouseButtons.Right, 1, 0, 0, 0)));
+        }
+
+        // Provides tooltip text for memory addresses
+        private void Grid_CellToolTipTextNeeded(object? sender, DataGridViewCellToolTipTextNeededEventArgs e)
+        {
+            if (e.RowIndex >= 0 && e.ColumnIndex >= 0)
+            {
+                var colName = _grid.Columns[e.ColumnIndex].Name;
+                if (colName == "ColLValue" || colName == "ColRValue")
+                {
+                    // Get the raw object value to check type, or check the Type column
+                    var row = _grid.Rows[e.RowIndex];
+                    if (row.Tag is AchievementCondition cond)
+                    {
+                        Operand op = colName == "ColLValue" ? cond.LeftOperand : cond.RightOperand;
+                        if (RaLogicSyntax.MemoryTypes.Contains(op.Type))
+                        {
+                            string addr = op.Value.Trim();
+                            if (!addr.StartsWith("0x")) addr = "0x" + addr;
+
+                            if (NotesLookup.TryGetValue(addr, out string? note))
+                            {
+                                e.ToolTipText = note;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Configures the TextBox control when editing a cell (Input Validation)
@@ -196,8 +240,8 @@ namespace RALogicEditor.Helpers
             if (row.Tag is AchievementCondition cond)
             {
                 ApplyConditionLogicRules(cond);
-                // Refresh visuals (applying ShowDecimal if active)
-                ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal);
+                // Refresh visuals (applying ShowDecimal and ShowAliases if active)
+                ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
                 LogicChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -226,7 +270,7 @@ namespace RALogicEditor.Helpers
                     else if (colName == "ColRSize") cond.RightOperand.Size = val;
 
                     ApplyConditionLogicRules(cond);
-                    ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal);
+                    ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
                     changed = true;
                 }
             }
@@ -362,7 +406,7 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.InsertRange(idx, conds);
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -387,7 +431,7 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.InsertRange(idx, clones);
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -409,7 +453,7 @@ namespace RALogicEditor.Helpers
 
             foreach (DataGridViewRow row in _grid.SelectedRows) { if (row.Tag is AchievementCondition cond) group.Conditions.Remove(cond); }
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -438,7 +482,7 @@ namespace RALogicEditor.Helpers
 
             foreach (var idx in indices) { var item = group.Conditions[idx]; group.Conditions.RemoveAt(idx); group.Conditions.Insert(idx + dist, item); }
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -464,7 +508,7 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.Add(new AchievementCondition { LeftOperand = { Type = "Value", Value = "0" }, Operator = "=", RightOperand = { Type = "Value", Value = "1" } });
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -484,6 +528,17 @@ namespace RALogicEditor.Helpers
         {
             if (colIndex != 4 && colIndex != 8) return;
             string val = _grid.Rows[rowIndex].Cells[colIndex].Value?.ToString() ?? "";
+
+            // Check if it's an alias (starts with [)
+            if (val.StartsWith("["))
+            {
+                // We need the underlying value from the model, not the formatted cell value
+                if (_grid.Rows[rowIndex].Tag is AchievementCondition cond)
+                {
+                    val = colIndex == 4 ? cond.LeftOperand.Value : cond.RightOperand.Value;
+                }
+            }
+
             if (!val.StartsWith("0x") || !long.TryParse(val.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long currentOffset)) return;
 
             List<long> offsets = new List<long>();
@@ -499,6 +554,13 @@ namespace RALogicEditor.Helpers
                 var row = _grid.Rows[scanIndex];
                 string flag = row.Cells["ColFlag"].Value?.ToString() ?? "";
                 string memVal = row.Cells["ColLValue"].Value?.ToString() ?? "";
+
+                // If Aliases are on, the cell might be text. Get raw model value.
+                if (row.Tag is AchievementCondition rCond)
+                {
+                    memVal = rCond.LeftOperand.Value;
+                }
+
                 if (flag == "Add Address" && memVal.StartsWith("0x") && long.TryParse(memVal.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long addr)) { collected.Push(addr); scanIndex--; chainFound = true; } else break;
             }
 
