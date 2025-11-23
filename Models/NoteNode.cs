@@ -7,6 +7,10 @@ namespace RALogicEditor.Models
     {
         public string Offset { get; set; } = "";
         public string Description { get; set; } = "";
+
+        // Size in bytes covered by this note (default 1)
+        public long Size { get; set; } = 1;
+
         public int RawLineIndex { get; set; }
         public int IndentLevel { get; set; }
         public string Content { get; set; } = "";
@@ -21,4 +25,4 @@ namespace RALogicEditor.Models
             return $"{Offset} | {Description}";
         }
     }
-}   
+}

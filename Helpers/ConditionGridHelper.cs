@@ -25,6 +25,7 @@ namespace RALogicEditor.Helpers
             bool showDecimal,
             bool showAliases,
             Dictionary<string, List<NoteNode>>? notesLookup,
+            List<(long Start, long End, NoteNode Node)>? rangeCache,
             List<ValidationIssue>? issues = null) // Added Issues parameter
         {
             grid.Rows.Clear();
@@ -55,7 +56,7 @@ namespace RALogicEditor.Helpers
                 }
 
                 // Pass 'i' and 'group' for pointer chain context scanning
-                SetRowValues(row, cond, readOnlyMode, showDecimal, showAliases, notesLookup, group, i, targetIssue);
+                SetRowValues(row, cond, readOnlyMode, showDecimal, showAliases, notesLookup, rangeCache, group, i, targetIssue);
                 grid.Rows.Add(row);
             }
         }
@@ -68,6 +69,7 @@ namespace RALogicEditor.Helpers
             bool showDecimal,
             bool showAliases,
             Dictionary<string, List<NoteNode>>? notesLookup,
+            List<(long Start, long End, NoteNode Node)>? rangeCache,
             AchievementConditionGroup? group = null,
             int rowIndex = -1,
             ValidationIssue? issue = null) // Added Issue parameter
@@ -78,7 +80,7 @@ namespace RALogicEditor.Helpers
             row.Cells[3].Value = cond.LeftOperand.Size;
 
             // Format Left Value
-            row.Cells[4].Value = FormatOperandDisplay(cond.LeftOperand, showDecimal, showAliases, notesLookup, group, rowIndex, true);
+            row.Cells[4].Value = FormatOperandDisplay(cond.LeftOperand, showDecimal, showAliases, notesLookup, rangeCache, group, rowIndex, true);
 
             row.Cells[5].Value = cond.Operator;
 
@@ -87,13 +89,13 @@ namespace RALogicEditor.Helpers
 
             // Format Right Value
             string rightSizeRef = LogicFormatter.GetRightOperandSizeReference(cond);
-            row.Cells[8].Value = FormatOperandDisplay(cond.RightOperand, showDecimal, showAliases, notesLookup, group, rowIndex, false, rightSizeRef);
+            row.Cells[8].Value = FormatOperandDisplay(cond.RightOperand, showDecimal, showAliases, notesLookup, rangeCache, group, rowIndex, false, rightSizeRef);
 
             // Apply visual styling (graying out invalid cells and applying issue highlights)
             ApplyCellFormatting(row, cond, readOnlyMode, showAliases, issue);
         }
 
-        private static string FormatOperandDisplay(Operand op, bool showDecimal, bool showAliases, Dictionary<string, List<NoteNode>>? notesLookup, AchievementConditionGroup? group, int rowIndex, bool isLeft, string sizeRef = "")
+        private static string FormatOperandDisplay(Operand op, bool showDecimal, bool showAliases, Dictionary<string, List<NoteNode>>? notesLookup, List<(long Start, long End, NoteNode Node)>? rangeCache, AchievementConditionGroup? group, int rowIndex, bool isLeft, string sizeRef = "")
         {
             // If Alias Mode is ON and this is a Memory type
             if (showAliases && RaLogicSyntax.MemoryTypes.Contains(op.Type) && notesLookup != null)
@@ -101,7 +103,7 @@ namespace RALogicEditor.Helpers
                 // Normalize the address using the same logic as the dictionary keys
                 string addr = LogicFormatter.NormalizeAddress(op.Value);
 
-                string alias = ResolveAlias(addr, group, rowIndex, isLeft, notesLookup);
+                string alias = ResolveAlias(addr, group, rowIndex, isLeft, notesLookup, rangeCache);
                 if (!string.IsNullOrEmpty(alias))
                 {
                     // Strip [Tags] like [32-bit Pointer] or [Void]
@@ -117,8 +119,20 @@ namespace RALogicEditor.Helpers
             return LogicFormatter.FormatDisplayValue(op, showDecimal, sizeRef);
         }
 
-        private static string ResolveAlias(string address, AchievementConditionGroup? group, int rowIndex, bool isLeft, Dictionary<string, List<NoteNode>> notesLookup)
+        private static string ResolveAlias(
+            string address,
+            AchievementConditionGroup? group,
+            int rowIndex,
+            bool isLeft,
+            Dictionary<string, List<NoteNode>> notesLookup,
+            List<(long Start, long End, NoteNode Node)>? rangeCache)
         {
+            // Helper to clean hex strings "0x123" -> long
+            long ParseHex(string s) =>
+                long.TryParse(s.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+
+            long addrVal = ParseHex(address);
+
             // 1. Check for Pointer Chain context (Backwards scan)
             // Only applicable if we have a group context and rowIndex > 0
             if (group != null && rowIndex > 0)
@@ -151,28 +165,29 @@ namespace RALogicEditor.Helpers
                     // Look up the Base Note
                     if (notesLookup.TryGetValue(normalizedBase, out var nodes))
                     {
-                        // Convert current address to a relative offset
-                        // e.g. address is "0x73" (value in grid for offset)
-                        // remove 0x, parse hex
-                        string cleanAddr = address.Replace("0x", "");
-
-                        if (long.TryParse(cleanAddr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long targetOffset))
+                        if (addrVal != -1)
                         {
-                            // Try to find a node with this offset
-                            var matchingNode = nodes.FirstOrDefault(n =>
-                            {
-                                // Strip + and 0x for comparison from node offset string like "+0x73"
-                                string cleanNodeOff = n.Offset.Replace("+", "").Replace("0x", "").Trim();
-                                if (long.TryParse(cleanNodeOff, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long nodeVal))
-                                {
-                                    return nodeVal == targetOffset;
-                                }
-                                return false;
-                            });
+                            long targetOffset = addrVal;
 
-                            if (matchingNode != null)
+                            // Search for exact match or range match inside the pointer node structure
+                            foreach (var node in nodes)
                             {
-                                return matchingNode.Description;
+                                // Clean node offset "+0x10" -> 0x10
+                                string rawOff = node.Offset.Replace("+", "").Replace("-", "").Replace("0x", "").Trim();
+                                if (long.TryParse(rawOff, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long nodeOff))
+                                {
+                                    if (node.Offset.StartsWith("-")) nodeOff = -nodeOff;
+
+                                    // Check Range: Node Offset <= Target < Node Offset + Size
+                                    if (targetOffset >= nodeOff && targetOffset < nodeOff + node.Size)
+                                    {
+                                        string desc = node.Description;
+                                        // Calculate delta
+                                        long delta = targetOffset - nodeOff;
+                                        if (delta > 0) desc += $" +0x{delta:X}";
+                                        return desc;
+                                    }
+                                }
                             }
                         }
                     }
@@ -199,6 +214,28 @@ namespace RALogicEditor.Helpers
                             desc = main.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
                         }
                     }
+                    return desc;
+                }
+            }
+
+            // 3. Ranged Direct Lookup (e.g. Entity Slot [176 bytes])
+            if (rangeCache != null && addrVal != -1)
+            {
+                // Find a range that covers this address
+                // We use first match, assuming no overlapping struct notes (or first loaded wins)
+                var match = rangeCache.FirstOrDefault(r => addrVal >= r.Start && addrVal < r.End);
+                if (match.Node != null)
+                {
+                    string desc = match.Node.Description;
+                    // Fallback for "Full Note" placeholder
+                    if (string.IsNullOrEmpty(desc) || desc.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string content = match.Node.Content;
+                        desc = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+                    }
+
+                    long delta = addrVal - match.Start;
+                    if (delta > 0) desc += $" +0x{delta:X}";
                     return desc;
                 }
             }

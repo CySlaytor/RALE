@@ -16,7 +16,12 @@ namespace RALogicEditor.Parsers
             bool isPointerNote = noteText.Contains("Pointer", StringComparison.OrdinalIgnoreCase);
 
             var flatList = new List<NoteNode>();
+            // Root node covers the full note text
             var root = new NoteNode { Offset = "(Default)", Description = "Full Note", IndentLevel = -2, Content = noteText };
+
+            // Try parse root size from first line if it's a struct definition
+            if (lines.Length > 0) root.Size = ParseSizeFromDescription(lines[0]);
+
             flatList.Add(root);
 
             if (isPointerNote)
@@ -61,7 +66,9 @@ namespace RALogicEditor.Parsers
                         string desc = match.Groups[3].Value;
                         if (!offset.StartsWith("+") && !offset.StartsWith("-")) offset = "+" + offset;
 
-                        var node = new NoteNode { Offset = offset, Description = desc, RawLineIndex = i, IndentLevel = indent };
+                        long size = ParseSizeFromDescription(desc);
+
+                        var node = new NoteNode { Offset = offset, Description = desc, RawLineIndex = i, IndentLevel = indent, Size = size };
 
                         // Pop stack until we find the parent (indent level must be less than current)
                         while (stack.Count > 0 && stack.Peek().IndentLevel >= indent)
@@ -92,6 +99,24 @@ namespace RALogicEditor.Parsers
                 CollectAllNodes(logicalRoot, flatList);
             }
             return flatList;
+        }
+
+        private static long ParseSizeFromDescription(string desc)
+        {
+            if (string.IsNullOrEmpty(desc)) return 1;
+
+            // 1. Explicit [X bytes]
+            var bytesMatch = Regex.Match(desc, @"\[(\d+)\s*bytes?\]", RegexOptions.IgnoreCase);
+            if (bytesMatch.Success && long.TryParse(bytesMatch.Groups[1].Value, out long bSize))
+                return bSize;
+
+            // 2. Standard types [32-bit] etc
+            if (desc.Contains("[32-bit") || desc.Contains("[Float")) return 4;
+            if (desc.Contains("[24-bit")) return 3;
+            if (desc.Contains("[16-bit")) return 2;
+            if (desc.Contains("[8-bit")) return 1;
+
+            return 1;
         }
 
         private static void CollectAllNodes(NoteNode node, List<NoteNode> flatList)

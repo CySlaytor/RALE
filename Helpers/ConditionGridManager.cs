@@ -45,6 +45,10 @@ namespace RALogicEditor.Helpers
         // Key: Normalized Address "0x1234", Value: List of NoteNodes (Tree)
         public Dictionary<string, List<NoteNode>> NotesLookup { get; set; } = new();
 
+        // Cache for range-based notes (e.g. Structs covering [176 bytes])
+        // Tuple: Start Address, End Address, Note Node
+        public List<(long Start, long End, NoteNode Node)> RangeCache { get; set; } = new();
+
         public ConditionGridManager(DoubleBufferedDataGridView grid)
         {
             _grid = grid;
@@ -248,7 +252,7 @@ namespace RALogicEditor.Helpers
             {
                 ApplyConditionLogicRules(cond);
                 // Refresh visuals (applying ShowDecimal and ShowAliases if active)
-                ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, _grid.Tag as AchievementConditionGroup, e.RowIndex);
+                ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, _grid.Tag as AchievementConditionGroup, e.RowIndex);
                 LogicChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -277,7 +281,7 @@ namespace RALogicEditor.Helpers
                     else if (colName == "ColRSize") cond.RightOperand.Size = val;
 
                     ApplyConditionLogicRules(cond);
-                    ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, _grid.Tag as AchievementConditionGroup, row.Index);
+                    ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, _grid.Tag as AchievementConditionGroup, row.Index);
                     changed = true;
                 }
             }
@@ -413,7 +417,7 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.InsertRange(idx, conds);
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -423,7 +427,7 @@ namespace RALogicEditor.Helpers
             RestoreSelection(newIndices);
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
-            StatusUpdateRequested?.Invoke(this, "Logic pasted.");
+            StatusUpdateRequested?.Invoke(this, $"Logic pasted ({conds.Count} lines).");
         }
 
         public void DuplicateSelected()
@@ -438,7 +442,7 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.InsertRange(idx, clones);
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -448,7 +452,7 @@ namespace RALogicEditor.Helpers
             RestoreSelection(newIndices);
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
-            StatusUpdateRequested?.Invoke(this, "Conditions duplicated.");
+            StatusUpdateRequested?.Invoke(this, $"Conditions duplicated ({clones.Count} lines).");
         }
 
         public void DeleteSelected()
@@ -460,7 +464,7 @@ namespace RALogicEditor.Helpers
 
             foreach (DataGridViewRow row in _grid.SelectedRows) { if (row.Tag is AchievementCondition cond) group.Conditions.Remove(cond); }
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -489,7 +493,7 @@ namespace RALogicEditor.Helpers
 
             foreach (var idx in indices) { var item = group.Conditions[idx]; group.Conditions.RemoveAt(idx); group.Conditions.Insert(idx + dist, item); }
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -515,7 +519,7 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.Add(new AchievementCondition { LeftOperand = { Type = "Value", Value = "0" }, Operator = "=", RightOperand = { Type = "Value", Value = "1" } });
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }

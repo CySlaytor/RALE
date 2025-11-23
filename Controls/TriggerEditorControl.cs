@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -177,6 +178,9 @@ namespace RALogicEditor.Controls
         public void SetNotes(List<CodeNote> notes)
         {
             _notesLookup.Clear();
+            // Clear range cache in manager
+            _gridManager.RangeCache.Clear();
+
             if (notes == null) return;
 
             foreach (var note in notes)
@@ -189,6 +193,21 @@ namespace RALogicEditor.Controls
 
                 // Add to dictionary (latest note wins if duplicate)
                 _notesLookup[key] = nodes;
+
+                // Populate Range Cache for struct-like notes (Size > 1)
+                // We assume the root node has the total size if parsed correctly
+                if (nodes.Count > 0)
+                {
+                    var root = nodes[0]; // Usually index 0 is root or default
+                    if (root.Size > 1)
+                    {
+                        if (long.TryParse(key.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long startAddr))
+                        {
+                            long endAddr = startAddr + root.Size;
+                            _gridManager.RangeCache.Add((startAddr, endAddr, root));
+                        }
+                    }
+                }
             }
 
             // Push map to Grid Manager for Tooltips
@@ -416,6 +435,10 @@ namespace RALogicEditor.Controls
             _boundAsset = asset;
             _isLeaderboardMode = asset.IsLeaderboard;
             _generatorRules.Clear();
+
+            // Clear previous selection to ensure new asset starts at Core (Index 0)
+            groupsList.SelectedItems.Clear();
+
             this.TriggerText = asset.Logic;
             _history.Clear();
 
@@ -810,9 +833,6 @@ namespace RALogicEditor.Controls
                 RefreshGroupsListUI();
             }
             _isProgrammaticallyChanging = false;
-
-            if (groupsList.Items.Count > 0)
-                groupsList.Items[0].Selected = true;
         }
 
         private Dictionary<string, List<AchievementConditionGroup>> ParseLeaderboardIntoSegments(string logic)
@@ -971,25 +991,26 @@ namespace RALogicEditor.Controls
                 }
 
                 // Passed _showDecimal, _showAliases, Notes Lookup AND Current Issues for highlighting
-                ConditionGridHelper.PopulateGridRows(conditionGrid, group, isGenerated, _showDecimal, _showAliases, _notesLookup, _currentIssues);
+                // Also passing RangeCache for Struct logic
+                ConditionGridHelper.PopulateGridRows(conditionGrid, group, isGenerated, _showDecimal, _showAliases, _notesLookup, _gridManager.RangeCache, _currentIssues);
 
                 // Restore State
                 if (conditionGrid.Rows.Count > 0)
                 {
+                    // Restore Focus FIRST (prevents clearing selection later)
+                    if (focusedRowIndex >= 0 && focusedRowIndex < conditionGrid.Rows.Count)
+                    {
+                        try { conditionGrid.CurrentCell = conditionGrid.Rows[focusedRowIndex].Cells[focusedColIndex]; } catch { }
+                    }
+
                     // Restore Selection
-                    conditionGrid.ClearSelection();
+                    conditionGrid.ClearSelection(); // Clear the selection made by CurrentCell assignment if any
                     foreach (int idx in selectedIndices)
                     {
                         if (idx >= 0 && idx < conditionGrid.Rows.Count)
                         {
                             conditionGrid.Rows[idx].Selected = true;
                         }
-                    }
-
-                    // Restore Focus
-                    if (focusedRowIndex >= 0 && focusedRowIndex < conditionGrid.Rows.Count)
-                    {
-                        conditionGrid.CurrentCell = conditionGrid.Rows[focusedRowIndex].Cells[focusedColIndex];
                     }
 
                     // Restore Scroll
