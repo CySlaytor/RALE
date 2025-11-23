@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace RALogicEditor.Forms
@@ -16,22 +17,30 @@ namespace RALogicEditor.Forms
         // List of addresses the user selected to apply the generator rule to
         public List<string> SelectedAddresses { get; private set; } = new();
 
-        // Constructor accepts a dictionary for readable labels: Key=Address, Value=Description
-        public GeneratorConfigForm(Dictionary<string, string> addressLabels, int defaultStride = 0, GeneratorDefinition existingDef = null)
+        // ViewModel to handle hierarchy and display formatting
+        public class GeneratorItemViewModel
+        {
+            public string Address { get; set; } = "";
+            public string Description { get; set; } = "";
+            public List<GeneratorItemViewModel> Children { get; set; } = new();
+
+            public override string ToString()
+            {
+                if (string.IsNullOrEmpty(Description)) return Address;
+
+                // Strip brackets [32-bit] etc for cleaner display, as requested
+                string cleanDesc = Regex.Replace(Description, @"\[.*?\]", "").Trim();
+
+                if (string.IsNullOrEmpty(cleanDesc)) return Address;
+                return $"{Address} ({cleanDesc})";
+            }
+        }
+
+        // Constructor now accepts a hierarchical list of items
+        public GeneratorConfigForm(List<GeneratorItemViewModel> rootItems, int defaultStride = 0, GeneratorDefinition? existingDef = null)
         {
             InitializeComponent();
-
-            // Populate the list
-            clbAddresses.Items.Clear();
-            foreach (var kvp in addressLabels)
-            {
-                // Display: "0x1234 (HP)" or just "0x1234"
-                string label = string.IsNullOrEmpty(kvp.Value) ? kvp.Key : $"{kvp.Key} ({kvp.Value})";
-                // We store the raw address in the Item but display the label? 
-                // Checklistbox items are objects. We can wrap them or just parse string.
-                // Simplest way: Store a custom object.
-                clbAddresses.Items.Add(new AddressItem(kvp.Key, label), false);
-            }
+            InitializeTreeView(rootItems);
 
             // Pre-fill Stride
             if (defaultStride > 0)
@@ -40,7 +49,7 @@ namespace RALogicEditor.Forms
                 chkAutoStride.Checked = true; // Visually indicate it was auto-detected
             }
 
-            // If we have existing rules, try to pre-fill the form
+            // If we have existing rules, try to pre-fill the form checks
             if (existingDef != null)
             {
                 txtCopies.Text = existingDef.Copies.ToString();
@@ -51,22 +60,81 @@ namespace RALogicEditor.Forms
                     txtStride.Text = "0x" + foundStride.ToString("X");
 
                     // Check addresses that are already in the rules
-                    for (int i = 0; i < clbAddresses.Items.Count; i++)
-                    {
-                        if (clbAddresses.Items[i] is AddressItem item)
-                        {
-                            if (existingDef.Rules.Any(r => r.SourceAddress == item.Address))
-                            {
-                                clbAddresses.SetItemChecked(i, true);
-                            }
-                        }
-                    }
+                    var rulesSet = existingDef.Rules.Select(r => r.SourceAddress).ToHashSet();
+                    CheckNodesRecursive(tvAddresses.Nodes, rulesSet);
                 }
             }
-            else if (clbAddresses.Items.Count == 1)
+            else if (tvAddresses.Nodes.Count == 1)
             {
-                // Select single item by default for convenience
-                clbAddresses.SetItemChecked(0, true);
+                // Select single root item by default for convenience
+                tvAddresses.Nodes[0].Checked = true;
+                // Propagate check to children
+                SetChildrenChecked(tvAddresses.Nodes[0], true);
+            }
+        }
+
+        private void InitializeTreeView(List<GeneratorItemViewModel> items)
+        {
+            tvAddresses.Nodes.Clear();
+            foreach (var item in items)
+            {
+                tvAddresses.Nodes.Add(CreateTreeNode(item));
+            }
+            tvAddresses.ExpandAll();
+        }
+
+        private TreeNode CreateTreeNode(GeneratorItemViewModel item)
+        {
+            var node = new TreeNode(item.ToString());
+            node.Tag = item.Address; // Store raw address in Tag for retrieval
+
+            foreach (var child in item.Children)
+            {
+                node.Nodes.Add(CreateTreeNode(child));
+            }
+            return node;
+        }
+
+        private void CheckNodesRecursive(TreeNodeCollection nodes, HashSet<string> addressesToCheck)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                if (node.Tag is string addr && addressesToCheck.Contains(addr))
+                {
+                    node.Checked = true;
+                    // Ensure parents are expanded to show checked items
+                    TreeNode parent = node.Parent;
+                    while (parent != null)
+                    {
+                        parent.Expand();
+                        parent = parent.Parent;
+                    }
+                }
+                CheckNodesRecursive(node.Nodes, addressesToCheck);
+            }
+        }
+
+        // Cascade checking to children
+        private void tvAddresses_AfterCheck(object sender, TreeViewEventArgs e)
+        {
+            // Only process user actions or code triggers, avoid infinite recursion loops by checking strict action if needed
+            // But simple recursion is fine here as long as we don't re-trigger for same state
+            // Added null check for e.Node
+            if (e.Action != TreeViewAction.Unknown && e.Node != null)
+            {
+                SetChildrenChecked(e.Node, e.Node.Checked);
+            }
+        }
+
+        private void SetChildrenChecked(TreeNode node, bool isChecked)
+        {
+            foreach (TreeNode child in node.Nodes)
+            {
+                if (child.Checked != isChecked)
+                {
+                    child.Checked = isChecked;
+                    SetChildrenChecked(child, isChecked);
+                }
             }
         }
 
@@ -92,8 +160,12 @@ namespace RALogicEditor.Forms
                 return;
             }
 
+            // Collect selected addresses from tree
+            SelectedAddresses.Clear();
+            CollectCheckedAddresses(tvAddresses.Nodes);
+
             // Validate Selection
-            if (clbAddresses.CheckedItems.Count == 0)
+            if (SelectedAddresses.Count == 0)
             {
                 MessageBox.Show("Please select at least one address to increment.");
                 return;
@@ -102,15 +174,21 @@ namespace RALogicEditor.Forms
             Copies = c;
             Stride = s;
 
-            SelectedAddresses.Clear();
-            foreach (var item in clbAddresses.CheckedItems)
-            {
-                if (item is AddressItem ai)
-                    SelectedAddresses.Add(ai.Address);
-            }
-
             this.DialogResult = DialogResult.OK;
             this.Close();
+        }
+
+        private void CollectCheckedAddresses(TreeNodeCollection nodes)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                if (node.Checked && node.Tag is string addr)
+                {
+                    if (!SelectedAddresses.Contains(addr))
+                        SelectedAddresses.Add(addr);
+                }
+                CollectCheckedAddresses(node.Nodes);
+            }
         }
 
         private void btnCancel_Click(object sender, EventArgs e)
@@ -121,23 +199,28 @@ namespace RALogicEditor.Forms
 
         private void btnSelectAll_Click(object sender, EventArgs e)
         {
-            bool state = true;
-            if (clbAddresses.CheckedItems.Count == clbAddresses.Items.Count)
-                state = false;
-
-            for (int i = 0; i < clbAddresses.Items.Count; i++)
+            bool anyUnchecked = false;
+            foreach (TreeNode node in tvAddresses.Nodes)
             {
-                clbAddresses.SetItemChecked(i, state);
+                if (!IsNodeTreeChecked(node)) { anyUnchecked = true; break; }
+            }
+
+            bool newState = anyUnchecked;
+            foreach (TreeNode node in tvAddresses.Nodes)
+            {
+                node.Checked = newState;
+                SetChildrenChecked(node, newState);
             }
         }
 
-        // Wrapper class for list display
-        private class AddressItem
+        private bool IsNodeTreeChecked(TreeNode node)
         {
-            public string Address { get; }
-            public string Display { get; }
-            public AddressItem(string addr, string disp) { Address = addr; Display = disp; }
-            public override string ToString() => Display;
+            if (!node.Checked) return false;
+            foreach (TreeNode child in node.Nodes)
+            {
+                if (!IsNodeTreeChecked(child)) return false;
+            }
+            return true;
         }
     }
 }

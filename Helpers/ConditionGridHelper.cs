@@ -128,63 +128,96 @@ namespace RALogicEditor.Helpers
             long ParseHex(string s) =>
                 long.TryParse(s.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
 
-            long addrVal = ParseHex(address);
+            long targetVal = ParseHex(address);
 
-            // 1. Check for Pointer Chain context (Backwards scan)
-            // Only applicable if we have a group context and rowIndex > 0
+            // 1. Strict Pointer Chain Logic
+            // We verify that the sequence of 'Add Address' offsets in the Grid matches the hierarchy in the Notes.
             if (group != null && rowIndex > 0)
             {
-                // Scan backwards to find the Base Address of the chain
+                // Collect the chain of offsets from the grid (scanning backwards)
+                var chainStack = new Stack<string>();
                 int scan = rowIndex - 1;
-                string? baseAddress = null;
-
-                // We only care about "Add Address" flags forming a chain immediately preceding this row
                 while (scan >= 0)
                 {
                     var prevCond = group.Conditions[scan];
+                    // RA logic: A contiguous block of "Add Address" defines the pointer chain.
+                    // The first "Add Address" in the block is the Base.
                     if (prevCond.Flag == "Add Address")
                     {
-                        baseAddress = prevCond.LeftOperand.Value;
+                        chainStack.Push(prevCond.LeftOperand.Value);
                         scan--;
                     }
                     else
                     {
-                        // Chain broken
                         break;
                     }
                 }
 
-                // If we found a base address
-                if (!string.IsNullOrEmpty(baseAddress))
+                if (chainStack.Count > 0)
                 {
-                    string normalizedBase = LogicFormatter.NormalizeAddress(baseAddress);
+                    // The bottom of the stack is the Base Address
+                    string baseAddrStr = chainStack.Pop();
+                    string normalizedBase = LogicFormatter.NormalizeAddress(baseAddrStr);
 
-                    // Look up the Base Note
                     if (notesLookup.TryGetValue(normalizedBase, out var nodes))
                     {
-                        if (addrVal != -1)
+                        // Find valid top-level nodes (children of logical root)
+                        // PointerTreeParser nodes have IndentLevel starting at 0 for top level usually,
+                        // or we check for Parent.IndentLevel == -1.
+                        // 'nodes' is a flat list containing all nodes.
+                        var currentLevelNodes = nodes.Where(n => n.IndentLevel != -2 && (n.Parent == null || n.Parent.IndentLevel == -1)).ToList();
+                        bool chainValid = true;
+                        NoteNode? contextNode = null;
+
+                        // Traverse the intermediate offsets (if any)
+                        while (chainStack.Count > 0)
                         {
-                            long targetOffset = addrVal;
+                            string offsetStr = chainStack.Pop();
+                            long offset = ParseHex(offsetStr);
+                            if (offset == -1) { chainValid = false; break; }
 
-                            // Search for exact match or range match inside the pointer node structure
-                            foreach (var node in nodes)
+                            // Find a node in currentLevelNodes that matches this offset
+                            NoteNode? match = null;
+                            foreach (var node in currentLevelNodes)
                             {
-                                // Clean node offset "+0x10" -> 0x10
-                                string rawOff = node.Offset.Replace("+", "").Replace("-", "").Replace("0x", "").Trim();
-                                if (long.TryParse(rawOff, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long nodeOff))
-                                {
-                                    if (node.Offset.StartsWith("-")) nodeOff = -nodeOff;
+                                long nodeOff = ParseHex(node.Offset.Replace("+", "").Replace("-", "").Trim());
+                                if (node.Offset.Contains("-")) nodeOff = -nodeOff;
 
-                                    // Check Range: Node Offset <= Target < Node Offset + Size
-                                    if (targetOffset >= nodeOff && targetOffset < nodeOff + node.Size)
+                                if (offset >= nodeOff && offset < nodeOff + node.Size)
+                                {
+                                    match = node;
+                                    break;
+                                }
+                            }
+
+                            if (match != null)
+                            {
+                                contextNode = match;
+                                currentLevelNodes = match.Children; // Go deeper
+                            }
+                            else
+                            {
+                                chainValid = false;
+                                break;
+                            }
+                        }
+
+                        // If the chain matched so far, look for the Target (current row address) in the final context
+                        if (chainValid)
+                        {
+                            if (targetVal != -1)
+                            {
+                                foreach (var node in currentLevelNodes)
+                                {
+                                    long nodeOff = ParseHex(node.Offset.Replace("+", "").Replace("-", "").Trim());
+                                    if (node.Offset.Contains("-")) nodeOff = -nodeOff;
+
+                                    if (targetVal >= nodeOff && targetVal < nodeOff + node.Size)
                                     {
                                         string desc = node.Description;
-
-                                        // Clean description first
                                         desc = Regex.Replace(desc, @"\[.*?\]", "").Trim();
 
-                                        // Calculate delta
-                                        long delta = targetOffset - nodeOff;
+                                        long delta = targetVal - nodeOff;
                                         if (delta > 0)
                                         {
                                             string suffix = $" +0x{delta:X}";
@@ -201,18 +234,20 @@ namespace RALogicEditor.Helpers
             }
 
             // 2. Direct Lookup (Base Address or simple memory)
+            // Only used if we are NOT deep in a pointer chain context, or if the chain logic above returned nothing.
+            // However, if we are in a chain but it broke, we generally fall back to displaying the raw address 
+            // (handled by returning empty string here), OR we check if the address itself happens to be a global static address.
+            // To prevent incorrect matches, we should only do global lookup if this row is NOT part of an Add Address chain context that failed.
+            // But checking grid context again is expensive. Standard behavior: try global lookup if local failed.
+
             if (notesLookup.TryGetValue(address, out var directNodes))
             {
-                // Return the description of the root node
                 var root = directNodes.FirstOrDefault();
                 if (root != null)
                 {
                     var main = directNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? directNodes.First();
-
                     string desc = main.Description;
 
-                    // "Full Note" is a generic placeholder from the PointerTreeParser. 
-                    // If we see it, we must extract the first line of the content instead.
                     if (string.IsNullOrEmpty(desc) || desc.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
                     {
                         if (!string.IsNullOrEmpty(main.Content))
@@ -220,38 +255,29 @@ namespace RALogicEditor.Helpers
                             desc = main.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
                         }
                     }
-
-                    // Strip tags immediately
                     return Regex.Replace(desc, @"\[.*?\]", "").Trim();
                 }
             }
 
             // 3. Ranged Direct Lookup (e.g. Entity Slot [176 bytes])
-            if (rangeCache != null && addrVal != -1)
+            if (rangeCache != null && targetVal != -1)
             {
-                // Find a range that covers this address
-                // We use first match, assuming no overlapping struct notes (or first loaded wins)
-                var match = rangeCache.FirstOrDefault(r => addrVal >= r.Start && addrVal < r.End);
+                var match = rangeCache.FirstOrDefault(r => targetVal >= r.Start && targetVal < r.End);
                 if (match.Node != null)
                 {
                     string desc = match.Node.Description;
-                    // Fallback for "Full Note" placeholder
                     if (string.IsNullOrEmpty(desc) || desc.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
                     {
                         string content = match.Node.Content;
                         desc = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
                     }
 
-                    // FIX: Strip tags BEFORE checking for duplicates
-                    // This solves the issue where "Name +0x10 [8-bit]" + "+0x10" resulted in "Name +0x10 [8-bit] +0x10"
-                    // because EndsWith failed due to the trailing tag.
                     desc = Regex.Replace(desc, @"\[.*?\]", "").Trim();
 
-                    long delta = addrVal - match.Start;
+                    long delta = targetVal - match.Start;
                     if (delta > 0)
                     {
                         string suffix = $" +0x{delta:X}";
-                        // Check if description already contains this suffix to avoid "+0xA1 +0xA1" visual bugs
                         if (!desc.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                         {
                             desc += suffix;

@@ -19,7 +19,7 @@
             this.btnOK = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
             this.lblStrideHint = new System.Windows.Forms.Label();
-            this.clbAddresses = new System.Windows.Forms.CheckedListBox();
+            this.tvAddresses = new System.Windows.Forms.TreeView();
             this.lblInstructions = new System.Windows.Forms.Label();
             this.btnSelectAll = new System.Windows.Forms.Button();
             this.chkAutoStride = new System.Windows.Forms.CheckBox();
@@ -92,14 +92,14 @@
             this.lblStrideHint.TabIndex = 7;
             this.lblStrideHint.Text = "Hex supported (0x)";
             // 
-            // clbAddresses
+            // tvAddresses
             // 
-            this.clbAddresses.CheckOnClick = true;
-            this.clbAddresses.FormattingEnabled = true;
-            this.clbAddresses.Location = new System.Drawing.Point(12, 27);
-            this.clbAddresses.Name = "clbAddresses";
-            this.clbAddresses.Size = new System.Drawing.Size(340, 184);
-            this.clbAddresses.TabIndex = 8;
+            this.tvAddresses.CheckBoxes = true;
+            this.tvAddresses.Location = new System.Drawing.Point(12, 27);
+            this.tvAddresses.Name = "tvAddresses";
+            this.tvAddresses.Size = new System.Drawing.Size(340, 184);
+            this.tvAddresses.TabIndex = 8;
+            this.tvAddresses.AfterCheck += new System.Windows.Forms.TreeViewEventHandler(this.tvAddresses_AfterCheck);
             // 
             // lblInstructions
             // 
@@ -142,7 +142,7 @@
             this.Controls.Add(this.chkAutoStride);
             this.Controls.Add(this.btnSelectAll);
             this.Controls.Add(this.lblInstructions);
-            this.Controls.Add(this.clbAddresses);
+            this.Controls.Add(this.tvAddresses);
             this.Controls.Add(this.lblStrideHint);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnOK);
@@ -168,7 +168,7 @@
         private System.Windows.Forms.Button btnOK;
         private System.Windows.Forms.Button btnCancel;
         private System.Windows.Forms.Label lblStrideHint;
-        private System.Windows.Forms.CheckedListBox clbAddresses;
+        private System.Windows.Forms.TreeView tvAddresses;
         private System.Windows.Forms.Label lblInstructions;
         private System.Windows.Forms.Button btnSelectAll;
         private System.Windows.Forms.CheckBox chkAutoStride;

@@ -457,10 +457,16 @@ namespace RALogicEditor.Controls
             _isLeaderboardMode = asset.IsLeaderboard;
             _generatorRules.Clear();
 
-            // Clear previous selection to ensure new asset starts at Core (Index 0)
-            groupsList.SelectedItems.Clear();
+            // We DO NOT clear groupsList.SelectedItems here.
+            // RefreshGroupsListUI (called by UpdateUIFromText) captures the current selection 
+            // and attempts to restore it. This preserves the "Alt 2" selection when switching assets.
 
-            this.TriggerText = asset.Logic;
+            // Directly update backing field and force UI refresh.
+            // This ensures the UI updates even if the logic string is identical to the previous asset,
+            // and avoids pushing an Undo state for the file load operation.
+            _triggerText = asset.Logic;
+            UpdateUIFromText();
+
             _history.Clear();
 
             txtTitle.Text = asset.Title;
@@ -745,118 +751,159 @@ namespace RALogicEditor.Controls
             int groupIndex = _activeGroups.IndexOf(group);
             if (groupIndex == -1) return;
 
-            // 1. Scan the group for all unique Memory Addresses and resolve Aliases
-            var uniqueAddresses = new Dictionary<string, string>();
-            int autoStride = 0;
+            // --- Updated Logic: Flattened Hierarchy with Context-Aware Notes ---
 
-            // New: Count how many copies we might need if we find a "176 bytes" pattern
-            // We use the maximum count of similarly sized items found in notes as a hint
+            var rootItems = new List<GeneratorConfigForm.GeneratorItemViewModel>();
+            int autoStride = 0;
             int detectedCopies = 1;
             Dictionary<long, int> sizeCounts = new Dictionary<long, int>();
 
-            void CheckOperand(Operand op)
+            GeneratorConfigForm.GeneratorItemViewModel? activeChainParent = null;
+            NoteNode? activeNoteNode = null; // Tracks the pointer tree context
+
+            // Local function now returns the Found Node to persist context
+            (GeneratorConfigForm.GeneratorItemViewModel Item, NoteNode? FoundNode) GetOrCreateNode(string addr, bool isPointerBase, GeneratorConfigForm.GeneratorItemViewModel? parent, NoteNode? contextNode)
             {
-                if (RaLogicSyntax.MemoryTypes.Contains(op.Type) && !string.IsNullOrEmpty(op.Value))
+                string normAddr = LogicFormatter.NormalizeAddress(addr);
+                string desc = "";
+                NoteNode? currentNote = null;
+                bool foundAsOffset = false;
+
+                // 1. Try Offset Context Lookup (if parent context exists)
+                if (contextNode != null)
                 {
-                    string val = op.Value.StartsWith("0x") ? op.Value : "0x" + op.Value;
-
-                    if (!uniqueAddresses.ContainsKey(val))
+                    long offsetVal = long.TryParse(normAddr.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+                    if (offsetVal != -1)
                     {
-                        string alias = "";
-                        string normalized = LogicFormatter.NormalizeAddress(val);
-
-                        // Try resolve alias from NotesLookup
-                        if (_notesLookup.TryGetValue(normalized, out var nodes))
+                        foreach (var n in contextNode.Children)
                         {
-                            var root = nodes.FirstOrDefault();
-                            if (root != null)
+                            // Clean node offset "+0x10" -> 0x10. Handle negative offsets.
+                            long nodeOff = long.TryParse(n.Offset.Replace("0x", "").Replace("+", "").Replace("-", "").Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long no) ? no : -99;
+                            if (n.Offset.Contains("-")) nodeOff = -nodeOff;
+
+                            // Match logic: Logic Offset matches Note Offset range
+                            if (nodeOff != -99 && offsetVal >= nodeOff && offsetVal < nodeOff + n.Size)
                             {
-                                alias = root.Description;
-
-                                // Fix Full Note logic
-                                if (string.IsNullOrEmpty(alias) || alias.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    if (!string.IsNullOrEmpty(root.Content))
-                                        alias = root.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
-                                }
-
-                                // Auto Stride Detection
-                                if (autoStride == 0 && root.Size > 1)
-                                {
-                                    autoStride = (int)root.Size;
-                                }
-
-                                // Count occurrence of this size in the full note set to guess copies
-                                // This is expensive to do for every address, so we do it lazily if we found a stride
-                                if (root.Size > 1)
-                                {
-                                    if (!sizeCounts.ContainsKey(root.Size)) sizeCounts[root.Size] = 0;
-                                    sizeCounts[root.Size]++; // This counts occurrence in logic, not useful for total copies
-                                }
+                                desc = n.Description;
+                                currentNote = n;
+                                foundAsOffset = true;
+                                break;
                             }
                         }
-                        // Check Range Cache
-                        else if (_gridManager.RangeCache != null)
-                        {
-                            if (long.TryParse(normalized.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long addrVal))
-                            {
-                                var match = _gridManager.RangeCache.FirstOrDefault(r => addrVal >= r.Start && addrVal < r.End);
-                                if (match.Node != null)
-                                {
-                                    alias = match.Node.Description;
-                                    if (string.IsNullOrEmpty(alias) || alias.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        alias = match.Node.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
-                                    }
-
-                                    if (autoStride == 0 && match.Node.Size > 1)
-                                        autoStride = (int)match.Node.Size;
-                                }
-                            }
-                        }
-
-                        uniqueAddresses.Add(val, alias);
                     }
+                }
+
+                // 2. Try Base Lookup (if not found as offset)
+                if (!foundAsOffset && (isPointerBase || parent == null))
+                {
+                    if (_notesLookup.TryGetValue(normAddr, out var nodes))
+                    {
+                        var root = nodes.FirstOrDefault();
+                        if (root != null)
+                        {
+                            desc = root.Description;
+                            if (string.IsNullOrEmpty(desc) || desc.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
+                                desc = root.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+
+                            // Try Stride Detection
+                            if (autoStride == 0 && root.Size > 1) autoStride = (int)root.Size;
+                            if (root.Size > 1) { if (!sizeCounts.ContainsKey(root.Size)) sizeCounts[root.Size] = 0; sizeCounts[root.Size]++; }
+
+                            // Create Synthetic Context for Base
+                            var syntheticContext = new NoteNode();
+                            foreach (var n in nodes)
+                            {
+                                if (n.IndentLevel != -2 && (n.Parent == null || n.Parent.IndentLevel == -1))
+                                {
+                                    syntheticContext.Children.Add(n);
+                                }
+                            }
+                            currentNote = syntheticContext;
+                        }
+                    }
+                }
+
+                // Create ViewModel
+                var item = new GeneratorConfigForm.GeneratorItemViewModel
+                {
+                    Address = addr.StartsWith("0x") ? addr : "0x" + addr,
+                    Description = desc
+                };
+
+                // Add to hierarchy
+                if (parent != null) parent.Children.Add(item);
+                else rootItems.Add(item);
+
+                return (item, currentNote);
+            }
+
+            // Scan conditions to build hierarchy
+            foreach (var cond in group.Conditions)
+            {
+                if (cond.Flag == "Add Address")
+                {
+                    if (RaLogicSyntax.MemoryTypes.Contains(cond.LeftOperand.Type))
+                    {
+                        var val = cond.LeftOperand.Value;
+                        // Pass activeChainParent. If null, this becomes root. If not null, this becomes child of root.
+                        var result = GetOrCreateNode(val, isPointerBase: true, parent: activeChainParent, contextNode: activeNoteNode);
+
+                        // If we didn't have a parent, this node IS the parent for the rest of the chain
+                        if (activeChainParent == null)
+                        {
+                            activeChainParent = result.Item;
+                        }
+                        // Else: activeChainParent stays the same (the root), effectively flattening the UI hierarchy
+
+                        // Context must advance deeply to support finding next offset descriptions
+                        activeNoteNode = result.FoundNode;
+                    }
+                }
+                else
+                {
+                    // Comparisons
+                    if (RaLogicSyntax.MemoryTypes.Contains(cond.LeftOperand.Type))
+                    {
+                        GetOrCreateNode(cond.LeftOperand.Value, isPointerBase: false, parent: activeChainParent, contextNode: activeNoteNode);
+                    }
+                    if (RaLogicSyntax.MemoryTypes.Contains(cond.RightOperand.Type))
+                    {
+                        GetOrCreateNode(cond.RightOperand.Value, isPointerBase: false, parent: null, contextNode: null);
+                    }
+
+                    activeChainParent = null;
+                    activeNoteNode = null;
                 }
             }
 
-            foreach (var cond in group.Conditions)
-            {
-                CheckOperand(cond.LeftOperand);
-                CheckOperand(cond.RightOperand);
-            }
+            // Apply Smart Padding
+            ApplySmartPadding(rootItems);
 
-            // If we found a stride, try to guess copies by scanning ALL notes for notes with similar size/structure
-            // This is a heuristic: If we see "Entity Slot #01 [176]", we count how many other notes have [176]
+            // Stride Heuristic
             if (autoStride > 0)
             {
-                // Count how many range cache items have this size
                 int count = _gridManager.RangeCache.Count(x => x.Node.Size == autoStride);
-                if (count > 1) detectedCopies = count - 1; // Subtract 1 because we already have the master
+                if (count > 1) detectedCopies = count - 1;
             }
 
-            if (uniqueAddresses.Count == 0)
+            if (rootItems.Count == 0)
             {
                 MessageBox.Show("No memory addresses found in this group to generate from.", "Generator", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            _generatorRules.TryGetValue(groupIndex, out var existingDef);
+            GeneratorDefinition? existingDef;
+            _generatorRules.TryGetValue(groupIndex, out existingDef);
 
-            // If we auto-detected copies, pass it to existingDef if it's null, or create a temporary one
             if (existingDef == null && detectedCopies > 1)
-            {
                 existingDef = new GeneratorDefinition { Copies = detectedCopies };
-            }
 
-            // 2. Open the Multi-Select Form
-            using var form = new GeneratorConfigForm(uniqueAddresses, autoStride, existingDef);
+            using var form = new GeneratorConfigForm(rootItems, autoStride, existingDef);
 
             if (form.ShowDialog() == DialogResult.OK)
             {
                 PushUndoState();
 
-                // Check for Existing Alts Collision
                 if (groupIndex < _activeGroups.Count - 1)
                 {
                     var result = MessageBox.Show(
@@ -869,29 +916,22 @@ namespace RALogicEditor.Controls
 
                     if (result == DialogResult.Yes)
                     {
-                        // Remove all groups after the current one
                         while (_activeGroups.Count > groupIndex + 1)
                         {
                             _activeGroups.RemoveAt(_activeGroups.Count - 1);
                         }
-
-                        // Also clean up any rules that might have existed for those deleted groups
                         var keysToRemove = _generatorRules.Keys.Where(k => k > groupIndex).ToList();
                         foreach (var k in keysToRemove) _generatorRules.Remove(k);
                     }
                 }
 
-                // Initialize Definition
                 if (!_generatorRules.ContainsKey(groupIndex))
                     _generatorRules[groupIndex] = new GeneratorDefinition();
 
                 var def = _generatorRules[groupIndex];
                 def.Copies = form.Copies;
-
-                // Clear old rules
                 def.Rules.Clear();
 
-                // 3. Create a rule for EVERY selected address using the SAME Stride
                 foreach (string addr in form.SelectedAddresses)
                 {
                     def.Rules.Add(new GeneratorRule
@@ -904,6 +944,33 @@ namespace RALogicEditor.Controls
                 LogicGeneratorService.ApplyGeneratorRules(_activeGroups, _generatorRules);
                 RefreshGroupsListUI();
                 BuildTriggerAndNotify();
+            }
+        }
+
+        // New helper for padding
+        private void ApplySmartPadding(List<GeneratorConfigForm.GeneratorItemViewModel> roots)
+        {
+            foreach (var root in roots)
+            {
+                if (root.Children.Count == 0) continue;
+
+                // Calculate max length of hex part for children
+                int maxLen = 0;
+                foreach (var child in root.Children)
+                {
+                    string hex = child.Address.StartsWith("0x") ? child.Address.Substring(2) : child.Address;
+                    if (hex.Length > maxLen) maxLen = hex.Length;
+                }
+
+                // Apply padding if maxLen > 1
+                if (maxLen > 1)
+                {
+                    foreach (var child in root.Children)
+                    {
+                        string hex = child.Address.StartsWith("0x") ? child.Address.Substring(2) : child.Address;
+                        child.Address = "0x" + hex.PadLeft(maxLen, '0');
+                    }
+                }
             }
         }
 
