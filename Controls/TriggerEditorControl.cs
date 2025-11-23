@@ -22,8 +22,8 @@ namespace RALogicEditor.Controls
     {
         // Handles all DataGridView interactions and display logic
         private readonly ConditionGridManager _gridManager;
-        // Handles local Undo/Redo for text edits inside this control
-        private readonly HistoryManager<string> _history = new();
+        // Handles local Undo/Redo. Changed from string to TriggerEditorState to track Generator Rules
+        private readonly HistoryManager<TriggerEditorState> _history = new();
 
         // -- State --
         private bool _isProgrammaticallyChanging; // Lock to prevent event loops
@@ -71,7 +71,7 @@ namespace RALogicEditor.Controls
             {
                 if (_triggerText != value && !_history.IsUndoingRedoing)
                 {
-                    _history.PushState(_triggerText);
+                    PushUndoState();
                     _triggerText = value;
                     UpdateUIFromText();
                 }
@@ -91,6 +91,24 @@ namespace RALogicEditor.Controls
             InitializeGrids();
             InitializeLeaderboardControls();
             SetStatus("Ready");
+        }
+
+        // Helper to capture current full state
+        private void PushUndoState()
+        {
+            var state = new TriggerEditorState
+            {
+                LogicString = _triggerText,
+                GeneratorRules = _generatorRules // Wrapper clones this internally
+            };
+            _history.PushState(state.Clone());
+        }
+
+        // Helper to restore state
+        private void RestoreState(TriggerEditorState state)
+        {
+            _triggerText = state.LogicString;
+            _generatorRules = state.Clone().GeneratorRules; // Restore dictionary
         }
 
         private void InitializeEvents()
@@ -114,6 +132,9 @@ namespace RALogicEditor.Controls
             chkAliasMode.CheckedChanged += ChkAliasMode_CheckedChanged;
 
             conditionGrid.ContextMenuStrip.Opening += ConditionGrid_ContextMenuStrip_Opening;
+
+            // Handle Tools Menu Opening to toggle Bake option
+            toolsContextMenu.Opening += ToolsContextMenu_Opening;
         }
 
         private void InitializeGrids()
@@ -224,7 +245,7 @@ namespace RALogicEditor.Controls
             // Use BeginInvoke to avoid reentrancy bugs (modifying grid rows during CellEndEdit)
             this.BeginInvoke(new Action(() =>
             {
-                _history.PushState(_triggerText);
+                PushUndoState();
                 BuildTriggerAndNotify();
                 RunValidation();
             }));
@@ -312,7 +333,7 @@ namespace RALogicEditor.Controls
             }
 
             // Fallback to normal logic paste
-            _history.PushState(_triggerText);
+            PushUndoState();
             _gridManager.PasteLogic();
         }
 
@@ -488,7 +509,7 @@ namespace RALogicEditor.Controls
 
             // Reset labels positions for Achievement mode
             lblAuthor.Location = new Point(232, 63);
-            lblAssetState.Location = new Point(350, 63);
+            lblAssetState.Location = new Point(330, 63);
 
             cmbPoints.Text = cheevo.Points.ToString();
             lblAuthor.Text = $"Author: {cheevo.Author}";
@@ -539,7 +560,10 @@ namespace RALogicEditor.Controls
 
         public void Undo()
         {
-            _triggerText = _history.Undo(_triggerText);
+            var current = new TriggerEditorState { LogicString = _triggerText, GeneratorRules = _generatorRules };
+            var previous = _history.Undo(current);
+
+            RestoreState(previous);
             UpdateUIFromText();
             TriggerTextChanged?.Invoke(this, EventArgs.Empty);
             SetStatus("Undone.");
@@ -547,7 +571,10 @@ namespace RALogicEditor.Controls
 
         public void Redo()
         {
-            _triggerText = _history.Redo(_triggerText);
+            var current = new TriggerEditorState { LogicString = _triggerText, GeneratorRules = _generatorRules };
+            var next = _history.Redo(current);
+
+            RestoreState(next);
             UpdateUIFromText();
             TriggerTextChanged?.Invoke(this, EventArgs.Empty);
             SetStatus("Redone.");
@@ -557,6 +584,13 @@ namespace RALogicEditor.Controls
 
         private void btnReset_Click(object? sender, EventArgs e) => AssetResetRequested?.Invoke(this, EventArgs.Empty);
         private void btnAddNote_Click(object? sender, EventArgs e) => AddFromCodeNoteRequested?.Invoke(this, EventArgs.Empty);
+
+        private void btnCopyDef_Click(object? sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(_triggerText)) return;
+            Clipboard.SetText(_triggerText);
+            SetStatus("Full definition copied to clipboard.");
+        }
 
         private void TxtTitle_TextChanged(object? sender, EventArgs e) => NotifyAssetDataChanged(a => a.Title = txtTitle.Text);
         private void TxtDescription_TextChanged(object? sender, EventArgs e) => NotifyAssetDataChanged(a => a.Description = txtDescription.Text);
@@ -603,23 +637,38 @@ namespace RALogicEditor.Controls
             copyRowToolStripMenuItem.Enabled = any;
             copyLogicToolStripMenuItem.Enabled = any;
             pasteToolStripMenuItem.Enabled = Clipboard.ContainsText();
-            createGeneratorToolStripMenuItem.Enabled = any && conditionGrid.SelectedRows.Count == 1;
             saveAsSnippetToolStripMenuItem.Enabled = any;
         }
 
+        private void ToolsContextMenu_Opening(object? sender, CancelEventArgs e)
+        {
+            // Only allow generator if we are editing an asset
+            createGeneratorToolStripMenuItem.Enabled = _activeGroups.Count > 0;
+
+            // Only allow bake if the current group is a generator master
+            bool canBake = false;
+            if (conditionGrid.Tag is AchievementConditionGroup group)
+            {
+                int index = _activeGroups.IndexOf(group);
+                if (index != -1 && _generatorRules.ContainsKey(index))
+                    canBake = true;
+            }
+            commitGeneratorToolStripMenuItem.Enabled = canBake;
+        }
+
         // Proxy calls to Grid Manager
-        private void moveUpToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.MoveSelected(-1); }
-        private void moveDownToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.MoveSelected(1); }
-        private void duplicateToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.DuplicateSelected(); }
-        private void deleteToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.DeleteSelected(); }
-        private void addConditionToolStripMenuItem_Click(object? sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.AddCondition(); }
+        private void moveUpToolStripMenuItem_Click(object? sender, EventArgs e) { PushUndoState(); _gridManager.MoveSelected(-1); }
+        private void moveDownToolStripMenuItem_Click(object? sender, EventArgs e) { PushUndoState(); _gridManager.MoveSelected(1); }
+        private void duplicateToolStripMenuItem_Click(object? sender, EventArgs e) { PushUndoState(); _gridManager.DuplicateSelected(); }
+        private void deleteToolStripMenuItem_Click(object? sender, EventArgs e) { PushUndoState(); _gridManager.DeleteSelected(); }
+        private void addConditionToolStripMenuItem_Click(object? sender, EventArgs e) { PushUndoState(); _gridManager.AddCondition(); }
         private void copyRowToolStripMenuItem_Click(object? sender, EventArgs e) => _gridManager.CopySelectedRows();
         private void copyLogicToolStripMenuItem_Click(object? sender, EventArgs e) => _gridManager.CopySelectedLogic();
         private void pasteToolStripMenuItem_Click(object? sender, EventArgs e) { if (Clipboard.ContainsText()) GridManager_PasteRequested(sender, Clipboard.GetText()); }
 
         private void addGroupToolStripMenuItem_Click(object? sender, EventArgs e)
         {
-            _history.PushState(_triggerText);
+            PushUndoState();
             string newName = _activeGroups.Count == 0 ? "Core" : (GroupSeparator == 'S' ? "Alt " + _activeGroups.Count : "Group " + (_activeGroups.Count + 1));
             _activeGroups.Add(new AchievementConditionGroup { GroupName = newName });
             RefreshGroupsListUI();
@@ -647,7 +696,7 @@ namespace RALogicEditor.Controls
                 }
             }
 
-            _history.PushState(_triggerText);
+            PushUndoState();
             if (_generatorRules.ContainsKey(idx)) _generatorRules.Remove(idx);
 
             _activeGroups.RemoveAt(idx);
@@ -674,7 +723,7 @@ namespace RALogicEditor.Controls
             if (MessageBox.Show("Are you sure you want to remove all Alt groups?", "Confirm", MessageBoxButtons.YesNo) != DialogResult.Yes)
                 return;
 
-            _history.PushState(_triggerText);
+            PushUndoState();
             _generatorRules.Clear();
 
             var first = _activeGroups[0];
@@ -690,47 +739,167 @@ namespace RALogicEditor.Controls
 
         private void createGeneratorToolStripMenuItem_Click(object? sender, EventArgs e)
         {
-            if (conditionGrid.SelectedRows.Count != 1) return;
             var group = conditionGrid.Tag as AchievementConditionGroup;
             if (group == null) return;
 
             int groupIndex = _activeGroups.IndexOf(group);
             if (groupIndex == -1) return;
 
-            var row = conditionGrid.SelectedRows[0];
-            string target = "";
-            string lVal = row.Cells["ColLValue"].Value?.ToString() ?? "";
-            string rVal = row.Cells["ColRValue"].Value?.ToString() ?? "";
+            // 1. Scan the group for all unique Memory Addresses and resolve Aliases
+            var uniqueAddresses = new Dictionary<string, string>();
+            int autoStride = 0;
 
-            if (lVal.StartsWith("0x") || lVal.StartsWith("[")) // Handle alias bracket start
+            // New: Count how many copies we might need if we find a "176 bytes" pattern
+            // We use the maximum count of similarly sized items found in notes as a hint
+            int detectedCopies = 1;
+            Dictionary<long, int> sizeCounts = new Dictionary<long, int>();
+
+            void CheckOperand(Operand op)
             {
-                // In Alias mode, we must retrieve raw value from tag
-                if (row.Tag is AchievementCondition cond) target = cond.LeftOperand.Value;
-                else target = lVal;
+                if (RaLogicSyntax.MemoryTypes.Contains(op.Type) && !string.IsNullOrEmpty(op.Value))
+                {
+                    string val = op.Value.StartsWith("0x") ? op.Value : "0x" + op.Value;
+
+                    if (!uniqueAddresses.ContainsKey(val))
+                    {
+                        string alias = "";
+                        string normalized = LogicFormatter.NormalizeAddress(val);
+
+                        // Try resolve alias from NotesLookup
+                        if (_notesLookup.TryGetValue(normalized, out var nodes))
+                        {
+                            var root = nodes.FirstOrDefault();
+                            if (root != null)
+                            {
+                                alias = root.Description;
+
+                                // Fix Full Note logic
+                                if (string.IsNullOrEmpty(alias) || alias.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (!string.IsNullOrEmpty(root.Content))
+                                        alias = root.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+                                }
+
+                                // Auto Stride Detection
+                                if (autoStride == 0 && root.Size > 1)
+                                {
+                                    autoStride = (int)root.Size;
+                                }
+
+                                // Count occurrence of this size in the full note set to guess copies
+                                // This is expensive to do for every address, so we do it lazily if we found a stride
+                                if (root.Size > 1)
+                                {
+                                    if (!sizeCounts.ContainsKey(root.Size)) sizeCounts[root.Size] = 0;
+                                    sizeCounts[root.Size]++; // This counts occurrence in logic, not useful for total copies
+                                }
+                            }
+                        }
+                        // Check Range Cache
+                        else if (_gridManager.RangeCache != null)
+                        {
+                            if (long.TryParse(normalized.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long addrVal))
+                            {
+                                var match = _gridManager.RangeCache.FirstOrDefault(r => addrVal >= r.Start && addrVal < r.End);
+                                if (match.Node != null)
+                                {
+                                    alias = match.Node.Description;
+                                    if (string.IsNullOrEmpty(alias) || alias.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        alias = match.Node.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+                                    }
+
+                                    if (autoStride == 0 && match.Node.Size > 1)
+                                        autoStride = (int)match.Node.Size;
+                                }
+                            }
+                        }
+
+                        uniqueAddresses.Add(val, alias);
+                    }
+                }
             }
-            else if (rVal.StartsWith("0x") || rVal.StartsWith("["))
+
+            foreach (var cond in group.Conditions)
             {
-                if (row.Tag is AchievementCondition cond) target = cond.RightOperand.Value;
-                else target = rVal;
+                CheckOperand(cond.LeftOperand);
+                CheckOperand(cond.RightOperand);
             }
 
-            if (string.IsNullOrEmpty(target)) return;
+            // If we found a stride, try to guess copies by scanning ALL notes for notes with similar size/structure
+            // This is a heuristic: If we see "Entity Slot #01 [176]", we count how many other notes have [176]
+            if (autoStride > 0)
+            {
+                // Count how many range cache items have this size
+                int count = _gridManager.RangeCache.Count(x => x.Node.Size == autoStride);
+                if (count > 1) detectedCopies = count - 1; // Subtract 1 because we already have the master
+            }
 
-            using var form = new GeneratorConfigForm(target);
+            if (uniqueAddresses.Count == 0)
+            {
+                MessageBox.Show("No memory addresses found in this group to generate from.", "Generator", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            _generatorRules.TryGetValue(groupIndex, out var existingDef);
+
+            // If we auto-detected copies, pass it to existingDef if it's null, or create a temporary one
+            if (existingDef == null && detectedCopies > 1)
+            {
+                existingDef = new GeneratorDefinition { Copies = detectedCopies };
+            }
+
+            // 2. Open the Multi-Select Form
+            using var form = new GeneratorConfigForm(uniqueAddresses, autoStride, existingDef);
+
             if (form.ShowDialog() == DialogResult.OK)
             {
-                _history.PushState(_triggerText);
+                PushUndoState();
 
+                // Check for Existing Alts Collision
+                if (groupIndex < _activeGroups.Count - 1)
+                {
+                    var result = MessageBox.Show(
+                        "There are existing Alt groups after this group. Do you want to delete them to make room for the generator?",
+                        "Overwrite Confirmation",
+                        MessageBoxButtons.YesNoCancel,
+                        MessageBoxIcon.Warning);
+
+                    if (result == DialogResult.Cancel) return;
+
+                    if (result == DialogResult.Yes)
+                    {
+                        // Remove all groups after the current one
+                        while (_activeGroups.Count > groupIndex + 1)
+                        {
+                            _activeGroups.RemoveAt(_activeGroups.Count - 1);
+                        }
+
+                        // Also clean up any rules that might have existed for those deleted groups
+                        var keysToRemove = _generatorRules.Keys.Where(k => k > groupIndex).ToList();
+                        foreach (var k in keysToRemove) _generatorRules.Remove(k);
+                    }
+                }
+
+                // Initialize Definition
                 if (!_generatorRules.ContainsKey(groupIndex))
-                    _generatorRules[groupIndex] = new GeneratorDefinition { Copies = form.Copies };
-                else
-                    _generatorRules[groupIndex].Copies = form.Copies;
+                    _generatorRules[groupIndex] = new GeneratorDefinition();
 
                 var def = _generatorRules[groupIndex];
-                var existing = def.Rules.FirstOrDefault(r => r.SourceAddress == target);
+                def.Copies = form.Copies;
 
-                if (existing != null) existing.Stride = form.Stride;
-                else def.Rules.Add(new GeneratorRule { SourceAddress = target, Stride = form.Stride });
+                // Clear old rules
+                def.Rules.Clear();
+
+                // 3. Create a rule for EVERY selected address using the SAME Stride
+                foreach (string addr in form.SelectedAddresses)
+                {
+                    def.Rules.Add(new GeneratorRule
+                    {
+                        SourceAddress = addr,
+                        Stride = form.Stride
+                    });
+                }
 
                 LogicGeneratorService.ApplyGeneratorRules(_activeGroups, _generatorRules);
                 RefreshGroupsListUI();
@@ -738,11 +907,37 @@ namespace RALogicEditor.Controls
             }
         }
 
+        // New context menu action to "Bake" the generator
+        private void commitGeneratorToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            // Find active group index
+            if (conditionGrid.Tag is not AchievementConditionGroup group) return;
+            int index = _activeGroups.IndexOf(group);
+
+            if (index != -1 && _generatorRules.ContainsKey(index))
+            {
+                PushUndoState();
+                _generatorRules.Remove(index);
+
+                // Rename logic to clean up "Alt 1 (+1)" to sequential "Alt 2"
+                if (!_isLeaderboardMode)
+                {
+                    for (int i = 1; i < _activeGroups.Count; i++)
+                    {
+                        _activeGroups[i].GroupName = $"Alt {i}";
+                    }
+                }
+
+                RefreshGroupsListUI(); // Refreshes list to remove (Auto) text and show new names
+                SetStatus("Generator committed. Groups are now independent and renamed.");
+            }
+        }
+
         public void AddConditionFromNote(string logicString, string type, string size)
         {
             if (string.IsNullOrEmpty(logicString)) return;
 
-            _history.PushState(_triggerText);
+            PushUndoState();
 
             var groups = AchievementParser.ParseAchievementTrigger(logicString, GroupSeparator, false);
 
@@ -1122,7 +1317,7 @@ namespace RALogicEditor.Controls
                     string oldClip = Clipboard.ContainsText() ? Clipboard.GetText() : "";
                     Clipboard.SetText(form.SelectedSnippet.LogicCode);
 
-                    _history.PushState(_triggerText);
+                    PushUndoState();
                     _gridManager.PasteLogic();
 
                     // Restore clipboard if desired, or leave it for repeated pasting

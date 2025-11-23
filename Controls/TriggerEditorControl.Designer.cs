@@ -15,6 +15,7 @@ namespace RALogicEditor.Controls
         {
             components = new System.ComponentModel.Container();
             panelHeader = new Panel();
+            btnCopyDef = new Button();
             lblAssetState = new Label();
             btnTools = new Button();
             btnAddNote = new Button();
@@ -29,6 +30,8 @@ namespace RALogicEditor.Controls
             pbBadge = new PictureBox();
             toolsContextMenu = new ContextMenuStrip(components);
             pointerCalculatorToolStripMenuItem = new ToolStripMenuItem();
+            createGeneratorToolStripMenuItem = new ToolStripMenuItem();
+            commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
             splitGroups = new SplitContainer();
             groupsList = new ListView();
             colGroups = new ColumnHeader();
@@ -53,7 +56,6 @@ namespace RALogicEditor.Controls
             copyRowToolStripMenuItem = new ToolStripMenuItem();
             pasteToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator3 = new ToolStripSeparator();
-            createGeneratorToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator5 = new ToolStripSeparator();
             saveAsSnippetToolStripMenuItem = new ToolStripMenuItem();
             insertSnippetToolStripMenuItem = new ToolStripMenuItem();
@@ -78,6 +80,7 @@ namespace RALogicEditor.Controls
             // panelHeader
             // 
             panelHeader.BackColor = SystemColors.Control;
+            panelHeader.Controls.Add(btnCopyDef);
             panelHeader.Controls.Add(lblAssetState);
             panelHeader.Controls.Add(btnTools);
             panelHeader.Controls.Add(btnAddNote);
@@ -95,6 +98,17 @@ namespace RALogicEditor.Controls
             panelHeader.Padding = new Padding(5);
             panelHeader.Size = new Size(700, 85);
             panelHeader.TabIndex = 0;
+            // 
+            // btnCopyDef
+            // 
+            btnCopyDef.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnCopyDef.Location = new Point(375, 58);
+            btnCopyDef.Name = "btnCopyDef";
+            btnCopyDef.Size = new Size(75, 23);
+            btnCopyDef.TabIndex = 11;
+            btnCopyDef.Text = "Copy Def";
+            btnCopyDef.UseVisualStyleBackColor = true;
+            btnCopyDef.Click += btnCopyDef_Click;
             // 
             // lblAssetState
             // 
@@ -220,16 +234,30 @@ namespace RALogicEditor.Controls
             // 
             // toolsContextMenu
             // 
-            toolsContextMenu.Items.AddRange(new ToolStripItem[] { pointerCalculatorToolStripMenuItem });
+            toolsContextMenu.Items.AddRange(new ToolStripItem[] { pointerCalculatorToolStripMenuItem, createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem });
             toolsContextMenu.Name = "toolsContextMenu";
-            toolsContextMenu.Size = new Size(170, 26);
+            toolsContextMenu.Size = new Size(209, 92);
             // 
             // pointerCalculatorToolStripMenuItem
             // 
             pointerCalculatorToolStripMenuItem.Name = "pointerCalculatorToolStripMenuItem";
-            pointerCalculatorToolStripMenuItem.Size = new Size(169, 22);
+            pointerCalculatorToolStripMenuItem.Size = new Size(208, 22);
             pointerCalculatorToolStripMenuItem.Text = "Pointer Calculator";
             pointerCalculatorToolStripMenuItem.Click += pointerCalculatorToolStripMenuItem_Click;
+            // 
+            // createGeneratorToolStripMenuItem
+            // 
+            createGeneratorToolStripMenuItem.Name = "createGeneratorToolStripMenuItem";
+            createGeneratorToolStripMenuItem.Size = new Size(208, 22);
+            createGeneratorToolStripMenuItem.Text = "Create Generator...";
+            createGeneratorToolStripMenuItem.Click += createGeneratorToolStripMenuItem_Click;
+            // 
+            // commitGeneratorToolStripMenuItem
+            // 
+            commitGeneratorToolStripMenuItem.Name = "commitGeneratorToolStripMenuItem";
+            commitGeneratorToolStripMenuItem.Size = new Size(208, 22);
+            commitGeneratorToolStripMenuItem.Text = "Commit Generator (Bake)";
+            commitGeneratorToolStripMenuItem.Click += commitGeneratorToolStripMenuItem_Click;
             // 
             // splitGroups
             // 
@@ -354,7 +382,7 @@ namespace RALogicEditor.Controls
             // 
             // gridContextMenu
             // 
-            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, createGeneratorToolStripMenuItem, toolStripSeparator5, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
+            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, toolStripSeparator5, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
             gridContextMenu.Name = "gridContextMenu";
             gridContextMenu.Size = new Size(209, 270);
             // 
@@ -435,13 +463,6 @@ namespace RALogicEditor.Controls
             // 
             toolStripSeparator3.Name = "toolStripSeparator3";
             toolStripSeparator3.Size = new Size(205, 6);
-            // 
-            // createGeneratorToolStripMenuItem
-            // 
-            createGeneratorToolStripMenuItem.Name = "createGeneratorToolStripMenuItem";
-            createGeneratorToolStripMenuItem.Size = new Size(208, 22);
-            createGeneratorToolStripMenuItem.Text = "Create Generator...";
-            createGeneratorToolStripMenuItem.Click += createGeneratorToolStripMenuItem_Click;
             // 
             // toolStripSeparator5
             // 
@@ -567,6 +588,7 @@ namespace RALogicEditor.Controls
         private System.Windows.Forms.ToolStripStatusLabel lblEditorStatus = null!;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator3 = null!;
         private System.Windows.Forms.ToolStripMenuItem createGeneratorToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem commitGeneratorToolStripMenuItem = null!;
         private System.Windows.Forms.CheckBox chkShowDecimal = null!;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator4 = null!;
         private System.Windows.Forms.ToolStripMenuItem removeAllAltGroupsToolStripMenuItem = null!;
@@ -580,5 +602,6 @@ namespace RALogicEditor.Controls
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator5 = null!;
         private System.Windows.Forms.ToolStripMenuItem saveAsSnippetToolStripMenuItem = null!;
         private System.Windows.Forms.ToolStripMenuItem insertSnippetToolStripMenuItem = null!;
+        private System.Windows.Forms.Button btnCopyDef = null!;
     }
 }

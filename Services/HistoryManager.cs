@@ -14,6 +14,9 @@ namespace RALogicEditor.Services
             if (IsUndoingRedoing) return;
 
             // Prevent duplicate states if the new state matches the top of stack
+            // Note: This equality check might be shallow for complex objects. 
+            // For the complex state we are about to introduce, we might rely on the caller to ensure they aren't pushing redundant states
+            // or implement deep comparison. For now, we keep the standard check.
             if (_undoStack.Count > 0 && EqualityComparer<T>.Default.Equals(_undoStack.Peek(), state))
                 return;
 
@@ -52,4 +55,27 @@ namespace RALogicEditor.Services
             IsUndoingRedoing = false;
         }
     }
-}   
+
+    // Helper class to encapsulate the full state of the Trigger Editor
+    public class TriggerEditorState
+    {
+        public string LogicString { get; set; } = "";
+        // We must clone the dictionary to avoid reference issues in the stack
+        public Dictionary<int, RALogicEditor.Models.GeneratorDefinition> GeneratorRules { get; set; } = new();
+
+        public TriggerEditorState Clone()
+        {
+            var clone = new TriggerEditorState { LogicString = this.LogicString };
+            foreach (var kvp in this.GeneratorRules)
+            {
+                var ruleClone = new RALogicEditor.Models.GeneratorDefinition { Copies = kvp.Value.Copies };
+                foreach (var r in kvp.Value.Rules)
+                {
+                    ruleClone.Rules.Add(new RALogicEditor.Models.GeneratorRule { SourceAddress = r.SourceAddress, Stride = r.Stride });
+                }
+                clone.GeneratorRules[kvp.Key] = ruleClone;
+            }
+            return clone;
+        }
+    }
+}

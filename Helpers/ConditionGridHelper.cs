@@ -106,12 +106,9 @@ namespace RALogicEditor.Helpers
                 string alias = ResolveAlias(addr, group, rowIndex, isLeft, notesLookup, rangeCache);
                 if (!string.IsNullOrEmpty(alias))
                 {
-                    // Strip [Tags] like [32-bit Pointer] or [Void]
-                    // Regex: Matches [anything] and removes it.
-                    alias = Regex.Replace(alias, @"\[.*?\]", "").Trim();
-
-                    // Use a shorter display format for Aliases to indicate it is not a raw value
-                    return alias;
+                    // We strip tags inside ResolveAlias now for cleaner duplicate checking, 
+                    // but we do a final trim here just in case.
+                    return alias.Trim();
                 }
             }
 
@@ -182,9 +179,18 @@ namespace RALogicEditor.Helpers
                                     if (targetOffset >= nodeOff && targetOffset < nodeOff + node.Size)
                                     {
                                         string desc = node.Description;
+
+                                        // Clean description first
+                                        desc = Regex.Replace(desc, @"\[.*?\]", "").Trim();
+
                                         // Calculate delta
                                         long delta = targetOffset - nodeOff;
-                                        if (delta > 0) desc += $" +0x{delta:X}";
+                                        if (delta > 0)
+                                        {
+                                            string suffix = $" +0x{delta:X}";
+                                            if (!desc.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                                                desc += suffix;
+                                        }
                                         return desc;
                                     }
                                 }
@@ -214,7 +220,9 @@ namespace RALogicEditor.Helpers
                             desc = main.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
                         }
                     }
-                    return desc;
+
+                    // Strip tags immediately
+                    return Regex.Replace(desc, @"\[.*?\]", "").Trim();
                 }
             }
 
@@ -234,8 +242,21 @@ namespace RALogicEditor.Helpers
                         desc = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
                     }
 
+                    // FIX: Strip tags BEFORE checking for duplicates
+                    // This solves the issue where "Name +0x10 [8-bit]" + "+0x10" resulted in "Name +0x10 [8-bit] +0x10"
+                    // because EndsWith failed due to the trailing tag.
+                    desc = Regex.Replace(desc, @"\[.*?\]", "").Trim();
+
                     long delta = addrVal - match.Start;
-                    if (delta > 0) desc += $" +0x{delta:X}";
+                    if (delta > 0)
+                    {
+                        string suffix = $" +0x{delta:X}";
+                        // Check if description already contains this suffix to avoid "+0xA1 +0xA1" visual bugs
+                        if (!desc.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                        {
+                            desc += suffix;
+                        }
+                    }
                     return desc;
                 }
             }

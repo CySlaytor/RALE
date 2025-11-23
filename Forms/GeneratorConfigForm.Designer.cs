@@ -18,14 +18,17 @@
             this.txtStride = new System.Windows.Forms.TextBox();
             this.btnOK = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
-            this.lblTarget = new System.Windows.Forms.Label();
             this.lblStrideHint = new System.Windows.Forms.Label();
+            this.clbAddresses = new System.Windows.Forms.CheckedListBox();
+            this.lblInstructions = new System.Windows.Forms.Label();
+            this.btnSelectAll = new System.Windows.Forms.Button();
+            this.chkAutoStride = new System.Windows.Forms.CheckBox();
             this.SuspendLayout();
             // 
             // lblCopies
             // 
             this.lblCopies.AutoSize = true;
-            this.lblCopies.Location = new System.Drawing.Point(12, 38);
+            this.lblCopies.Location = new System.Drawing.Point(12, 237);
             this.lblCopies.Name = "lblCopies";
             this.lblCopies.Size = new System.Drawing.Size(105, 15);
             this.lblCopies.TabIndex = 0;
@@ -33,7 +36,7 @@
             // 
             // txtCopies
             // 
-            this.txtCopies.Location = new System.Drawing.Point(123, 35);
+            this.txtCopies.Location = new System.Drawing.Point(123, 234);
             this.txtCopies.Name = "txtCopies";
             this.txtCopies.Size = new System.Drawing.Size(100, 23);
             this.txtCopies.TabIndex = 1;
@@ -42,7 +45,7 @@
             // lblStride
             // 
             this.lblStride.AutoSize = true;
-            this.lblStride.Location = new System.Drawing.Point(12, 70);
+            this.lblStride.Location = new System.Drawing.Point(12, 269);
             this.lblStride.Name = "lblStride";
             this.lblStride.Size = new System.Drawing.Size(95, 15);
             this.lblStride.TabIndex = 2;
@@ -50,7 +53,7 @@
             // 
             // txtStride
             // 
-            this.txtStride.Location = new System.Drawing.Point(123, 67);
+            this.txtStride.Location = new System.Drawing.Point(123, 266);
             this.txtStride.Name = "txtStride";
             this.txtStride.Size = new System.Drawing.Size(100, 23);
             this.txtStride.TabIndex = 3;
@@ -58,7 +61,8 @@
             // 
             // btnOK
             // 
-            this.btnOK.Location = new System.Drawing.Point(67, 126);
+            this.btnOK.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnOK.Location = new System.Drawing.Point(196, 316);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(75, 23);
             this.btnOK.TabIndex = 4;
@@ -68,7 +72,8 @@
             // 
             // btnCancel
             // 
-            this.btnCancel.Location = new System.Drawing.Point(148, 126);
+            this.btnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnCancel.Location = new System.Drawing.Point(277, 316);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
             this.btnCancel.TabIndex = 5;
@@ -76,26 +81,56 @@
             this.btnCancel.UseVisualStyleBackColor = true;
             this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
             // 
-            // lblTarget
-            // 
-            this.lblTarget.AutoSize = true;
-            this.lblTarget.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
-            this.lblTarget.Location = new System.Drawing.Point(12, 9);
-            this.lblTarget.Name = "lblTarget";
-            this.lblTarget.Size = new System.Drawing.Size(90, 15);
-            this.lblTarget.TabIndex = 6;
-            this.lblTarget.Text = "Target: 0x0000";
-            // 
             // lblStrideHint
             // 
             this.lblStrideHint.AutoSize = true;
             this.lblStrideHint.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
             this.lblStrideHint.ForeColor = System.Drawing.SystemColors.GrayText;
-            this.lblStrideHint.Location = new System.Drawing.Point(123, 93);
+            this.lblStrideHint.Location = new System.Drawing.Point(123, 292);
             this.lblStrideHint.Name = "lblStrideHint";
             this.lblStrideHint.Size = new System.Drawing.Size(108, 13);
             this.lblStrideHint.TabIndex = 7;
             this.lblStrideHint.Text = "Hex supported (0x)";
+            // 
+            // clbAddresses
+            // 
+            this.clbAddresses.CheckOnClick = true;
+            this.clbAddresses.FormattingEnabled = true;
+            this.clbAddresses.Location = new System.Drawing.Point(12, 27);
+            this.clbAddresses.Name = "clbAddresses";
+            this.clbAddresses.Size = new System.Drawing.Size(340, 184);
+            this.clbAddresses.TabIndex = 8;
+            // 
+            // lblInstructions
+            // 
+            this.lblInstructions.AutoSize = true;
+            this.lblInstructions.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
+            this.lblInstructions.Location = new System.Drawing.Point(12, 9);
+            this.lblInstructions.Name = "lblInstructions";
+            this.lblInstructions.Size = new System.Drawing.Size(188, 15);
+            this.lblInstructions.TabIndex = 9;
+            this.lblInstructions.Text = "Select Base Addresses to Expand:";
+            // 
+            // btnSelectAll
+            // 
+            this.btnSelectAll.Location = new System.Drawing.Point(277, 217);
+            this.btnSelectAll.Name = "btnSelectAll";
+            this.btnSelectAll.Size = new System.Drawing.Size(75, 23);
+            this.btnSelectAll.TabIndex = 10;
+            this.btnSelectAll.Text = "Select All";
+            this.btnSelectAll.UseVisualStyleBackColor = true;
+            this.btnSelectAll.Click += new System.EventHandler(this.btnSelectAll_Click);
+            // 
+            // chkAutoStride
+            // 
+            this.chkAutoStride.AutoSize = true;
+            this.chkAutoStride.Enabled = true;
+            this.chkAutoStride.Location = new System.Drawing.Point(237, 268);
+            this.chkAutoStride.Name = "chkAutoStride";
+            this.chkAutoStride.Size = new System.Drawing.Size(97, 19);
+            this.chkAutoStride.TabIndex = 11;
+            this.chkAutoStride.Text = "Auto Detect";
+            this.chkAutoStride.UseVisualStyleBackColor = true;
             // 
             // GeneratorConfigForm
             // 
@@ -103,9 +138,12 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.btnCancel;
-            this.ClientSize = new System.Drawing.Size(284, 161);
+            this.ClientSize = new System.Drawing.Size(364, 351);
+            this.Controls.Add(this.chkAutoStride);
+            this.Controls.Add(this.btnSelectAll);
+            this.Controls.Add(this.lblInstructions);
+            this.Controls.Add(this.clbAddresses);
             this.Controls.Add(this.lblStrideHint);
-            this.Controls.Add(this.lblTarget);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnOK);
             this.Controls.Add(this.txtStride);
@@ -129,7 +167,10 @@
         private System.Windows.Forms.TextBox txtStride;
         private System.Windows.Forms.Button btnOK;
         private System.Windows.Forms.Button btnCancel;
-        private System.Windows.Forms.Label lblTarget;
         private System.Windows.Forms.Label lblStrideHint;
+        private System.Windows.Forms.CheckedListBox clbAddresses;
+        private System.Windows.Forms.Label lblInstructions;
+        private System.Windows.Forms.Button btnSelectAll;
+        private System.Windows.Forms.CheckBox chkAutoStride;
     }
 }
