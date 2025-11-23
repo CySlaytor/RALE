@@ -15,8 +15,6 @@
             components = new System.ComponentModel.Container();
             panelHeader = new Panel();
             btnTools = new Button();
-            toolsContextMenu = new ContextMenuStrip(components);
-            pointerCalculatorToolStripMenuItem = new ToolStripMenuItem();
             btnAddNote = new Button();
             btnReset = new Button();
             lvLeaderboardComponents = new ListView();
@@ -27,6 +25,8 @@
             txtDescription = new TextBox();
             txtTitle = new TextBox();
             pbBadge = new PictureBox();
+            toolsContextMenu = new ContextMenuStrip(components);
+            pointerCalculatorToolStripMenuItem = new ToolStripMenuItem();
             splitGroups = new SplitContainer();
             groupsList = new ListView();
             colGroups = new ColumnHeader();
@@ -52,16 +52,16 @@
             pasteToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator3 = new ToolStripSeparator();
             createGeneratorToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparator5 = new ToolStripSeparator();
+            saveAsSnippetToolStripMenuItem = new ToolStripMenuItem();
+            insertSnippetToolStripMenuItem = new ToolStripMenuItem();
             statusStripEditor = new StatusStrip();
             lblEditorStatus = new ToolStripStatusLabel();
             chkShowDecimal = new CheckBox();
             chkAliasMode = new CheckBox();
-            toolStripSeparator5 = new ToolStripSeparator();
-            saveAsSnippetToolStripMenuItem = new ToolStripMenuItem();
-            insertSnippetToolStripMenuItem = new ToolStripMenuItem();
             panelHeader.SuspendLayout();
-            toolsContextMenu.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pbBadge).BeginInit();
+            toolsContextMenu.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)splitGroups).BeginInit();
             splitGroups.Panel1.SuspendLayout();
             splitGroups.Panel2.SuspendLayout();
@@ -104,19 +104,6 @@
             btnTools.UseVisualStyleBackColor = true;
             btnTools.Click += btnTools_Click;
             // 
-            // toolsContextMenu
-            // 
-            toolsContextMenu.Items.AddRange(new ToolStripItem[] { pointerCalculatorToolStripMenuItem });
-            toolsContextMenu.Name = "toolsContextMenu";
-            toolsContextMenu.Size = new Size(169, 26);
-            // 
-            // pointerCalculatorToolStripMenuItem
-            // 
-            pointerCalculatorToolStripMenuItem.Name = "pointerCalculatorToolStripMenuItem";
-            pointerCalculatorToolStripMenuItem.Size = new Size(168, 22);
-            pointerCalculatorToolStripMenuItem.Text = "Pointer Calculator";
-            pointerCalculatorToolStripMenuItem.Click += pointerCalculatorToolStripMenuItem_Click;
-            // 
             // btnAddNote
             // 
             btnAddNote.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -148,7 +135,7 @@
             lvLeaderboardComponents.MultiSelect = false;
             lvLeaderboardComponents.Name = "lvLeaderboardComponents";
             lvLeaderboardComponents.Scrollable = false;
-            lvLeaderboardComponents.Size = new Size(80, 75);
+            lvLeaderboardComponents.Size = new Size(64, 75);
             lvLeaderboardComponents.TabIndex = 6;
             lvLeaderboardComponents.UseCompatibleStateImageBehavior = false;
             lvLeaderboardComponents.View = View.Details;
@@ -217,6 +204,19 @@
             pbBadge.SizeMode = PictureBoxSizeMode.Zoom;
             pbBadge.TabIndex = 0;
             pbBadge.TabStop = false;
+            // 
+            // toolsContextMenu
+            // 
+            toolsContextMenu.Items.AddRange(new ToolStripItem[] { pointerCalculatorToolStripMenuItem });
+            toolsContextMenu.Name = "toolsContextMenu";
+            toolsContextMenu.Size = new Size(170, 26);
+            // 
+            // pointerCalculatorToolStripMenuItem
+            // 
+            pointerCalculatorToolStripMenuItem.Name = "pointerCalculatorToolStripMenuItem";
+            pointerCalculatorToolStripMenuItem.Size = new Size(169, 22);
+            pointerCalculatorToolStripMenuItem.Text = "Pointer Calculator";
+            pointerCalculatorToolStripMenuItem.Click += pointerCalculatorToolStripMenuItem_Click;
             // 
             // splitGroups
             // 
@@ -343,7 +343,7 @@
             // 
             gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, createGeneratorToolStripMenuItem, toolStripSeparator5, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
             gridContextMenu.Name = "gridContextMenu";
-            gridContextMenu.Size = new Size(209, 286);
+            gridContextMenu.Size = new Size(209, 270);
             // 
             // moveUpToolStripMenuItem
             // 
@@ -430,6 +430,26 @@
             createGeneratorToolStripMenuItem.Text = "Create Generator...";
             createGeneratorToolStripMenuItem.Click += createGeneratorToolStripMenuItem_Click;
             // 
+            // toolStripSeparator5
+            // 
+            toolStripSeparator5.Name = "toolStripSeparator5";
+            toolStripSeparator5.Size = new Size(205, 6);
+            // 
+            // saveAsSnippetToolStripMenuItem
+            // 
+            saveAsSnippetToolStripMenuItem.Name = "saveAsSnippetToolStripMenuItem";
+            saveAsSnippetToolStripMenuItem.Size = new Size(208, 22);
+            saveAsSnippetToolStripMenuItem.Text = "Save Selection as Snippet";
+            saveAsSnippetToolStripMenuItem.Click += saveAsSnippetToolStripMenuItem_Click;
+            // 
+            // insertSnippetToolStripMenuItem
+            // 
+            insertSnippetToolStripMenuItem.Name = "insertSnippetToolStripMenuItem";
+            insertSnippetToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.I;
+            insertSnippetToolStripMenuItem.Size = new Size(208, 22);
+            insertSnippetToolStripMenuItem.Text = "Insert Snippet...";
+            insertSnippetToolStripMenuItem.Click += insertSnippetToolStripMenuItem_Click;
+            // 
             // statusStripEditor
             // 
             statusStripEditor.Items.AddRange(new ToolStripItem[] { lblEditorStatus });
@@ -463,32 +483,12 @@
             chkAliasMode.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             chkAliasMode.AutoSize = true;
             chkAliasMode.BackColor = SystemColors.Control;
-            chkAliasMode.Location = new Point(480, 381);
+            chkAliasMode.Location = new Point(481, 381);
             chkAliasMode.Name = "chkAliasMode";
-            chkAliasMode.Size = new Size(95, 19);
+            chkAliasMode.Size = new Size(94, 19);
             chkAliasMode.TabIndex = 10;
             chkAliasMode.Text = "Show Aliases";
             chkAliasMode.UseVisualStyleBackColor = true;
-            // 
-            // toolStripSeparator5
-            // 
-            toolStripSeparator5.Name = "toolStripSeparator5";
-            toolStripSeparator5.Size = new Size(205, 6);
-            // 
-            // saveAsSnippetToolStripMenuItem
-            // 
-            saveAsSnippetToolStripMenuItem.Name = "saveAsSnippetToolStripMenuItem";
-            saveAsSnippetToolStripMenuItem.Size = new Size(208, 22);
-            saveAsSnippetToolStripMenuItem.Text = "Save Selection as Snippet";
-            saveAsSnippetToolStripMenuItem.Click += saveAsSnippetToolStripMenuItem_Click;
-            // 
-            // insertSnippetToolStripMenuItem
-            // 
-            insertSnippetToolStripMenuItem.Name = "insertSnippetToolStripMenuItem";
-            insertSnippetToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.I;
-            insertSnippetToolStripMenuItem.Size = new Size(208, 22);
-            insertSnippetToolStripMenuItem.Text = "Insert Snippet...";
-            insertSnippetToolStripMenuItem.Click += insertSnippetToolStripMenuItem_Click;
             // 
             // TriggerEditorControl
             // 
@@ -503,8 +503,8 @@
             Size = new Size(700, 400);
             panelHeader.ResumeLayout(false);
             panelHeader.PerformLayout();
-            toolsContextMenu.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)pbBadge).EndInit();
+            toolsContextMenu.ResumeLayout(false);
             splitGroups.Panel1.ResumeLayout(false);
             splitGroups.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)splitGroups).EndInit();

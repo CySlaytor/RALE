@@ -155,5 +155,20 @@ namespace RALogicEditor.Utilities
             if (size.Contains("24-bit")) return 0xFFFFFF;
             return -1;
         }
+
+        // New helper for consistent dictionary keys (e.g. "0x001234" -> "0x1234")
+        public static string NormalizeAddress(string address)
+        {
+            if (string.IsNullOrWhiteSpace(address)) return "";
+            string clean = address.Trim();
+            if (clean.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) clean = clean.Substring(2);
+
+            if (long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val))
+            {
+                return "0x" + val.ToString("x");
+            }
+            // Fallback if it's not valid hex (shouldn't happen often in this context)
+            return "0x" + clean.ToLower();
+        }
     }
 }

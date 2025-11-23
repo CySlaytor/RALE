@@ -40,8 +40,8 @@ namespace RALogicEditor.Controls
         private Dictionary<int, GeneratorDefinition> _generatorRules = new();
 
         // Cache for Code Notes for Tooltips/Aliases
-        // Key: Normalized Address "0x1234", Value: Note Title
-        private Dictionary<string, string> _notesLookup = new();
+        // Key: Normalized Address "0x1234", Value: Parsed Node Tree
+        private Dictionary<string, List<NoteNode>> _notesLookup = new();
 
         public char GroupSeparator { get; set; } = 'S'; // 'S' for achievements, '::' handled internally for LBs
 
@@ -175,16 +175,14 @@ namespace RALogicEditor.Controls
 
             foreach (var note in notes)
             {
-                if (string.IsNullOrEmpty(note.Address)) continue;
-                string addr = note.Address.Trim();
-                // Ensure uniform hex format for lookup
-                if (!addr.StartsWith("0x")) addr = "0x" + addr;
+                // Use LogicFormatter to get canonical key (e.g. "0x1234" instead of "0x001234")
+                string key = LogicFormatter.NormalizeAddress(note.Address);
 
-                // Extract first line or title for the alias
-                string title = note.Note.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "Note";
+                // Parse note for tree structure
+                var nodes = PointerTreeParser.ParseNoteText(note.Note);
 
                 // Add to dictionary (latest note wins if duplicate)
-                _notesLookup[addr] = title;
+                _notesLookup[key] = nodes;
             }
 
             // Push map to Grid Manager for Tooltips
@@ -224,10 +222,6 @@ namespace RALogicEditor.Controls
             if (string.IsNullOrWhiteSpace(clipboardText)) return;
 
             // Smart Paste Check: Is this a full achievement string?
-            // ID:"Logic":Title:Desc:Type:Author:Points...
-            // Matches format like: 12345:"0xH...":MyTitle...
-
-            // Crude check for colon count and ID start
             if (char.IsDigit(clipboardText[0]) && clipboardText.Contains(":\"") && clipboardText.Count(c => c == ':') > 5)
             {
                 var result = MessageBox.Show("Detected full achievement data in clipboard.\nDo you want to update Title, Points, and Description as well?",
@@ -251,9 +245,6 @@ namespace RALogicEditor.Controls
         {
             try
             {
-                // Re-use UserTextParser logic partially by creating a dummy file structure in memory
-                // Or simple manual parse
-
                 // ID:"Logic":Title:Desc...
                 int firstColon = raw.IndexOf(':');
                 if (firstColon == -1) return;
@@ -513,12 +504,7 @@ namespace RALogicEditor.Controls
         private void addConditionToolStripMenuItem_Click(object sender, EventArgs e) { _history.PushState(_triggerText); _gridManager.AddCondition(); }
         private void copyRowToolStripMenuItem_Click(object sender, EventArgs e) => _gridManager.CopySelectedRows();
         private void copyLogicToolStripMenuItem_Click(object sender, EventArgs e) => _gridManager.CopySelectedLogic();
-        // Paste logic handled by GridManager event now for Smart Paste support
-        private void pasteToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (Clipboard.ContainsText())
-                GridManager_PasteRequested(sender, Clipboard.GetText());
-        }
+        private void pasteToolStripMenuItem_Click(object sender, EventArgs e) { if (Clipboard.ContainsText()) GridManager_PasteRequested(sender, Clipboard.GetText()); }
 
         private void addGroupToolStripMenuItem_Click(object sender, EventArgs e)
         {
@@ -859,7 +845,6 @@ namespace RALogicEditor.Controls
                 var group = _activeGroups[index];
                 conditionGrid.Tag = group;
                 RefreshCurrentGridDisplay();
-                RunValidation();
             }
         }
 

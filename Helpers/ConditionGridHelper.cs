@@ -6,6 +6,9 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.RegularExpressions;
+using System.Linq;
+using System;
 
 namespace RALogicEditor.Helpers
 {
@@ -14,8 +17,8 @@ namespace RALogicEditor.Helpers
     public static class ConditionGridHelper
     {
         // Clears the grid and repopulates it with the conditions from the provided group.
-        // Handles read-only state, decimal display, and now Alias Mode.
-        public static void PopulateGridRows(DoubleBufferedDataGridView grid, AchievementConditionGroup group, bool readOnlyMode, bool showDecimal, bool showAliases, Dictionary<string, string>? notesLookup)
+        // Handles read-only state, decimal display, and now Alias Mode with Pointer Context.
+        public static void PopulateGridRows(DoubleBufferedDataGridView grid, AchievementConditionGroup group, bool readOnlyMode, bool showDecimal, bool showAliases, Dictionary<string, List<NoteNode>>? notesLookup)
         {
             grid.Rows.Clear();
             if (group == null || group.Conditions == null) return;
@@ -34,52 +37,53 @@ namespace RALogicEditor.Helpers
                 row.CreateCells(grid);
                 row.Tag = cond; // Link the row to the model object
 
-                SetRowValues(row, cond, readOnlyMode, showDecimal, showAliases, notesLookup);
+                // Pass 'i' and 'group' for pointer chain context scanning
+                SetRowValues(row, cond, readOnlyMode, showDecimal, showAliases, notesLookup, group, i);
                 grid.Rows.Add(row);
             }
         }
 
         // Maps the properties of an AchievementCondition to the specific cells in a DataGridViewRow.
-        public static void SetRowValues(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode, bool showDecimal, bool showAliases, Dictionary<string, string>? notesLookup)
+        public static void SetRowValues(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode, bool showDecimal, bool showAliases, Dictionary<string, List<NoteNode>>? notesLookup, AchievementConditionGroup? group = null, int rowIndex = -1)
         {
             row.Cells[0].Value = cond.ID;
             row.Cells[1].Value = cond.Flag;
             row.Cells[2].Value = cond.LeftOperand.Type;
             row.Cells[3].Value = cond.LeftOperand.Size;
 
-            // Format Left Value (Alias check for Memory, Decimal check for Values)
-            row.Cells[4].Value = FormatOperandDisplay(cond.LeftOperand, showDecimal, showAliases, notesLookup);
+            // Format Left Value
+            row.Cells[4].Value = FormatOperandDisplay(cond.LeftOperand, showDecimal, showAliases, notesLookup, group, rowIndex, true);
 
             row.Cells[5].Value = cond.Operator;
 
             row.Cells[6].Value = cond.RightOperand.Type;
             row.Cells[7].Value = cond.RightOperand.Size;
 
-            // Format Right Value (Alias check for Memory, Decimal check for Values)
-            // Needs reference size from Left operand for accurate masking if it is a Value
+            // Format Right Value
             string rightSizeRef = LogicFormatter.GetRightOperandSizeReference(cond);
-            // We pass the operand itself, but we handle the formatting logic manually if needed or delegate
-            row.Cells[8].Value = FormatOperandDisplay(cond.RightOperand, showDecimal, showAliases, notesLookup, rightSizeRef);
+            row.Cells[8].Value = FormatOperandDisplay(cond.RightOperand, showDecimal, showAliases, notesLookup, group, rowIndex, false, rightSizeRef);
 
             // Apply visual styling (graying out invalid cells)
             ApplyCellFormatting(row, cond, readOnlyMode);
         }
 
-        private static string FormatOperandDisplay(Operand op, bool showDecimal, bool showAliases, Dictionary<string, string>? notesLookup, string sizeRef = "")
+        private static string FormatOperandDisplay(Operand op, bool showDecimal, bool showAliases, Dictionary<string, List<NoteNode>>? notesLookup, AchievementConditionGroup? group, int rowIndex, bool isLeft, string sizeRef = "")
         {
-            // If Alias Mode is ON and this is a Memory type, try to find the note
+            // If Alias Mode is ON and this is a Memory type
             if (showAliases && RaLogicSyntax.MemoryTypes.Contains(op.Type) && notesLookup != null)
             {
-                // Normalize address (ensure 0x prefix)
-                string addr = op.Value.Trim();
-                if (!addr.StartsWith("0x") && long.TryParse(addr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
-                {
-                    addr = "0x" + addr;
-                }
+                // Normalize the address using the same logic as the dictionary keys
+                string addr = LogicFormatter.NormalizeAddress(op.Value);
 
-                if (notesLookup.ContainsKey(addr))
+                string alias = ResolveAlias(addr, group, rowIndex, isLeft, notesLookup);
+                if (!string.IsNullOrEmpty(alias))
                 {
-                    return $"[{notesLookup[addr]}]";
+                    // Strip [Tags] like [32-bit Pointer] or [Void]
+                    // Regex: Matches [anything] and removes it.
+                    alias = Regex.Replace(alias, @"\[.*?\]", "").Trim();
+
+                    // Use a shorter display format for Aliases to indicate it is not a raw value
+                    return alias;
                 }
             }
 
@@ -87,8 +91,95 @@ namespace RALogicEditor.Helpers
             return LogicFormatter.FormatDisplayValue(op, showDecimal, sizeRef);
         }
 
-        // Applies specific background colors and read-only states to cells based on logic rules.
-        // For example: If Type is "Value", the "Size" column should be disabled/grayed out.
+        private static string ResolveAlias(string address, AchievementConditionGroup? group, int rowIndex, bool isLeft, Dictionary<string, List<NoteNode>> notesLookup)
+        {
+            // 1. Check for Pointer Chain context (Backwards scan)
+            // Only applicable if we have a group context and rowIndex > 0
+            if (group != null && rowIndex > 0)
+            {
+                // Scan backwards to find the Base Address of the chain
+                int scan = rowIndex - 1;
+                string? baseAddress = null;
+
+                // We only care about "Add Address" flags forming a chain immediately preceding this row
+                while (scan >= 0)
+                {
+                    var prevCond = group.Conditions[scan];
+                    if (prevCond.Flag == "Add Address")
+                    {
+                        baseAddress = prevCond.LeftOperand.Value;
+                        scan--;
+                    }
+                    else
+                    {
+                        // Chain broken
+                        break;
+                    }
+                }
+
+                // If we found a base address
+                if (!string.IsNullOrEmpty(baseAddress))
+                {
+                    string normalizedBase = LogicFormatter.NormalizeAddress(baseAddress);
+
+                    // Look up the Base Note
+                    if (notesLookup.TryGetValue(normalizedBase, out var nodes))
+                    {
+                        // Convert current address to a relative offset
+                        // e.g. address is "0x73" (value in grid for offset)
+                        // remove 0x, parse hex
+                        string cleanAddr = address.Replace("0x", "");
+
+                        if (long.TryParse(cleanAddr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long targetOffset))
+                        {
+                            // Try to find a node with this offset
+                            var matchingNode = nodes.FirstOrDefault(n =>
+                            {
+                                // Strip + and 0x for comparison from node offset string like "+0x73"
+                                string cleanNodeOff = n.Offset.Replace("+", "").Replace("0x", "").Trim();
+                                if (long.TryParse(cleanNodeOff, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long nodeVal))
+                                {
+                                    return nodeVal == targetOffset;
+                                }
+                                return false;
+                            });
+
+                            if (matchingNode != null)
+                            {
+                                return matchingNode.Description;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Direct Lookup (Base Address or simple memory)
+            if (notesLookup.TryGetValue(address, out var directNodes))
+            {
+                // Return the description of the root node
+                var root = directNodes.FirstOrDefault();
+                if (root != null)
+                {
+                    var main = directNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? directNodes.First();
+
+                    string desc = main.Description;
+
+                    // FIX: "Full Note" is a generic placeholder from the PointerTreeParser. 
+                    // If we see it, we must extract the first line of the content instead.
+                    if (string.IsNullOrEmpty(desc) || desc.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!string.IsNullOrEmpty(main.Content))
+                        {
+                            desc = main.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+                        }
+                    }
+                    return desc;
+                }
+            }
+
+            return "";
+        }
+
         private static void ApplyCellFormatting(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode)
         {
             // Define colors
@@ -110,7 +201,7 @@ namespace RALogicEditor.Helpers
                 {
                     lValueCell.ReadOnly = true;
                     lValueCell.Style.BackColor = staticColor;
-                    row.Cells[4].Value = ""; // Recalls don't have a value
+                    row.Cells[4].Value = "";
                 }
                 else
                 {
@@ -169,7 +260,7 @@ namespace RALogicEditor.Helpers
                 {
                     rValueCell.ReadOnly = readOnlyMode;
                     rValueCell.Style.BackColor = editableColor;
-                    rSizeCell.Style.BackColor = staticColor; // Values don't have size on right side
+                    rSizeCell.Style.BackColor = staticColor;
                     rSizeCell.ToolTipText = "";
                 }
                 else

@@ -41,8 +41,9 @@ namespace RALogicEditor.Helpers
         // Property to track Alias display
         public bool ShowAliases { get; set; } = false;
 
-        // Dictionary to lookup note descriptions by address (e.g. "0x1234" -> "Player HP")
-        public Dictionary<string, string> NotesLookup { get; set; } = new();
+        // Dictionary to lookup parsed notes by address
+        // Key: Normalized Address "0x1234", Value: List of NoteNodes (Tree)
+        public Dictionary<string, List<NoteNode>> NotesLookup { get; set; } = new();
 
         public ConditionGridManager(DoubleBufferedDataGridView grid)
         {
@@ -160,9 +161,15 @@ namespace RALogicEditor.Helpers
                             string addr = op.Value.Trim();
                             if (!addr.StartsWith("0x")) addr = "0x" + addr;
 
-                            if (NotesLookup.TryGetValue(addr, out string? note))
+                            if (NotesLookup.TryGetValue(addr, out var nodes) && nodes.Count > 0)
                             {
-                                e.ToolTipText = note;
+                                // Find the root node (indent -2) or fallback to first
+                                var root = nodes.FirstOrDefault(n => n.IndentLevel == -2) ?? nodes[0];
+                                string desc = root.Description;
+                                if (string.IsNullOrEmpty(desc)) desc = root.Content.Split('\n')[0];
+
+                                // Strip tags for tooltip as well
+                                e.ToolTipText = Regex.Replace(desc, @"\[.*?\]", "").Trim();
                             }
                         }
                     }
@@ -241,7 +248,7 @@ namespace RALogicEditor.Helpers
             {
                 ApplyConditionLogicRules(cond);
                 // Refresh visuals (applying ShowDecimal and ShowAliases if active)
-                ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
+                ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, _grid.Tag as AchievementConditionGroup, e.RowIndex);
                 LogicChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -270,7 +277,7 @@ namespace RALogicEditor.Helpers
                     else if (colName == "ColRSize") cond.RightOperand.Size = val;
 
                     ApplyConditionLogicRules(cond);
-                    ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup);
+                    ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, _grid.Tag as AchievementConditionGroup, row.Index);
                     changed = true;
                 }
             }
@@ -527,16 +534,17 @@ namespace RALogicEditor.Helpers
         private void HandleAddressSelection(int rowIndex, int colIndex)
         {
             if (colIndex != 4 && colIndex != 8) return;
-            string val = _grid.Rows[rowIndex].Cells[colIndex].Value?.ToString() ?? "";
 
-            // Check if it's an alias (starts with [)
-            if (val.StartsWith("["))
+            // FIX: Get underlying value directly from Model tag, ignoring Visual Cell value (alias)
+            string val = "";
+            if (_grid.Rows[rowIndex].Tag is AchievementCondition cond)
             {
-                // We need the underlying value from the model, not the formatted cell value
-                if (_grid.Rows[rowIndex].Tag is AchievementCondition cond)
-                {
-                    val = colIndex == 4 ? cond.LeftOperand.Value : cond.RightOperand.Value;
-                }
+                val = colIndex == 4 ? cond.LeftOperand.Value : cond.RightOperand.Value;
+            }
+            else
+            {
+                // Fallback to cell value if tag missing (shouldn't happen)
+                val = _grid.Rows[rowIndex].Cells[colIndex].Value?.ToString() ?? "";
             }
 
             if (!val.StartsWith("0x") || !long.TryParse(val.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long currentOffset)) return;
@@ -553,13 +561,10 @@ namespace RALogicEditor.Helpers
             {
                 var row = _grid.Rows[scanIndex];
                 string flag = row.Cells["ColFlag"].Value?.ToString() ?? "";
-                string memVal = row.Cells["ColLValue"].Value?.ToString() ?? "";
 
-                // If Aliases are on, the cell might be text. Get raw model value.
-                if (row.Tag is AchievementCondition rCond)
-                {
-                    memVal = rCond.LeftOperand.Value;
-                }
+                // Use model tag here as well for previous rows
+                string memVal = "";
+                if (row.Tag is AchievementCondition rCond) memVal = rCond.LeftOperand.Value;
 
                 if (flag == "Add Address" && memVal.StartsWith("0x") && long.TryParse(memVal.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long addr)) { collected.Push(addr); scanIndex--; chainFound = true; } else break;
             }
