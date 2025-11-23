@@ -14,10 +14,13 @@ using System.Windows.Forms;
 
 namespace RALogicEditor.Helpers
 {
+    // Manages the interaction logic for the Condition Grid.
+    // Handles events, input validation, context menus, and clipboard operations.
     public class ConditionGridManager
     {
         private readonly DoubleBufferedDataGridView _grid;
 
+        // Context menus for different column types
         private readonly ContextMenuStrip _flagContextMenu = new();
         private readonly ContextMenuStrip _typeContextMenu = new();
         private readonly ContextMenuStrip _sizeContextMenu = new();
@@ -29,6 +32,9 @@ namespace RALogicEditor.Helpers
         public event EventHandler<string>? StatusUpdateRequested;
         public event EventHandler<string>? AddressSelected;
         public event EventHandler<PointerChainArgs>? PointerChainSelected;
+
+        // Property to track display preference (Hex vs Decimal)
+        public bool ShowDecimal { get; set; } = false;
 
         public ConditionGridManager(DoubleBufferedDataGridView grid)
         {
@@ -47,6 +53,7 @@ namespace RALogicEditor.Helpers
             _grid.KeyDown += Grid_KeyDown;
         }
 
+        // Dynamically creates context menus based on definitions in RaLogicSyntax
         private void InitializeContextMenus()
         {
             CreateMenu(_flagContextMenu, RaLogicSyntax.Flags);
@@ -54,6 +61,7 @@ namespace RALogicEditor.Helpers
             CreateMenu(_sizeContextMenu, RaLogicSyntax.MemorySizes);
             CreateMenu(_cmpContextMenu, RaLogicSyntax.ComparisonOperators);
             CreateMenu(_cmpArithmeticContextMenu, RaLogicSyntax.ArithmeticOperators);
+            // Strict operators exclude "None"
             var strictOps = RaLogicSyntax.ComparisonOperators.Where(op => op != RaLogicSyntax.NO_OPERATOR_TEXT).ToArray();
             CreateMenu(_cmpStrictContextMenu, strictOps);
         }
@@ -62,38 +70,48 @@ namespace RALogicEditor.Helpers
         {
             foreach (var item in items)
             {
+                // Escape ampersands for menu items
                 var text = item.Replace("&", "&&");
                 var menuItem = new ToolStripMenuItem(text, null, OnContextMenuItemClick) { Tag = item };
                 menu.Items.Add(menuItem);
             }
         }
 
+        // Handles keyboard shortcuts for Copy/Paste and Enter key navigation
         private void Grid_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter && _grid.CurrentCell != null)
             {
+                // Enter on an address cell triggers the "Follow Address" logic
                 HandleAddressSelection(_grid.CurrentCell.RowIndex, _grid.CurrentCell.ColumnIndex);
                 e.Handled = true;
             }
+            // Prevent modification in ReadOnly mode, but allow Copy
             if (_grid.ReadOnly && e.KeyCode != Keys.C) { if (e.KeyCode == Keys.Delete || e.KeyCode == Keys.V) { e.Handled = true; return; } }
+
             if (e.Control && e.KeyCode == Keys.C) { CopySelectedRows(); e.Handled = true; }
             else if (e.Control && e.Shift && e.KeyCode == Keys.C) { CopySelectedLogic(); e.Handled = true; }
             else if (e.Control && e.KeyCode == Keys.V) { PasteLogic(); e.Handled = true; }
         }
 
+        // Handles Right-Click context menus
         private void Grid_CellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
         {
             if (e.Button == MouseButtons.Right && e.RowIndex >= 0 && e.ColumnIndex >= 0)
             {
+                // Ensure the row is selected on right-click
                 if (!_grid.Rows[e.RowIndex].Selected) { _grid.ClearSelection(); _grid.Rows[e.RowIndex].Selected = true; }
                 if (_grid.ReadOnly) return;
 
                 var colName = _grid.Columns[e.ColumnIndex].Name;
+
+                // Show appropriate menu based on column type
                 if (colName == "ColFlag") _flagContextMenu.Show(Cursor.Position);
                 else if (colName == "ColLType" || colName == "ColRType") _typeContextMenu.Show(Cursor.Position);
                 else if (colName == "ColLSize" || colName == "ColRSize") _sizeContextMenu.Show(Cursor.Position);
                 else if (colName == "ColCmp")
                 {
+                    // Show specific operator menus based on the current Flag (e.g., Arithmetic vs Comparison)
                     var flag = _grid.Rows[e.RowIndex].Cells["ColFlag"].Value?.ToString() ?? "";
                     if (RaLogicSyntax.ArithmeticFlags.Contains(flag)) _cmpArithmeticContextMenu.Show(Cursor.Position);
                     else if (RaLogicSyntax.StrictComparisonFlags.Contains(flag)) _cmpStrictContextMenu.Show(Cursor.Position);
@@ -102,11 +120,13 @@ namespace RALogicEditor.Helpers
             }
         }
 
+        // Double click acts as a right click for context menus
         private void Grid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex >= 0) Grid_CellMouseDown(sender, new DataGridViewCellMouseEventArgs(e.ColumnIndex, e.RowIndex, 0, 0, new MouseEventArgs(MouseButtons.Right, 1, 0, 0, 0)));
         }
 
+        // Configures the TextBox control when editing a cell (Input Validation)
         private void Grid_EditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
         {
             if (e.Control is TextBox editingControl && _grid.CurrentCell != null)
@@ -114,14 +134,24 @@ namespace RALogicEditor.Helpers
                 editingControl.CharacterCasing = CharacterCasing.Lower;
                 editingControl.KeyPress -= EditingControl_KeyPress;
                 editingControl.KeyPress += EditingControl_KeyPress;
+
                 string colName = _grid.Columns[_grid.CurrentCell.ColumnIndex].Name;
                 string type = colName == "ColLValue" ? (_grid.Rows[_grid.CurrentCell.RowIndex].Cells["ColLType"].Value?.ToString() ?? "") : (_grid.Rows[_grid.CurrentCell.RowIndex].Cells["ColRType"].Value?.ToString() ?? "");
+
                 if (type == "Float") editingControl.MaxLength = 32;
                 else if (type == "Value") editingControl.MaxLength = 15;
-                else { editingControl.MaxLength = 8; if (editingControl.Text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) editingControl.Text = editingControl.Text.Substring(2); }
+                else
+                {
+                    // Hex addresses limit
+                    editingControl.MaxLength = 8;
+                    // Auto-strip 0x prefix for easier editing
+                    if (editingControl.Text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                        editingControl.Text = editingControl.Text.Substring(2);
+                }
             }
         }
 
+        // Enforces Hexadecimal or Floating point character rules
         private void EditingControl_KeyPress(object? sender, KeyPressEventArgs e)
         {
             if (char.IsControl(e.KeyChar)) return;
@@ -132,12 +162,18 @@ namespace RALogicEditor.Helpers
                 string type = colName == "ColLValue" ? (_grid.Rows[_grid.CurrentCell.RowIndex].Cells["ColLType"].Value?.ToString() ?? "") : (_grid.Rows[_grid.CurrentCell.RowIndex].Cells["ColRType"].Value?.ToString() ?? "");
                 allowFloat = type == "Float";
             }
+
+            // Allow Hex chars
             bool isHex = char.IsDigit(e.KeyChar) || (e.KeyChar >= 'a' && e.KeyChar <= 'f') || (e.KeyChar >= 'A' && e.KeyChar <= 'F') || e.KeyChar == 'x' || e.KeyChar == 'X';
             if (isHex) return;
+
+            // Allow Float chars
             if (allowFloat && (e.KeyChar == '.' || e.KeyChar == '-' || e.KeyChar == ',')) return;
-            e.Handled = true;
+
+            e.Handled = true; // Block invalid input
         }
 
+        // Updates the Model object (AchievementCondition) when cell values change
         private void Grid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0) return;
@@ -146,11 +182,13 @@ namespace RALogicEditor.Helpers
             var cell = row.Cells[e.ColumnIndex];
             string value = cell.Value?.ToString() ?? "";
 
+            // Parse input string into Model
             if (cell.OwningColumn.Name == "ColLValue") cond.LeftOperand.Value = LogicFormatter.ParseAndFormatValue(value, cond.LeftOperand.Type, cond.LeftOperand.Size);
             else if (cell.OwningColumn.Name == "ColRValue") cond.RightOperand.Value = LogicFormatter.ParseAndFormatValue(value, cond.RightOperand.Type, LogicFormatter.GetRightOperandSizeReference(cond));
             else if (cell.OwningColumn.Name == "ColHits") { var match = Regex.Match(value, @"\d+"); cond.RequiredHits = match.Success ? uint.Parse(match.Value) : 0; }
         }
 
+        // Called when editing finishes; refreshes the visual row state
         private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0) return;
@@ -158,11 +196,13 @@ namespace RALogicEditor.Helpers
             if (row.Tag is AchievementCondition cond)
             {
                 ApplyConditionLogicRules(cond);
-                ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly);
+                // Refresh visuals (applying ShowDecimal if active)
+                ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal);
                 LogicChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
+        // Handles selection from Context Menus
         private void OnContextMenuItemClick(object? sender, EventArgs e)
         {
             if (_grid.ReadOnly || sender is not ToolStripMenuItem item) return;
@@ -177,6 +217,7 @@ namespace RALogicEditor.Helpers
                     if (_grid.CurrentCell == null) continue;
                     string colName = _grid.Columns[_grid.CurrentCell.ColumnIndex].Name;
 
+                    // Apply selected menu item to the model
                     if (colName == "ColFlag") { string old = cond.Flag; cond.Flag = val; HandleFlagChange(cond, old); }
                     else if (colName == "ColLType") HandleTypeChange(cond.LeftOperand, val, cond.LeftOperand.Size);
                     else if (colName == "ColLSize") cond.LeftOperand.Size = val;
@@ -185,13 +226,14 @@ namespace RALogicEditor.Helpers
                     else if (colName == "ColRSize") cond.RightOperand.Size = val;
 
                     ApplyConditionLogicRules(cond);
-                    ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly);
+                    ConditionGridHelper.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal);
                     changed = true;
                 }
             }
             if (changed) { LogicChanged?.Invoke(this, EventArgs.Empty); StatusUpdateRequested?.Invoke(this, "Updated condition property."); }
         }
 
+        // Auto-formats value when Type changes (e.g., reset Float to 1.0 or Value to 0)
         private void HandleTypeChange(Operand op, string newType, string refSize)
         {
             string oldType = op.Type;
@@ -205,12 +247,15 @@ namespace RALogicEditor.Helpers
             else
             {
                 var integerLike = new HashSet<string> { "Mem", "Value", "Delta", "Prior", "BCD", "Inverted" };
+                // Convert Integer to Float presentation
                 if (integerLike.Contains(oldType) && newType == "Float") { if (uint.TryParse(op.Value.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint hexVal)) op.Value = BitConverter.ToSingle(BitConverter.GetBytes(hexVal), 0).ToString("G9", CultureInfo.InvariantCulture); }
+                // Convert Float to Integer presentation
                 else if (oldType == "Float" && integerLike.Contains(newType)) { string safeVal = op.Value.Replace(',', '.'); if (float.TryParse(safeVal, NumberStyles.Float, CultureInfo.InvariantCulture, out float floatVal)) op.Value = "0x" + BitConverter.ToUInt32(BitConverter.GetBytes(floatVal), 0).ToString("x8"); }
             }
             op.Type = newType;
         }
 
+        // Resets operands when Flag changes (e.g. AddSource shouldn't have Comparison)
         private void HandleFlagChange(AchievementCondition cond, string oldFlag)
         {
             bool wasA = RaLogicSyntax.ArithmeticFlags.Contains(oldFlag);
@@ -219,6 +264,7 @@ namespace RALogicEditor.Helpers
             else if (!wasA && isA) { cond.Operator = ""; cond.RightOperand = new Operand(); }
         }
 
+        // Resets right operand when Operator changes (None vs =)
         private void HandleOperatorChange(AchievementCondition cond, string oldOp)
         {
             bool wasE = string.IsNullOrEmpty(oldOp);
@@ -227,6 +273,7 @@ namespace RALogicEditor.Helpers
             else if (!wasE && isE) cond.RightOperand = new Operand();
         }
 
+        // Enforces syntax rules (e.g. Implicit sizes, required comparisons)
         private void ApplyConditionLogicRules(AchievementCondition cond)
         {
             if (cond.LeftOperand.Type is "Value" or "Float" or "Recall") cond.LeftOperand.Size = "";
@@ -247,6 +294,7 @@ namespace RALogicEditor.Helpers
             }
         }
 
+        // Copies selected rows as TSV (Text) to Clipboard
         public void CopySelectedRows()
         {
             if (_grid.SelectedRows.Count == 0) return;
@@ -260,6 +308,7 @@ namespace RALogicEditor.Helpers
             StatusUpdateRequested?.Invoke(this, "Rows copied to clipboard.");
         }
 
+        // Copies logic as RA Logic String (e.g. 0x123=1) to Clipboard
         public void CopySelectedLogic()
         {
             if (_grid.SelectedRows.Count == 0) return;
@@ -300,6 +349,7 @@ namespace RALogicEditor.Helpers
             }
         }
 
+        // Pastes logic string from Clipboard into Grid
         public void PasteLogic()
         {
             if (!Clipboard.ContainsText() || _grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
@@ -312,7 +362,7 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.InsertRange(idx, conds);
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -337,7 +387,7 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.InsertRange(idx, clones);
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -359,7 +409,7 @@ namespace RALogicEditor.Helpers
 
             foreach (DataGridViewRow row in _grid.SelectedRows) { if (row.Tag is AchievementCondition cond) group.Conditions.Remove(cond); }
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -388,7 +438,7 @@ namespace RALogicEditor.Helpers
 
             foreach (var idx in indices) { var item = group.Conditions[idx]; group.Conditions.RemoveAt(idx); group.Conditions.Insert(idx + dist, item); }
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -414,7 +464,7 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.Add(new AchievementCondition { LeftOperand = { Type = "Value", Value = "0" }, Operator = "=", RightOperand = { Type = "Value", Value = "1" } });
 
-            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly);
+            ConditionGridHelper.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal);
 
             if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
                 try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
@@ -429,6 +479,7 @@ namespace RALogicEditor.Helpers
             LogicChanged?.Invoke(this, EventArgs.Empty);
         }
 
+        // Detects if a cell contains a memory address and attempts to resolve pointer chains
         private void HandleAddressSelection(int rowIndex, int colIndex)
         {
             if (colIndex != 4 && colIndex != 8) return;
@@ -442,6 +493,7 @@ namespace RALogicEditor.Helpers
             int scanIndex = rowIndex - 1;
             bool chainFound = false;
 
+            // Scan backwards to find "Add Address" flags indicating a pointer chain
             while (scanIndex >= 0)
             {
                 var row = _grid.Rows[scanIndex];

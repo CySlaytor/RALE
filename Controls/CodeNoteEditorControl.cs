@@ -38,18 +38,62 @@ namespace RALogicEditor.Controls
         public void SetNotes(List<CodeNote> notes)
         {
             _isInternalUpdate = true;
-            _allNotes = notes ?? new List<CodeNote>();
-            ApplyFilter();
-            _isInternalUpdate = false;
+            try
+            {
+                // 1. Capture current selection to restore it after reload
+                string? previousAddress = null;
+                if (cmbNotes.SelectedItem is CodeNote current)
+                {
+                    previousAddress = current.Address;
+                }
+
+                _allNotes = notes ?? new List<CodeNote>();
+
+                // 2. Reset UI
+                cmbNotes.DataSource = null;
+                cmbNotes.Items.Clear();
+                txtNoteBody.Text = "";
+
+                // 3. Apply Filter (forces a rebuild of the display list from the new _allNotes)
+                ApplyFilter(false);
+
+                // 4. Restore selection
+                bool selectionRestored = false;
+                if (previousAddress != null)
+                {
+                    var match = _filteredNotes.FirstOrDefault(n => n.Address == previousAddress);
+                    if (match != null)
+                    {
+                        cmbNotes.SelectedItem = match;
+                        LoadNoteToTextBox(match);
+                        selectionRestored = true;
+                    }
+                }
+
+                // 5. Fallback if nothing restored or selected
+                if (!selectionRestored && _filteredNotes.Count > 0)
+                {
+                    cmbNotes.SelectedIndex = 0;
+                    LoadNoteToTextBox(_filteredNotes[0]);
+                }
+            }
+            finally
+            {
+                _isInternalUpdate = false;
+            }
         }
 
         // Filters note list based on search text
-        private void ApplyFilter()
+        private void ApplyFilter(bool autoSelectFirst = true)
         {
             string filter = txtSearch.Text.Trim();
             if (string.IsNullOrWhiteSpace(filter))
             {
-                if (_filteredNotes.Count != _allNotes.Count) _filteredNotes = new List<CodeNote>(_allNotes);
+                // Always create a new list from _allNotes.
+                // Previously, this checked (Count != Count) to skip allocation, but
+                // reloading often keeps the same count while changing content.
+                // We must force a refresh to drop references to old objects.
+                _filteredNotes = new List<CodeNote>(_allNotes);
             }
             else
             {
@@ -58,25 +102,44 @@ namespace RALogicEditor.Controls
                                 n.Note.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
             }
 
+            // Reset DataSource to force the ComboBox to repaint with new data
             cmbNotes.DataSource = null;
             cmbNotes.DataSource = _filteredNotes;
 
-            if (_filteredNotes.Count > 0) { cmbNotes.SelectedIndex = 0; LoadNoteToTextBox(_filteredNotes[0]); }
-            else { txtNoteBody.Text = ""; _fullNoteCache = ""; cmbVariables.DataSource = null; UpdateStatusStrip(null); }
+            if (autoSelectFirst && _filteredNotes.Count > 0)
+            {
+                cmbNotes.SelectedIndex = 0;
+                LoadNoteToTextBox(_filteredNotes[0]);
+            }
+            else if (_filteredNotes.Count == 0)
+            {
+                txtNoteBody.Text = "";
+                _fullNoteCache = "";
+                cmbVariables.DataSource = null;
+                UpdateStatusStrip(null);
+            }
         }
 
-        private void txtSearch_TextChanged(object sender, EventArgs e) { if (!_isInternalUpdate) ApplyFilter(); }
+        private void txtSearch_TextChanged(object sender, EventArgs e) { if (!_isInternalUpdate) ApplyFilter(true); }
 
         // Parses the selected note text to find pointer offsets
         private void LoadNoteToTextBox(CodeNote note)
         {
+            // Preserve existing state to prevent prematurely enabling events
+            bool wasUpdating = _isInternalUpdate;
             _isInternalUpdate = true;
-            _fullNoteCache = note.Note.Replace("\n", "\r\n");
-            txtNoteBody.Text = _fullNoteCache;
-            RefreshVariableTree();
-            if (cmbVariables.Items.Count > 0) cmbVariables.SelectedIndex = 0; else cmbVariables.SelectedIndex = -1;
-            UpdateStatusStrip(null);
-            _isInternalUpdate = false;
+            try
+            {
+                _fullNoteCache = note.Note.Replace("\n", "\r\n");
+                txtNoteBody.Text = _fullNoteCache;
+                RefreshVariableTree();
+                if (cmbVariables.Items.Count > 0) cmbVariables.SelectedIndex = 0; else cmbVariables.SelectedIndex = -1;
+                UpdateStatusStrip(null);
+            }
+            finally
+            {
+                _isInternalUpdate = wasUpdating;
+            }
         }
 
         private void RefreshVariableTree()
@@ -170,7 +233,10 @@ namespace RALogicEditor.Controls
 
             if (cmbNotes.SelectedItem is CodeNote note)
             {
-                note.Note = txtNoteBody.Text; _fullNoteCache = txtNoteBody.Text; RefreshVariableTree(); cmbNotes.Invalidate();
+                note.Note = txtNoteBody.Text;
+                _fullNoteCache = txtNoteBody.Text;
+                RefreshVariableTree();
+                cmbNotes.Invalidate();
             }
         }
 

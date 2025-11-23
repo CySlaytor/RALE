@@ -18,17 +18,33 @@ namespace RALogicEditor.Parsers
         {
             var data = new UserData();
             string[] lines;
-            try { lines = File.ReadAllLines(filepath); } catch { return data; }
+            try
+            {
+                // Use FileStream with ReadWrite sharing.
+                // This prevents exceptions if the file is currently open in an external text editor.
+                using (var fs = new FileStream(filepath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var sr = new StreamReader(fs))
+                {
+                    var list = new List<string>();
+                    string? l;
+                    while ((l = sr.ReadLine()) != null) list.Add(l);
+                    lines = list.ToArray();
+                }
+            }
+            catch { return data; }
 
             foreach (var line in lines)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
+                string trimmedLine = line.TrimStart();
 
                 try
                 {
-                    if (line.StartsWith("N0:"))
+                    // Use permissive regex for Code Notes to handle manual edits
+                    // Matches: N0: 0x1234 : "Note"
+                    if (trimmedLine.StartsWith("N0:", System.StringComparison.OrdinalIgnoreCase))
                     {
-                        var match = Regex.Match(line, "^N0:(0x[0-9A-Fa-f]+):\"(.+)\"$");
+                        var match = Regex.Match(trimmedLine, @"^N0:\s*(0x[0-9A-Fa-f]+)\s*:\s*""(.+)""\s*$", RegexOptions.IgnoreCase);
                         if (match.Success)
                         {
                             data.Notes.Add(new CodeNote
@@ -39,14 +55,15 @@ namespace RALogicEditor.Parsers
                             });
                         }
                     }
-                    else if (line.StartsWith("L"))
+                    else if (trimmedLine.StartsWith("L", System.StringComparison.OrdinalIgnoreCase) && trimmedLine.Length > 1 && char.IsDigit(trimmedLine[1]))
                     {
-                        int firstColon = line.IndexOf(':');
+                        // Leaderboards: L123:...
+                        int firstColon = trimmedLine.IndexOf(':');
                         if (firstColon == -1) continue;
-                        string idStr = line.Substring(1, firstColon - 1);
+                        string idStr = trimmedLine.Substring(1, firstColon - 1);
                         if (!int.TryParse(idStr, out int id)) continue;
 
-                        string content = line.Substring(firstColon + 1);
+                        string content = trimmedLine.Substring(firstColon + 1);
                         var parts = ParseColonLine(content);
 
                         if (parts.Count >= 8)
@@ -63,14 +80,15 @@ namespace RALogicEditor.Parsers
                             });
                         }
                     }
-                    else if (char.IsDigit(line[0]))
+                    else if (char.IsDigit(trimmedLine[0]))
                     {
-                        int firstColon = line.IndexOf(':');
+                        // Achievements: 123:...
+                        int firstColon = trimmedLine.IndexOf(':');
                         if (firstColon == -1) continue;
-                        string idStr = line.Substring(0, firstColon);
+                        string idStr = trimmedLine.Substring(0, firstColon);
                         if (!int.TryParse(idStr, out int id)) continue;
 
-                        string content = line.Substring(firstColon + 1);
+                        string content = trimmedLine.Substring(firstColon + 1);
                         var parts = ParseColonLine(content);
 
                         if (parts.Count >= 3)
@@ -118,6 +136,7 @@ namespace RALogicEditor.Parsers
         private static string CleanValue(string val)
         {
             if (string.IsNullOrEmpty(val)) return "";
+            val = val.Trim();
             if (val.StartsWith("\"") && val.EndsWith("\"") && val.Length >= 2)
                 return val.Substring(1, val.Length - 2).Replace("\\\"", "\"");
             return val;

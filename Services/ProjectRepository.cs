@@ -13,6 +13,8 @@ namespace RALogicEditor.Services
         public RaRoot? ServerData { get; private set; }
         public UserTextParser.UserData? LocalData { get; private set; }
 
+        private List<CodeNote> _serverNotes = new(); // Store original server notes for comparison
+
         public string CurrentGameId { get; private set; } = "";
         public string CurrentTitle { get; private set; } = "";
 
@@ -20,6 +22,7 @@ namespace RALogicEditor.Services
         {
             ServerData = null;
             LocalData = null;
+            _serverNotes.Clear();
             userFilePath = "";
             CurrentGameId = "";
 
@@ -99,8 +102,6 @@ namespace RALogicEditor.Services
 
         private void LoadAndMergeNotes(string notesPath)
         {
-            List<CodeNote> jsonNotes = new();
-
             if (File.Exists(notesPath))
             {
                 try
@@ -112,36 +113,48 @@ namespace RALogicEditor.Services
                         ReadCommentHandling = JsonCommentHandling.Skip,
                         AllowTrailingCommas = true
                     };
-                    jsonNotes = JsonSerializer.Deserialize<List<CodeNote>>(jsonContent, options) ?? new();
+                    _serverNotes = JsonSerializer.Deserialize<List<CodeNote>>(jsonContent, options) ?? new();
                 }
                 catch { /* Ignore load errors */ }
             }
 
             // Merge Logic:
-            // 1. Dictionary keyed by Address
-            // 2. Add JSON notes first
-            // 3. Overwrite/Add Local notes (User.txt)
+            // 1. Start with Server Notes
+            // 2. Overlay Local Notes (User.txt)
 
             var mergedNotesMap = new Dictionary<string, CodeNote>();
 
-            foreach (var n in jsonNotes)
+            foreach (var n in _serverNotes)
             {
+                // Store a copy to ensure we don't modify the reference in _serverNotes list
                 if (!mergedNotesMap.ContainsKey(n.Address))
-                    mergedNotesMap[n.Address] = n;
+                    mergedNotesMap[n.Address] = new CodeNote { Address = n.Address, Note = n.Note, User = n.User };
             }
 
-            if (LocalData != null && LocalData.Notes != null)
+            if (LocalData != null)
             {
-                foreach (var n in LocalData.Notes)
+                if (LocalData.Notes != null)
                 {
-                    // Local notes take precedence (edits)
-                    mergedNotesMap[n.Address] = n;
+                    foreach (var n in LocalData.Notes)
+                    {
+                        // Local notes take precedence (edits)
+                        mergedNotesMap[n.Address] = n;
+                    }
                 }
 
-                // Update the LocalData list to contain the full merged set
-                // This ensures the UI sees everything
+                // Update the LocalData list to contain the full merged set for the UI
                 LocalData.Notes = mergedNotesMap.Values.OrderBy(n => n.Address).ToList();
             }
+        }
+
+        // Checks if a note matches exactly what is on the server (Address and Content)
+        public bool IsNoteSynced(CodeNote note)
+        {
+            var serverNote = _serverNotes.FirstOrDefault(n => n.Address == note.Address);
+            if (serverNote == null) return false; // New local note
+
+            // Compare content, ignoring User field
+            return serverNote.Note == note.Note;
         }
 
         // Merges Server and Local lists based on IDs to determine Sync status

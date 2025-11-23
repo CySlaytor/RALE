@@ -307,7 +307,14 @@ namespace RALogicEditor.Controls
         private void TxtTitle_TextChanged(object? sender, EventArgs e) => NotifyAssetDataChanged(a => a.Title = txtTitle.Text);
         private void TxtDescription_TextChanged(object? sender, EventArgs e) => NotifyAssetDataChanged(a => a.Description = txtDescription.Text);
         private void CmbPoints_Changed(object? sender, EventArgs e) => NotifyAssetDataChanged(a => { if (a is RaAchievement r && int.TryParse(cmbPoints.Text, out int p)) r.Points = p; });
-        private void ChkShowDecimal_CheckedChanged(object? sender, EventArgs e) { _showDecimal = chkShowDecimal.Checked; RefreshCurrentGridDisplay(); }
+
+        private void ChkShowDecimal_CheckedChanged(object? sender, EventArgs e)
+        {
+            _showDecimal = chkShowDecimal.Checked;
+            // Sync manager so edits work correctly
+            _gridManager.ShowDecimal = _showDecimal;
+            RefreshCurrentGridDisplay();
+        }
 
         private void CmbType_SelectedIndexChanged(object? sender, EventArgs e)
         {
@@ -494,8 +501,37 @@ namespace RALogicEditor.Controls
 
                 if (conditionGrid.Tag is AchievementConditionGroup activeGroup)
                 {
-                    activeGroup.Conditions.AddRange(conditions);
+                    // Logic for insertion point
+                    int insertIndex = activeGroup.Conditions.Count;
+                    if (conditionGrid.SelectedRows.Count > 0)
+                    {
+                        // Insert after the last selected row
+                        insertIndex = conditionGrid.SelectedRows.Cast<DataGridViewRow>().Max(r => r.Index) + 1;
+                    }
+
+                    // Insert conditions
+                    activeGroup.Conditions.InsertRange(insertIndex, conditions);
+
                     RefreshCurrentGridDisplay();
+
+                    // Restore Selection (highlight new items)
+                    conditionGrid.ClearSelection();
+
+                    if (insertIndex < conditionGrid.Rows.Count)
+                    {
+                        // Scroll to/Focus first new row
+                        conditionGrid.CurrentCell = conditionGrid.Rows[insertIndex].Cells[0];
+                    }
+
+                    for (int i = 0; i < conditions.Count; i++)
+                    {
+                        int rowIdx = insertIndex + i;
+                        if (rowIdx < conditionGrid.Rows.Count)
+                        {
+                            conditionGrid.Rows[rowIdx].Selected = true;
+                        }
+                    }
+
                     BuildTriggerAndNotify();
                 }
             }
@@ -669,7 +705,8 @@ namespace RALogicEditor.Controls
                         }
                     }
                 }
-                ConditionGridHelper.PopulateGridRows(conditionGrid, group, isGenerated);
+                // Passed _showDecimal
+                ConditionGridHelper.PopulateGridRows(conditionGrid, group, isGenerated, _showDecimal);
             }
         }
 

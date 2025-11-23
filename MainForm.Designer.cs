@@ -21,6 +21,7 @@
             editToolStripMenuItem = new ToolStripMenuItem();
             undoToolStripMenuItem = new ToolStripMenuItem();
             redoToolStripMenuItem = new ToolStripMenuItem();
+            renumberLocalIDsToolStripMenuItem = new ToolStripMenuItem();
             splitMain = new SplitContainer();
             achievementGrid = new DataGridView();
             colID = new DataGridViewTextBoxColumn();
@@ -33,6 +34,8 @@
             toolStripSeparatorAsset = new ToolStripSeparator();
             moveUpAssetToolStripMenuItem = new ToolStripMenuItem();
             moveDownAssetToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparatorRenumber = new ToolStripSeparator();
+            renumberContextToolStripMenuItem = new ToolStripMenuItem();
             panelGridBottom = new Panel();
             btnDeleteAsset = new Button();
             btnDuplicateAsset = new Button();
@@ -97,7 +100,7 @@
             // 
             // editToolStripMenuItem
             // 
-            editToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { undoToolStripMenuItem, redoToolStripMenuItem });
+            editToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { undoToolStripMenuItem, redoToolStripMenuItem, new ToolStripSeparator(), renumberLocalIDsToolStripMenuItem });
             editToolStripMenuItem.Name = "editToolStripMenuItem";
             editToolStripMenuItem.Size = new Size(39, 20);
             editToolStripMenuItem.Text = "&Edit";
@@ -117,6 +120,12 @@
             redoToolStripMenuItem.Size = new Size(144, 22);
             redoToolStripMenuItem.Text = "Redo";
             redoToolStripMenuItem.Click += Redo_Click;
+            // 
+            // renumberLocalIDsToolStripMenuItem
+            // 
+            renumberLocalIDsToolStripMenuItem.Name = "renumberLocalIDsToolStripMenuItem";
+            renumberLocalIDsToolStripMenuItem.Size = new Size(180, 22);
+            renumberLocalIDsToolStripMenuItem.Text = "Renumber Local IDs";
             // 
             // splitMain
             // 
@@ -173,9 +182,9 @@
             // 
             // assetContextMenu
             // 
-            assetContextMenu.Items.AddRange(new ToolStripItem[] { newAssetToolStripMenuItem, cloneAssetToolStripMenuItem, deleteAssetToolStripMenuItem, resetAssetToolStripMenuItem, toolStripSeparatorAsset, moveUpAssetToolStripMenuItem, moveDownAssetToolStripMenuItem });
+            assetContextMenu.Items.AddRange(new ToolStripItem[] { newAssetToolStripMenuItem, cloneAssetToolStripMenuItem, deleteAssetToolStripMenuItem, resetAssetToolStripMenuItem, toolStripSeparatorAsset, moveUpAssetToolStripMenuItem, moveDownAssetToolStripMenuItem, toolStripSeparatorRenumber, renumberContextToolStripMenuItem });
             assetContextMenu.Name = "assetContextMenu";
-            assetContextMenu.Size = new Size(200, 142);
+            assetContextMenu.Size = new Size(200, 186);
             // 
             // newAssetToolStripMenuItem
             // 
@@ -221,6 +230,17 @@
             moveDownAssetToolStripMenuItem.ShortcutKeys = Keys.Alt | Keys.Down;
             moveDownAssetToolStripMenuItem.Size = new Size(199, 22);
             moveDownAssetToolStripMenuItem.Text = "Move Down";
+            // 
+            // toolStripSeparatorRenumber
+            // 
+            toolStripSeparatorRenumber.Name = "toolStripSeparatorRenumber";
+            toolStripSeparatorRenumber.Size = new Size(196, 6);
+            // 
+            // renumberContextToolStripMenuItem
+            // 
+            renumberContextToolStripMenuItem.Name = "renumberContextToolStripMenuItem";
+            renumberContextToolStripMenuItem.Size = new Size(199, 22);
+            renumberContextToolStripMenuItem.Text = "Renumber Local IDs";
             // 
             // panelGridBottom
             // 
@@ -368,6 +388,7 @@
         private System.Windows.Forms.ToolStripMenuItem editToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem undoToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem redoToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem renumberLocalIDsToolStripMenuItem;
         private System.Windows.Forms.SplitContainer splitMain;
         private System.Windows.Forms.SplitContainer splitEditor;
         private System.Windows.Forms.DataGridView achievementGrid;
@@ -386,6 +407,8 @@
         private System.Windows.Forms.ToolStripMenuItem moveUpAssetToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem moveDownAssetToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem resetAssetToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparatorRenumber;
+        private System.Windows.Forms.ToolStripMenuItem renumberContextToolStripMenuItem;
         private System.Windows.Forms.Panel panelGridBottom;
         private System.Windows.Forms.Button btnAddAsset;
         private System.Windows.Forms.Button btnDuplicateAsset;

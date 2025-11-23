@@ -80,6 +80,8 @@ namespace RALogicEditor
             resetAssetToolStripMenuItem.Click += ResetAsset_Click;
             moveUpAssetToolStripMenuItem.Click += MoveAssetUp_Click;
             moveDownAssetToolStripMenuItem.Click += MoveAssetDown_Click;
+            renumberLocalIDsToolStripMenuItem.Click += RenumberLocalIDs_Click;
+            renumberContextToolStripMenuItem.Click += RenumberLocalIDs_Click;
 
             // -- Button Wiring --
             btnAddAsset.Click += NewAsset_Click;
@@ -260,6 +262,8 @@ namespace RALogicEditor
                 cmbSource.SelectedItem = "JSON";
 
             ReloadDataView();
+
+            // Ensure notes are set or cleared
             codeNoteEditor.SetNotes(_projectRepo.LocalData?.Notes ?? new List<CodeNote>());
         }
 
@@ -305,10 +309,16 @@ namespace RALogicEditor
                     sb.AppendLine($"L{l.ID}:\"{pSta}\":\"{pCan}\":\"{pSub}\":\"{pVal}\":{l.Format}:{l.Title}:{l.Description}:{l.LowerIsBetter}");
                 }
 
-                // Save notes
-                foreach (var n in _projectRepo.LocalData!.Notes)
+                // Save notes - Filter out notes that match the server data
+                if (_projectRepo.LocalData?.Notes != null)
                 {
-                    sb.AppendLine($"N0:{n.Address}:\"{n.Note.Replace("\r\n", "\\r\\n")}\"");
+                    foreach (var n in _projectRepo.LocalData.Notes)
+                    {
+                        // Only save notes that are modified or new compared to the server JSON
+                        if (_projectRepo.IsNoteSynced(n)) continue;
+
+                        sb.AppendLine($"N0:{n.Address}:\"{n.Note.Replace("\r\n", "\\r\\n")}\"");
+                    }
                 }
 
                 File.WriteAllText(savePath, sb.ToString());
@@ -392,7 +402,15 @@ namespace RALogicEditor
 
         private void AddGridRow(IAssetItem item)
         {
-            int idx = achievementGrid.Rows.Add(item.ID, item.Title);
+            // Only prefix 'L' for Leaderboards that are effectively "Local" (High ID range)
+            // Standard server IDs (e.g. 42948) should appear as raw numbers.
+            string displayId = item.ID.ToString();
+            if (item.IsLeaderboard && item.ID >= 111000001)
+            {
+                displayId = $"L{item.ID}";
+            }
+
+            int idx = achievementGrid.Rows.Add(displayId, item.Title);
             var row = achievementGrid.Rows[idx];
             row.Tag = item;
             UpdateRowColor(row, item);
@@ -567,7 +585,8 @@ namespace RALogicEditor
             // Select new item
             foreach (DataGridViewRow row in achievementGrid.Rows)
             {
-                if ((int)row.Cells[0].Value == newId)
+                // Use Tag to verify ID safely, as display value might be a string (e.g. "L111...")
+                if (row.Tag is IAssetItem item && item.ID == newId)
                 {
                     row.Selected = true;
                     LoadSelectedAsset();
@@ -757,6 +776,33 @@ namespace RALogicEditor
             }
         }
 
+        // Action: Renumber all local assets sequentially
+        private void RenumberLocalIDs_Click(object? sender, EventArgs e)
+        {
+            if (_projectRepo.LocalData == null) return;
+
+            bool hasLocal = _projectRepo.LocalData.Achievements.Any() || _projectRepo.LocalData.Leaderboards.Any();
+            if (!hasLocal) return;
+
+            PushMainUndo();
+
+            int currentId = 111000001;
+
+            // Achievements first
+            foreach (var ach in _projectRepo.LocalData.Achievements)
+            {
+                ach.ID = currentId++;
+            }
+
+            // Leaderboards follow
+            foreach (var lb in _projectRepo.LocalData.Leaderboards)
+            {
+                lb.ID = currentId++;
+            }
+
+            ReloadDataView();
+        }
+
         private void SwapInList<T>(List<T> list, int idA, int idB) where T : IAssetItem
         {
             var indexA = list.FindIndex(x => x.ID == idA);
@@ -819,6 +865,10 @@ namespace RALogicEditor
             resetAssetToolStripMenuItem.Enabled = hasSelection && anyModified;
             moveUpAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
             moveDownAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
+
+            bool hasAnyLocal = _projectRepo.LocalData != null &&
+                              (_projectRepo.LocalData.Achievements.Count > 0 || _projectRepo.LocalData.Leaderboards.Count > 0);
+            renumberContextToolStripMenuItem.Enabled = hasAnyLocal;
         }
 
         private void UpdateSelectionUI()

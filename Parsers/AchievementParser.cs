@@ -96,7 +96,7 @@ namespace RALogicEditor.Parsers
             string opStr = "";
             int opIndex = -1;
 
-            // FIX: Sort operators by Length Descending to match strict operators (>=) before substrings (=)
+            // Sort operators by Length Descending to match strict operators (>=) before substrings (=)
             var sortedOps = RaLogicSyntax.ComparisonOperators
                 .Where(op => op != RaLogicSyntax.NO_OPERATOR_TEXT)
                 .OrderByDescending(op => op.Length)
