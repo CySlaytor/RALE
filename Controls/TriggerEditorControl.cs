@@ -39,6 +39,9 @@ namespace RALogicEditor.Controls
         // Stores Generator rules (Copies, Strides) keyed by Group Index
         private Dictionary<int, GeneratorDefinition> _generatorRules = new();
 
+        // Current list of validation issues for highlighting
+        private List<ValidationIssue> _currentIssues = new();
+
         // Cache for Code Notes for Tooltips/Aliases
         // Key: Normalized Address "0x1234", Value: Parsed Node Tree
         private Dictionary<string, List<NoteNode>> _notesLookup = new();
@@ -53,6 +56,9 @@ namespace RALogicEditor.Controls
         public event EventHandler? AddFromCodeNoteRequested;
         public event EventHandler<string>? AddressSelected;
         public event EventHandler<PointerChainArgs>? PointerChainSelected;
+
+        // New event to broadcast validation results to main form
+        public event EventHandler<List<ValidationIssue>>? ValidationCompleted;
 
         // Public property for the Logic String (Two-way binding)
         [Browsable(false)]
@@ -194,25 +200,75 @@ namespace RALogicEditor.Controls
 
         private void GridManager_LogicChanged(object? sender, EventArgs e)
         {
-            _history.PushState(_triggerText);
-            BuildTriggerAndNotify();
-            RunValidation();
+            if (!this.IsHandleCreated) return;
+
+            // Use BeginInvoke to avoid reentrancy bugs (modifying grid rows during CellEndEdit)
+            this.BeginInvoke(new Action(() =>
+            {
+                _history.PushState(_triggerText);
+                BuildTriggerAndNotify();
+                RunValidation();
+            }));
         }
 
         private void RunValidation()
         {
-            // Only validate current group to save perf
-            if (conditionGrid.Tag is AchievementConditionGroup group)
+            // Run full validation on all groups, passing the bound asset for context
+            _currentIssues = LogicValidator.ValidateAsset(_activeGroups, _boundAsset);
+
+            // Broadcast to listeners (e.g. CodeReviewControl)
+            ValidationCompleted?.Invoke(this, _currentIssues);
+
+            if (_currentIssues.Any(i => i.Severity >= FeedbackSeverity.Error))
+                SetStatus("❌ Error(s) found in logic.");
+            else if (_currentIssues.Any(i => i.Severity >= FeedbackSeverity.Warning))
+                SetStatus("⚠️ Warning(s) found in logic.");
+            else
+                SetStatus("Ready");
+
+            // Refresh grid to show highlights
+            RefreshCurrentGridDisplay();
+        }
+
+        // Public method for external controls (CodeReviewer) to select a specific condition
+        public void SelectCondition(AchievementCondition? target)
+        {
+            if (target == null) return;
+
+            // 1. Find which group contains this condition
+            int groupIndex = -1;
+            for (int i = 0; i < _activeGroups.Count; i++)
             {
-                var warnings = LogicValidator.ValidateGroup(group);
-                if (warnings.Count > 0)
+                if (_activeGroups[i].Conditions.Contains(target))
                 {
-                    SetStatus("⚠️ Warning: " + warnings[0]);
-                    // Could update UI color here if desired
+                    groupIndex = i;
+                    break;
                 }
-                else
+            }
+
+            if (groupIndex != -1)
+            {
+                // 2. Switch to that group if not active
+                if (groupsList.SelectedIndices.Count == 0 || groupsList.SelectedIndices[0] != groupIndex)
                 {
-                    SetStatus("Ready");
+                    if (groupIndex < groupsList.Items.Count)
+                    {
+                        groupsList.Items[groupIndex].Selected = true;
+                        // Ensure the list scrolls to show it
+                        groupsList.EnsureVisible(groupIndex);
+                    }
+                }
+
+                // 3. Find the row in the grid
+                foreach (DataGridViewRow row in conditionGrid.Rows)
+                {
+                    if (row.Tag == target)
+                    {
+                        conditionGrid.ClearSelection();
+                        row.Selected = true;
+                        conditionGrid.FirstDisplayedScrollingRowIndex = row.Index;
+                        break;
+                    }
                 }
             }
         }
@@ -339,6 +395,7 @@ namespace RALogicEditor.Controls
             groupsList.Items.Clear();
             conditionGrid.Rows.Clear();
             _history.Clear();
+            _currentIssues.Clear();
 
             cmbPoints.Visible = true;
             cmbType.Visible = true;
@@ -348,6 +405,9 @@ namespace RALogicEditor.Controls
             lvLeaderboardComponents.Visible = false;
             btnReset.Visible = false;
             SetStatus("Ready");
+
+            // Clear reviewer list
+            ValidationCompleted?.Invoke(this, new List<ValidationIssue>());
         }
 
         // Loads an asset into the editor
@@ -909,8 +969,9 @@ namespace RALogicEditor.Controls
                         }
                     }
                 }
-                // Passed _showDecimal and _showAliases and the Notes Lookup
-                ConditionGridHelper.PopulateGridRows(conditionGrid, group, isGenerated, _showDecimal, _showAliases, _notesLookup);
+
+                // Passed _showDecimal, _showAliases, Notes Lookup AND Current Issues for highlighting
+                ConditionGridHelper.PopulateGridRows(conditionGrid, group, isGenerated, _showDecimal, _showAliases, _notesLookup, _currentIssues);
 
                 // Restore State
                 if (conditionGrid.Rows.Count > 0)

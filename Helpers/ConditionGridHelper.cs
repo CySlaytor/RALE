@@ -18,7 +18,14 @@ namespace RALogicEditor.Helpers
     {
         // Clears the grid and repopulates it with the conditions from the provided group.
         // Handles read-only state, decimal display, and now Alias Mode with Pointer Context.
-        public static void PopulateGridRows(DoubleBufferedDataGridView grid, AchievementConditionGroup group, bool readOnlyMode, bool showDecimal, bool showAliases, Dictionary<string, List<NoteNode>>? notesLookup)
+        public static void PopulateGridRows(
+            DoubleBufferedDataGridView grid,
+            AchievementConditionGroup group,
+            bool readOnlyMode,
+            bool showDecimal,
+            bool showAliases,
+            Dictionary<string, List<NoteNode>>? notesLookup,
+            List<ValidationIssue>? issues = null) // Added Issues parameter
         {
             grid.Rows.Clear();
             if (group == null || group.Conditions == null) return;
@@ -37,14 +44,33 @@ namespace RALogicEditor.Helpers
                 row.CreateCells(grid);
                 row.Tag = cond; // Link the row to the model object
 
+                // Check if this condition has issues
+                ValidationIssue? targetIssue = null;
+                if (issues != null)
+                {
+                    // Find highest severity issue targeting this condition
+                    targetIssue = issues.Where(iss => iss.Target == cond)
+                                        .OrderByDescending(iss => iss.Severity)
+                                        .FirstOrDefault();
+                }
+
                 // Pass 'i' and 'group' for pointer chain context scanning
-                SetRowValues(row, cond, readOnlyMode, showDecimal, showAliases, notesLookup, group, i);
+                SetRowValues(row, cond, readOnlyMode, showDecimal, showAliases, notesLookup, group, i, targetIssue);
                 grid.Rows.Add(row);
             }
         }
 
         // Maps the properties of an AchievementCondition to the specific cells in a DataGridViewRow.
-        public static void SetRowValues(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode, bool showDecimal, bool showAliases, Dictionary<string, List<NoteNode>>? notesLookup, AchievementConditionGroup? group = null, int rowIndex = -1)
+        public static void SetRowValues(
+            DataGridViewRow row,
+            AchievementCondition cond,
+            bool readOnlyMode,
+            bool showDecimal,
+            bool showAliases,
+            Dictionary<string, List<NoteNode>>? notesLookup,
+            AchievementConditionGroup? group = null,
+            int rowIndex = -1,
+            ValidationIssue? issue = null) // Added Issue parameter
         {
             row.Cells[0].Value = cond.ID;
             row.Cells[1].Value = cond.Flag;
@@ -63,8 +89,8 @@ namespace RALogicEditor.Helpers
             string rightSizeRef = LogicFormatter.GetRightOperandSizeReference(cond);
             row.Cells[8].Value = FormatOperandDisplay(cond.RightOperand, showDecimal, showAliases, notesLookup, group, rowIndex, false, rightSizeRef);
 
-            // Apply visual styling (graying out invalid cells)
-            ApplyCellFormatting(row, cond, readOnlyMode, showAliases);
+            // Apply visual styling (graying out invalid cells and applying issue highlights)
+            ApplyCellFormatting(row, cond, readOnlyMode, showAliases, issue);
         }
 
         private static string FormatOperandDisplay(Operand op, bool showDecimal, bool showAliases, Dictionary<string, List<NoteNode>>? notesLookup, AchievementConditionGroup? group, int rowIndex, bool isLeft, string sizeRef = "")
@@ -180,11 +206,27 @@ namespace RALogicEditor.Helpers
             return "";
         }
 
-        private static void ApplyCellFormatting(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode, bool showAliases)
+        private static void ApplyCellFormatting(DataGridViewRow row, AchievementCondition cond, bool readOnlyMode, bool showAliases, ValidationIssue? issue)
         {
             // Define colors
             Color editableColor = readOnlyMode ? SystemColors.Control : SystemColors.Window;
             Color staticColor = SystemColors.ControlLight;
+
+            // -- Issue Highlighting (ID Column ONLY) --
+            if (issue != null)
+            {
+                if (issue.Severity == FeedbackSeverity.Error)
+                    row.Cells[0].Style.BackColor = Color.FromArgb(255, 220, 220); // Light Red
+                else if (issue.Severity == FeedbackSeverity.Warning)
+                    row.Cells[0].Style.BackColor = Color.FromArgb(255, 245, 200); // Light Orange
+                else
+                    row.Cells[0].Style.BackColor = staticColor; // Default ID Color if info/none
+            }
+            else
+            {
+                // Reset to default static color
+                row.Cells[0].Style.BackColor = staticColor;
+            }
 
             // -- Left Operand Formatting --
             var lSizeCell = row.Cells[3];
@@ -225,11 +267,9 @@ namespace RALogicEditor.Helpers
                 }
 
                 // If Alias mode is active and this is a memory type, disable editing to prevent string corruption
-                // LogicFormatter checks RaLogicSyntax.MemoryTypes for alias support, so we do too.
                 if (showAliases && RaLogicSyntax.MemoryTypes.Contains(cond.LeftOperand.Type))
                 {
                     lValueCell.ReadOnly = true;
-                    // Use a slightly different color (staticColor) to indicate non-editable state visually
                     lValueCell.Style.BackColor = staticColor;
                 }
                 else

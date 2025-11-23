@@ -157,7 +157,7 @@ namespace RALogicEditor.Forms
 
             while (i < server.Count || j < local.Count)
             {
-                // Fix: Changed type to string? to allow null assignment without warning
+                // Changed type to string? to allow null assignment without warning
                 string? sLine = (i < server.Count) ? server[i] : null;
                 string? lLine = (j < local.Count) ? local[j] : null;
 
@@ -166,7 +166,7 @@ namespace RALogicEditor.Forms
                     if (sLine != null)
                     {
                         newServer.Add(sLine);
-                        // Fix: Added '!' because we know lLine is not null if sLine is not null and they are equal
+                        // Added '!' because we know lLine is not null if sLine is not null and they are equal
                         newLocal.Add(lLine!);
                         i++; j++;
                     }

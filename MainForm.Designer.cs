@@ -22,6 +22,8 @@
             undoToolStripMenuItem = new ToolStripMenuItem();
             redoToolStripMenuItem = new ToolStripMenuItem();
             renumberLocalIDsToolStripMenuItem = new ToolStripMenuItem();
+            viewToolStripMenuItem = new ToolStripMenuItem();
+            viewReviewerToolStripMenuItem = new ToolStripMenuItem();
             splitMain = new SplitContainer();
             achievementGrid = new DataGridView();
             colID = new DataGridViewTextBoxColumn();
@@ -47,7 +49,9 @@
             cmbSource = new ComboBox();
             cmbAssetType = new ComboBox();
             splitEditor = new SplitContainer();
+            splitMiddle = new SplitContainer();
             triggerEditor = new RALogicEditor.Controls.TriggerEditorControl();
+            codeReviewControl = new RALogicEditor.Controls.CodeReviewControl();
             codeNoteEditor = new RALogicEditor.Controls.CodeNoteEditorControl();
             mainMenu.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)splitMain).BeginInit();
@@ -62,11 +66,15 @@
             splitEditor.Panel1.SuspendLayout();
             splitEditor.Panel2.SuspendLayout();
             splitEditor.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)splitMiddle).BeginInit();
+            splitMiddle.Panel1.SuspendLayout();
+            splitMiddle.Panel2.SuspendLayout();
+            splitMiddle.SuspendLayout();
             SuspendLayout();
             // 
             // mainMenu
             // 
-            mainMenu.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, editToolStripMenuItem });
+            mainMenu.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, editToolStripMenuItem, viewToolStripMenuItem });
             mainMenu.Location = new Point(0, 0);
             mainMenu.Name = "mainMenu";
             mainMenu.Size = new Size(1200, 24);
@@ -112,7 +120,7 @@
             // 
             undoToolStripMenuItem.Name = "undoToolStripMenuItem";
             undoToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Z;
-            undoToolStripMenuItem.Size = new Size(144, 22);
+            undoToolStripMenuItem.Size = new Size(180, 22);
             undoToolStripMenuItem.Text = "Undo";
             undoToolStripMenuItem.Click += Undo_Click;
             // 
@@ -120,7 +128,7 @@
             // 
             redoToolStripMenuItem.Name = "redoToolStripMenuItem";
             redoToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Y;
-            redoToolStripMenuItem.Size = new Size(144, 22);
+            redoToolStripMenuItem.Size = new Size(180, 22);
             redoToolStripMenuItem.Text = "Redo";
             redoToolStripMenuItem.Click += Redo_Click;
             // 
@@ -129,6 +137,20 @@
             renumberLocalIDsToolStripMenuItem.Name = "renumberLocalIDsToolStripMenuItem";
             renumberLocalIDsToolStripMenuItem.Size = new Size(180, 22);
             renumberLocalIDsToolStripMenuItem.Text = "Renumber Local IDs";
+            // 
+            // viewToolStripMenuItem
+            // 
+            viewToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { viewReviewerToolStripMenuItem });
+            viewToolStripMenuItem.Name = "viewToolStripMenuItem";
+            viewToolStripMenuItem.Size = new Size(44, 20);
+            viewToolStripMenuItem.Text = "&View";
+            // 
+            // viewReviewerToolStripMenuItem
+            // 
+            viewReviewerToolStripMenuItem.Name = "viewReviewerToolStripMenuItem";
+            viewReviewerToolStripMenuItem.ShortcutKeys = Keys.F8;
+            viewReviewerToolStripMenuItem.Size = new Size(180, 22);
+            viewReviewerToolStripMenuItem.Text = "Logic Reviewer";
             // 
             // splitMain
             // 
@@ -351,7 +373,7 @@
             // 
             // splitEditor.Panel1
             // 
-            splitEditor.Panel1.Controls.Add(triggerEditor);
+            splitEditor.Panel1.Controls.Add(splitMiddle);
             splitEditor.Panel1MinSize = 400;
             // 
             // splitEditor.Panel2
@@ -362,14 +384,40 @@
             splitEditor.SplitterDistance = 703;
             splitEditor.TabIndex = 0;
             // 
+            // splitMiddle
+            // 
+            splitMiddle.Dock = DockStyle.Fill;
+            splitMiddle.Location = new Point(0, 0);
+            splitMiddle.Name = "splitMiddle";
+            splitMiddle.Orientation = Orientation.Horizontal;
+            // 
+            // splitMiddle.Panel1
+            // 
+            splitMiddle.Panel1.Controls.Add(triggerEditor);
+            // 
+            // splitMiddle.Panel2
+            // 
+            splitMiddle.Panel2.Controls.Add(codeReviewControl);
+            splitMiddle.Size = new Size(703, 650);
+            splitMiddle.SplitterDistance = 400;
+            splitMiddle.TabIndex = 0;
+            // 
             // triggerEditor
             // 
             triggerEditor.Dock = DockStyle.Fill;
             triggerEditor.GroupSeparator = 'S';
             triggerEditor.Location = new Point(0, 0);
             triggerEditor.Name = "triggerEditor";
-            triggerEditor.Size = new Size(703, 650);
+            triggerEditor.Size = new Size(703, 400);
             triggerEditor.TabIndex = 0;
+            // 
+            // codeReviewControl
+            // 
+            codeReviewControl.Dock = DockStyle.Fill;
+            codeReviewControl.Location = new Point(0, 0);
+            codeReviewControl.Name = "codeReviewControl";
+            codeReviewControl.Size = new Size(703, 246);
+            codeReviewControl.TabIndex = 0;
             // 
             // codeNoteEditor
             // 
@@ -405,6 +453,10 @@
             splitEditor.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)splitEditor).EndInit();
             splitEditor.ResumeLayout(false);
+            splitMiddle.Panel1.ResumeLayout(false);
+            splitMiddle.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)splitMiddle).EndInit();
+            splitMiddle.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
 
@@ -419,8 +471,11 @@
         private System.Windows.Forms.ToolStripMenuItem undoToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem redoToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem renumberLocalIDsToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem viewToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem viewReviewerToolStripMenuItem;
         private System.Windows.Forms.SplitContainer splitMain;
         private System.Windows.Forms.SplitContainer splitEditor;
+        private System.Windows.Forms.SplitContainer splitMiddle;
         private System.Windows.Forms.DataGridView achievementGrid;
         private System.Windows.Forms.DataGridViewTextBoxColumn colID;
         private System.Windows.Forms.DataGridViewTextBoxColumn colTitle;
@@ -429,6 +484,7 @@
         private System.Windows.Forms.ComboBox cmbSource;
         private RALogicEditor.Controls.TriggerEditorControl triggerEditor;
         private RALogicEditor.Controls.CodeNoteEditorControl codeNoteEditor;
+        private RALogicEditor.Controls.CodeReviewControl codeReviewControl;
         private System.Windows.Forms.ContextMenuStrip assetContextMenu;
         private System.Windows.Forms.ToolStripMenuItem newAssetToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem cloneAssetToolStripMenuItem;

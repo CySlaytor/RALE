@@ -5,6 +5,7 @@ using RALogicEditor.Helpers;
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Services;
+using RALogicEditor.Definitions;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -32,6 +33,9 @@ namespace RALogicEditor
         private string _currentUserFilePath = ""; // Path to the companion User.txt
         private List<IAssetItem> _currentDisplayList = new(); // The filtered list currently shown in the grid
 
+        // Store global issues for the Code Reviewer
+        private List<ValidationIssue> _globalIssues = new();
+
         public MainForm()
         {
             InitializeComponent();
@@ -45,6 +49,14 @@ namespace RALogicEditor
             triggerEditor.AssetResetRequested += TriggerEditor_AssetResetRequested;
             // When user wants to inject logic from the Code Note viewer
             triggerEditor.AddFromCodeNoteRequested += TriggerEditor_AddFromCodeNoteRequested;
+
+            // -- New: Reviewer Events --
+            // Trigger Editor notifies when validation runs on the CURRENT asset. 
+            // We merge this result into the global list.
+            triggerEditor.ValidationCompleted += TriggerEditor_ValidationCompleted;
+
+            // Code Reviewer clicks: select the asset and the specific condition
+            codeReviewControl.IssueSelected += CodeReviewControl_IssueSelected;
 
             // -- Bridge: Trigger Editor -> Code Note Editor --
             // Highlighting memory addresses in the Note Viewer when clicked in the Trigger Grid
@@ -86,6 +98,9 @@ namespace RALogicEditor
             renumberLocalIDsToolStripMenuItem.Click += RenumberLocalIDs_Click;
             renumberContextToolStripMenuItem.Click += RenumberLocalIDs_Click;
 
+            // View Menu
+            viewReviewerToolStripMenuItem.Click += (s, e) => ToggleReviewer();
+
             // -- Button Wiring --
             btnAddAsset.Click += NewAsset_Click;
             btnDuplicateAsset.Click += DuplicateAsset_Click;
@@ -96,6 +111,126 @@ namespace RALogicEditor
             // Load recent files list on startup
             _recentFiles.Load();
             UpdateRecentMenu();
+
+            // Load and Apply Settings
+            AppSettings.Load();
+            ToggleReviewer(AppSettings.Current.ShowLogicReviewer);
+        }
+
+        private void ToggleReviewer(bool? forceState = null)
+        {
+            bool newState = forceState ?? !viewReviewerToolStripMenuItem.Checked;
+            viewReviewerToolStripMenuItem.Checked = newState;
+            splitMiddle.Panel2Collapsed = !newState;
+
+            // Save setting immediately
+            AppSettings.Current.ShowLogicReviewer = newState;
+            AppSettings.Save();
+        }
+
+        // Triggered when user clicks a row in the Code Review Control
+        private void CodeReviewControl_IssueSelected(object? sender, ValidationIssue issue)
+        {
+            if (issue.Asset == null) return;
+
+            // 1. Ensure the correct asset is loaded
+            if (_selectedAsset == null || _selectedAsset.ID != issue.Asset.ID)
+            {
+                SelectAssetInGrid(issue.Asset);
+            }
+
+            // 2. Highlight the specific condition in the editor
+            triggerEditor.SelectCondition(issue.Target);
+        }
+
+        private void SelectAssetInGrid(IAssetItem asset)
+        {
+            // 1. Ensure correct Asset Type (Achievement vs Leaderboard)
+            bool isLeaderboard = asset.IsLeaderboard;
+            int typeIndex = isLeaderboard ? 1 : 0; // 0=Ach, 1=LB
+            if (cmbAssetType.SelectedIndex != typeIndex)
+            {
+                cmbAssetType.SelectedIndex = typeIndex;
+                Application.DoEvents(); // Allow UI to process the change
+            }
+
+            // 2. Ensure correct Source View (JSON vs Local vs New) based on Asset State
+            // Items: "JSON", "Local", "New" -> Indices: 0, 1, 2
+            int sourceIndex = cmbSource.SelectedIndex;
+            switch (asset.State)
+            {
+                case AssetState.Local:
+                    sourceIndex = 2; // New
+                    break;
+                case AssetState.Modified:
+                    sourceIndex = 1; // Local
+                    break;
+                case AssetState.Synced:
+                    sourceIndex = 0; // JSON
+                    break;
+            }
+
+            if (cmbSource.SelectedIndex != sourceIndex)
+            {
+                cmbSource.SelectedIndex = sourceIndex;
+                Application.DoEvents();
+            }
+
+            // 3. Find row in grid
+            foreach (DataGridViewRow row in achievementGrid.Rows)
+            {
+                if (row.Tag is IAssetItem item && item.ID == asset.ID)
+                {
+                    achievementGrid.ClearSelection();
+                    row.Selected = true;
+                    achievementGrid.CurrentCell = row.Cells[0];
+                    // LoadSelectedAsset is handled by SelectionChanged event usually, 
+                    // but explicitly calling it ensures TriggerEditor updates immediately
+                    LoadSelectedAsset();
+                    break;
+                }
+            }
+        }
+
+        // Runs validation on ALL assets in the project to populate the review list initially
+        private void RunGlobalValidation()
+        {
+            _globalIssues.Clear();
+
+            var achs = _projectRepo.GetMergedList<RaAchievement>(false);
+            var lbs = _projectRepo.GetMergedList<RaLeaderboard>(true);
+
+            var allAssets = new List<IAssetItem>();
+            allAssets.AddRange(achs);
+            allAssets.AddRange(lbs);
+
+            foreach (var asset in allAssets)
+            {
+                // Parse logic string into object model
+                var groups = AchievementParser.ParseAchievementTrigger(asset.Logic, 'S', asset.IsLeaderboard);
+
+                // Run validation
+                var issues = LogicValidator.ValidateAsset(groups, asset);
+
+                _globalIssues.AddRange(issues);
+            }
+
+            codeReviewControl.SetIssues(_globalIssues);
+        }
+
+        // Called when the Trigger Editor updates (user edits logic) -> Update global list for THAT asset
+        private void TriggerEditor_ValidationCompleted(object? sender, List<ValidationIssue> issues)
+        {
+            if (_selectedAsset == null) return;
+
+            // Remove existing issues for this specific asset ID
+            _globalIssues.RemoveAll(i => i.Asset != null && i.Asset.ID == _selectedAsset.ID);
+
+            // Add updated issues
+            _globalIssues.AddRange(issues);
+
+            // Refresh List
+            codeReviewControl.SetIssues(_globalIssues);
         }
 
         private void achievementGrid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
@@ -271,6 +406,9 @@ namespace RALogicEditor
             codeNoteEditor.SetNotes(notes);
             // Pass notes to Trigger Editor for Tooltips and Alias Mode
             triggerEditor.SetNotes(notes);
+
+            // Run global validation scan
+            RunGlobalValidation();
         }
 
         private void saveToolStripMenuItem_Click(object sender, EventArgs e)
