@@ -22,30 +22,60 @@ namespace RALogicEditor.Services
                 var masterGroup = activeGroups[masterIndex];
                 var def = generatorRules[masterIndex];
 
-                while (activeGroups.Count <= masterIndex + def.Copies)
+                if (def.IsArray)
                 {
-                    activeGroups.Insert(masterIndex + 1, new AchievementConditionGroup { GroupName = "Temp" });
-                }
+                    // Array Mode: Append generated logic to the SAME group.
+                    // The 'Template' is the set of conditions that existed before generation.
+                    // The TriggerViewModel takes care of truncating the group to the TemplateConditionCount
+                    // before calling this service, so 'masterGroup.Conditions' currently contains ONLY the template.
 
-                for (int i = 1; i <= def.Copies; i++)
-                {
-                    int targetGroupIndex = masterIndex + i;
-                    var targetGroup = activeGroups[targetGroupIndex];
+                    // We need to capture the current template conditions to clone them
+                    var templateConditions = new List<AchievementCondition>();
+                    foreach (var c in masterGroup.Conditions) templateConditions.Add(c.Clone());
 
-                    string baseName = masterGroup.GroupName;
-                    if (baseName.Contains(" #")) baseName = Regex.Replace(baseName, @" #\d+", "");
-                    targetGroup.GroupName = $"{baseName} (+{i})";
-
-                    targetGroup.Conditions.Clear();
-                    foreach (var cond in masterGroup.Conditions)
+                    // Generate N copies
+                    for (int i = 1; i <= def.Copies; i++)
                     {
-                        var newCond = cond.Clone();
-                        foreach (var rule in def.Rules)
+                        foreach (var cond in templateConditions)
                         {
-                            ApplyOffsetToOperand(newCond.LeftOperand, rule.SourceAddress, rule.Stride, i);
-                            ApplyOffsetToOperand(newCond.RightOperand, rule.SourceAddress, rule.Stride, i);
+                            var newCond = cond.Clone();
+                            foreach (var rule in def.Rules)
+                            {
+                                ApplyOffsetToOperand(newCond.LeftOperand, rule.SourceAddress, rule.Stride, i);
+                                ApplyOffsetToOperand(newCond.RightOperand, rule.SourceAddress, rule.Stride, i);
+                            }
+                            masterGroup.Conditions.Add(newCond);
                         }
-                        targetGroup.Conditions.Add(newCond);
+                    }
+                }
+                else
+                {
+                    // Normal Mode: Generate NEW groups (Alts)
+                    while (activeGroups.Count <= masterIndex + def.Copies)
+                    {
+                        activeGroups.Insert(masterIndex + 1, new AchievementConditionGroup { GroupName = "Temp" });
+                    }
+
+                    for (int i = 1; i <= def.Copies; i++)
+                    {
+                        int targetGroupIndex = masterIndex + i;
+                        var targetGroup = activeGroups[targetGroupIndex];
+
+                        string baseName = masterGroup.GroupName;
+                        if (baseName.Contains(" #")) baseName = Regex.Replace(baseName, @" #\d+", "");
+                        targetGroup.GroupName = $"{baseName} (+{i})";
+
+                        targetGroup.Conditions.Clear();
+                        foreach (var cond in masterGroup.Conditions)
+                        {
+                            var newCond = cond.Clone();
+                            foreach (var rule in def.Rules)
+                            {
+                                ApplyOffsetToOperand(newCond.LeftOperand, rule.SourceAddress, rule.Stride, i);
+                                ApplyOffsetToOperand(newCond.RightOperand, rule.SourceAddress, rule.Stride, i);
+                            }
+                            targetGroup.Conditions.Add(newCond);
+                        }
                     }
                 }
             }

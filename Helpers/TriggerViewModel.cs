@@ -93,7 +93,36 @@ namespace RALogicEditor.Helpers
         {
             if (BoundAsset == null) return;
 
+            // 0. Cleanup Array Generation State
+            // If a group is set to Array Mode, we must revert it to its template state 
+            // (delete all generated copies) before re-running the generator.
+            // This ensures that edits to the template are propagated correctly.
+            foreach (var kvp in GeneratorRules)
+            {
+                int groupIndex = kvp.Key;
+                var def = kvp.Value;
+
+                if (def.IsArray && groupIndex < ActiveGroups.Count)
+                {
+                    var group = ActiveGroups[groupIndex];
+
+                    // If the group has more conditions than the template, strip the excess.
+                    // This effectively "Resets" the group to just the template logic.
+                    if (group.Conditions.Count > def.TemplateConditionCount)
+                    {
+                        int itemsToRemove = group.Conditions.Count - def.TemplateConditionCount;
+                        // Determine starting index for removal
+                        int startIndex = def.TemplateConditionCount;
+                        if (startIndex < group.Conditions.Count)
+                        {
+                            group.Conditions.RemoveRange(startIndex, itemsToRemove);
+                        }
+                    }
+                }
+            }
+
             // 1. Apply Generators before building string (Using injected service)
+            // This will re-generate the array copies based on the now-clean template.
             _generator.ApplyGeneratorRules(ActiveGroups, GeneratorRules);
 
             // 2. Build String

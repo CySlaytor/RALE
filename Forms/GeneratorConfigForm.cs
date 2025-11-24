@@ -13,6 +13,7 @@ namespace RALogicEditor.Forms
     {
         public int Copies { get; private set; }
         public int Stride { get; private set; }
+        public bool IsArray { get; private set; }
 
         // List of addresses the user selected to apply the generator rule to
         public List<string> SelectedAddresses { get; private set; } = new();
@@ -53,6 +54,7 @@ namespace RALogicEditor.Forms
             if (existingDef != null)
             {
                 txtCopies.Text = existingDef.Copies.ToString();
+                chkGenerateAsArray.Checked = existingDef.IsArray;
 
                 if (existingDef.Rules.Count > 0)
                 {
@@ -173,6 +175,7 @@ namespace RALogicEditor.Forms
 
             Copies = c;
             Stride = s;
+            IsArray = chkGenerateAsArray.Checked;
 
             this.DialogResult = DialogResult.OK;
             this.Close();

@@ -23,6 +23,7 @@
             this.lblInstructions = new System.Windows.Forms.Label();
             this.btnSelectAll = new System.Windows.Forms.Button();
             this.chkAutoStride = new System.Windows.Forms.CheckBox();
+            this.chkGenerateAsArray = new System.Windows.Forms.CheckBox();
             this.SuspendLayout();
             // 
             // lblCopies
@@ -62,7 +63,7 @@
             // btnOK
             // 
             this.btnOK.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnOK.Location = new System.Drawing.Point(196, 316);
+            this.btnOK.Location = new System.Drawing.Point(196, 335);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(75, 23);
             this.btnOK.TabIndex = 4;
@@ -73,7 +74,7 @@
             // btnCancel
             // 
             this.btnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnCancel.Location = new System.Drawing.Point(277, 316);
+            this.btnCancel.Location = new System.Drawing.Point(277, 335);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
             this.btnCancel.TabIndex = 5;
@@ -132,13 +133,24 @@
             this.chkAutoStride.Text = "Auto Detect";
             this.chkAutoStride.UseVisualStyleBackColor = true;
             // 
+            // chkGenerateAsArray
+            // 
+            this.chkGenerateAsArray.AutoSize = true;
+            this.chkGenerateAsArray.Location = new System.Drawing.Point(12, 311);
+            this.chkGenerateAsArray.Name = "chkGenerateAsArray";
+            this.chkGenerateAsArray.Size = new System.Drawing.Size(325, 19);
+            this.chkGenerateAsArray.TabIndex = 12;
+            this.chkGenerateAsArray.Text = "Generate as Array (Append to this Group, don't create Alts)";
+            this.chkGenerateAsArray.UseVisualStyleBackColor = true;
+            // 
             // GeneratorConfigForm
             // 
             this.AcceptButton = this.btnOK;
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.btnCancel;
-            this.ClientSize = new System.Drawing.Size(364, 351);
+            this.ClientSize = new System.Drawing.Size(364, 370);
+            this.Controls.Add(this.chkGenerateAsArray);
             this.Controls.Add(this.chkAutoStride);
             this.Controls.Add(this.btnSelectAll);
             this.Controls.Add(this.lblInstructions);
@@ -172,5 +184,6 @@
         private System.Windows.Forms.Label lblInstructions;
         private System.Windows.Forms.Button btnSelectAll;
         private System.Windows.Forms.CheckBox chkAutoStride;
+        private System.Windows.Forms.CheckBox chkGenerateAsArray;
     }
 }

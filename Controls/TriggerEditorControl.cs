@@ -385,8 +385,13 @@ namespace RALogicEditor.Controls
             HashSet<int> generatedIndices = new HashSet<int>();
             foreach (var kvp in generatorRules)
             {
-                for (int i = 1; i <= kvp.Value.Copies; i++)
-                    generatedIndices.Add(kvp.Key + i);
+                // If it's an Array type, it modifies the group in place, it doesn't create new Alts
+                // So we only skip indices for Normal mode
+                if (!kvp.Value.IsArray)
+                {
+                    for (int i = 1; i <= kvp.Value.Copies; i++)
+                        generatedIndices.Add(kvp.Key + i);
+                }
             }
 
             for (int i = 0; i < activeGroups.Count; i++)
@@ -403,6 +408,10 @@ namespace RALogicEditor.Controls
                     item.ForeColor = Color.Blue;
                     item.Font = new Font(groupsList.Font, FontStyle.Bold);
                     item.Text += " *";
+
+                    // Indicate Array mode in list
+                    if (generatorRules[i].IsArray)
+                        item.Text += " [Array]";
                 }
                 groupsList.Items.Add(item);
             }
@@ -444,9 +453,16 @@ namespace RALogicEditor.Controls
 
                 int index = _viewModel.ActiveGroups.IndexOf(group);
                 bool isGenerated = false;
+
+                // Logic to visually lock generated rows
+                // In Array mode, generated rows are appended to the same group.
+                // We should technically lock them, but identifying exactly which rows are generated vs template is tricky here visually without adding metadata to the Condition object.
+                // For "Normal" generator mode (Alts), the entire group is generated, so that's easy.
+                // For now, we only lock "Normal" generated groups. Array mode groups remain editable, but edits will be overwritten on next update unless baked.
+
                 foreach (var kvp in _viewModel.GeneratorRules)
                 {
-                    if (index > kvp.Key && index <= kvp.Key + kvp.Value.Copies)
+                    if (!kvp.Value.IsArray && index > kvp.Key && index <= kvp.Key + kvp.Value.Copies)
                     {
                         isGenerated = true;
                         break;
@@ -744,7 +760,8 @@ namespace RALogicEditor.Controls
             {
                 _viewModel.PushUndoState();
 
-                if (groupIndex < _viewModel.ActiveGroups.Count - 1)
+                // If NOT an Array generator, confirm overwrite of existing Alts
+                if (!form.IsArray && groupIndex < _viewModel.ActiveGroups.Count - 1)
                 {
                     var result = MessageBox.Show(
                         "There are existing Alt groups after this group. Do you want to delete them to make room for the generator?",
@@ -772,6 +789,15 @@ namespace RALogicEditor.Controls
 
                 var def = _viewModel.GeneratorRules[groupIndex];
                 def.Copies = form.Copies;
+                def.IsArray = form.IsArray;
+
+                // IMPORTANT: If we are in Array mode, we treat the CURRENT conditions in the group
+                // as the "Template". We save this count so future updates know how much to keep vs clear.
+                if (def.IsArray)
+                {
+                    def.TemplateConditionCount = group.Conditions.Count;
+                }
+
                 def.Rules.Clear();
 
                 foreach (string addr in form.SelectedAddresses)
