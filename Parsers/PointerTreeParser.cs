@@ -8,33 +8,49 @@ using System.Text.RegularExpressions;
 
 namespace RALogicEditor.Parsers
 {
+    // Parses raw Code Note text into a hierarchical tree of NoteNodes.
+    // Handles standard RetroAchievements pointer notation (indentation with dots/pluses).
     public static class PointerTreeParser
     {
+        // Main entry point: Converts a multiline string into a flat list of nodes
+        // preserving hierarchy via Parent/Children references.
         public static List<NoteNode> ParseNoteText(string noteText)
         {
             string[] lines = noteText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             bool isPointerNote = noteText.Contains("Pointer", StringComparison.OrdinalIgnoreCase);
 
             var flatList = new List<NoteNode>();
-            // Root node covers the full note text
+
+            // Create a root node that represents the "Base" of the note.
+            // IndentLevel -2 signifies it is the absolute root container.
             var root = new NoteNode { Offset = "(Default)", Description = "Full Note", IndentLevel = -2, Content = noteText };
 
-            // Try parse root size from first line if it's a struct definition
+            // Attempt to parse the size of the root data from the first line 
+            // (useful if the note defines a struct at the base address).
             if (lines.Length > 0) root.Size = ParseSizeFromDescription(lines[0]);
 
             flatList.Add(root);
 
             if (isPointerNote)
             {
+                // Stack used to track the current parent at each indentation level.
                 var stack = new Stack<NoteNode>();
+
+                // Logical Root acts as the parent for top-level pointer offsets (Indent 0).
                 var logicalRoot = new NoteNode { IndentLevel = -1 };
                 stack.Push(logicalRoot);
+
                 NoteNode? lastAddedNode = null;
 
-                // Regex to capture indentation, offset, and description
-                // Added capturing group for separator check if needed, but logic below handles it
-                var offsetRegex = new Regex(@"^([.\+]*)\s*([-+]?0x[0-9A-Fa-f]+)\s*(?:[|=:]\s*)?(.*)$");
-                var prefixStripRegex = new Regex(@"^([.\+]+)");
+                // Regex to parse specific pointer lines.
+                // Group 1: Indentation (e.g., "+", ".+", "..")
+                // Group 2: Sign (+ or -). Optional capture, but presence dictates if it's an offset.
+                // Group 3: Hex value (0x...).
+                // Group 4: Description/Remainder.
+                var offsetRegex = new Regex(@"^([.\+\s]*)([-+]?)(0x[0-9A-Fa-f]+)\s*(?:[|=:]\s*)?(.*)$");
+
+                // Helper regex to strip indentation characters from description lines.
+                var prefixStripRegex = new Regex(@"^([.\+\s]+)");
 
                 for (int i = 0; i < lines.Length; i++)
                 {
@@ -44,93 +60,133 @@ namespace RALogicEditor.Parsers
                     var match = offsetRegex.Match(line.Trim());
                     bool isNode = false;
 
-                    // Heuristic: A line is a Pointer Node if it matches the regex AND:
-                    // 1. It has explicit indentation (+ or .)
-                    // 2. OR it has a standard separator (| or :)
-                    // Lines like "0x2f = Intro" have no indent and '=' separator, so they are treated as content.
                     if (match.Success)
                     {
-                        bool hasIndent = match.Groups[1].Length > 0;
-                        bool hasStandardSeparator = line.Contains("|") || line.Contains(":");
+                        string indentStr = match.Groups[1].Value;
+                        string sign = match.Groups[2].Value;
 
-                        if (hasIndent || hasStandardSeparator)
+                        // Heuristic Logic to distinguish a "Pointer Offset" from a "Value Enumeration".
+                        // 
+                        // 1. If it has an explicit sign (+ or -), it is definitely an offset (e.g., +0x10).
+                        // 2. If it has indentation AND a separator (| or :), it is likely a struct offset (e.g., ..0x10 | Health).
+                        // 3. If it is indented but lacks a sign and separator (e.g., ....0x01 = Start), it is a value enum content.
+
+                        bool hasSign = !string.IsNullOrEmpty(sign);
+                        bool hasIndent = indentStr.Contains(".") || indentStr.Contains("+");
+                        bool hasSeparator = line.Contains("|") || line.Contains(":");
+
+                        if (hasSign)
                         {
                             isNode = true;
                         }
+                        else if (hasIndent && hasSeparator)
+                        {
+                            // Indented, no sign, but has separator -> Treat as Node.
+                            isNode = true;
+                        }
+                        // Else: It remains false (Value Enum).
                     }
 
                     if (isNode)
                     {
-                        int indent = match.Groups[1].Length;
-                        string offset = match.Groups[2].Value;
-                        string desc = match.Groups[3].Value;
+                        // Determine indentation depth based on dots or pluses.
+                        string indentStr = match.Groups[1].Value;
+                        int indent = 0;
+                        if (indentStr.Contains("+"))
+                        {
+                            // Standard format: count dots before the plus.
+                            indent = indentStr.Count(c => c == '.');
+                        }
+                        else
+                        {
+                            // Non-standard format: just dots.
+                            indent = indentStr.Count(c => c == '.');
+                        }
+
+                        string sign = match.Groups[2].Value;
+                        string hex = match.Groups[3].Value;
+                        string desc = match.Groups[4].Value;
+
+                        // Normalization: Ensure offset string always has a sign for logic generation consistency.
+                        string offset = sign + hex;
                         if (!offset.StartsWith("+") && !offset.StartsWith("-")) offset = "+" + offset;
 
                         long size = ParseSizeFromDescription(desc);
 
                         var node = new NoteNode { Offset = offset, Description = desc, RawLineIndex = i, IndentLevel = indent, Size = size };
 
-                        // Pop stack until we find the parent (indent level must be less than current)
+                        // Tree Construction:
+                        // Pop the stack until we find a node with a lower indent level (the parent).
                         while (stack.Count > 0 && stack.Peek().IndentLevel >= indent)
                             stack.Pop();
 
-                        // Safety check if stack somehow empty (shouldn't happen with logicalRoot)
+                        // Safety fallback
                         if (stack.Count == 0) stack.Push(logicalRoot);
 
                         var parent = stack.Peek();
                         node.Parent = parent;
                         parent.Children.Add(node);
+
+                        // Push this node as the potential parent for the next iteration.
                         stack.Push(node);
 
                         lastAddedNode = node;
                     }
                     else
                     {
-                        // Treat as content for the last added node (or root if none)
+                        // This line is not a node (e.g., a value definition like "0x01 = True").
+                        // Append it to the Content of the most recently added node.
                         if (lastAddedNode != null)
                         {
                             if (lastAddedNode.Content.Length > 0) lastAddedNode.Content += "\r\n";
-                            // Strip indentation markers if they exist (unlikely for content but safe to do)
+                            // Clean up indentation markers so the content box looks clean.
                             string cleanContentLine = prefixStripRegex.Replace(line.Trim(), "");
                             lastAddedNode.Content += cleanContentLine;
                         }
                     }
                 }
+                // Recursively flatten the tree for the dropdown list.
                 CollectAllNodes(logicalRoot, flatList);
             }
             return flatList;
         }
 
+        // Parses data size from tags in the description (e.g., [16-bit] or [32 bytes]).
         private static long ParseSizeFromDescription(string desc)
         {
             if (string.IsNullOrEmpty(desc)) return 1;
 
-            // 1. Explicit [X bytes]
+            // 1. Check for explicit byte count: [X bytes]
             var bytesMatch = Regex.Match(desc, @"\[(\d+)\s*bytes?\]", RegexOptions.IgnoreCase);
             if (bytesMatch.Success && long.TryParse(bytesMatch.Groups[1].Value, out long bSize))
                 return bSize;
 
-            // 2. Standard types [32-bit] etc
+            // 2. Check for standard type tags
             if (desc.Contains("[32-bit") || desc.Contains("[Float")) return 4;
             if (desc.Contains("[24-bit")) return 3;
             if (desc.Contains("[16-bit")) return 2;
             if (desc.Contains("[8-bit")) return 1;
 
-            return 1;
+            return 1; // Default to 8-bit (1 byte)
         }
 
+        // Helper to traverse tree and populate the list.
         private static void CollectAllNodes(NoteNode node, List<NoteNode> flatList)
         {
             if (node.IndentLevel != -1) flatList.Add(node);
             foreach (var child in node.Children) CollectAllNodes(child, flatList);
         }
 
+        // Constructs the RA Logic String (e.g., I:0x1234_0x10) for a specific node in the tree.
         public static (string Logic, string Type, string Size) GeneratePointerLogic(CodeNote baseNote, NoteNode selectedNode)
         {
             if (baseNote == null) return ("", "", "");
+
+            // Base Address cleanup
             string baseAddrStr = baseNote.Address.StartsWith("0x") ? baseNote.Address.Substring(2) : baseNote.Address;
             string type = "Mem"; string size = "32-bit";
 
+            // Parse the root note header to determine the pointer type (32-bit, 24-bit, BE, etc.)
             string noteHeader = baseNote.Note.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
             char ptrPrefix = ' '; bool defaultMask = false;
 
@@ -139,6 +195,7 @@ namespace RALogicEditor.Parsers
             else if (noteHeader.Contains("24-bit", StringComparison.OrdinalIgnoreCase)) ptrPrefix = 'W';
             else if (noteHeader.Contains("16-bit", StringComparison.OrdinalIgnoreCase)) ptrPrefix = ' ';
 
+            // Check for explicit mask in note (e.g. &0xFFFFFF)
             long explicitMaskVal = -1;
             var maskMatch = Regex.Match(noteHeader, @"&\s*(?:0x)?([0-9A-Fa-f]+)");
             if (maskMatch.Success) long.TryParse(maskMatch.Groups[1].Value, NumberStyles.HexNumber, null, out explicitMaskVal);
@@ -146,16 +203,19 @@ namespace RALogicEditor.Parsers
             string prefixStr = ptrPrefix == ' ' ? "" : ptrPrefix.ToString();
             string maskStr = "";
             if (explicitMaskVal != -1) maskStr = "&" + explicitMaskVal.ToString();
-            else if (defaultMask) maskStr = "&536870911";
+            else if (defaultMask) maskStr = "&536870911"; // Default 29-bit mask for BE pointers (0x1FFFFFFF)
 
             var sb = new StringBuilder();
             string descriptionForType = "";
 
+            // Build the chain if selecting a child node
             if (selectedNode != null && selectedNode.IndentLevel != -2)
             {
                 var chain = new List<string>();
                 var current = selectedNode;
                 descriptionForType = selectedNode.Description;
+
+                // Walk up the tree to collect offsets
                 while (current != null && current.IndentLevel != -1)
                 {
                     string hex = current.Offset.TrimStart('+', '-').Replace("0x", "");
@@ -163,12 +223,24 @@ namespace RALogicEditor.Parsers
                     chain.Insert(0, hex);
                     current = current.Parent;
                 }
+
+                // Format: I:Base_I:Offset1_Offset2
                 sb.Append($"I:0x{prefixStr}{baseAddrStr}{maskStr}");
+
+                // Add intermediate offsets as "Add Address" (I:)
                 for (int i = 0; i < chain.Count - 1; i++) sb.Append($"_I:0x{prefixStr}{chain[i]}{maskStr}");
+
+                // Add final offset (The read target)
                 if (chain.Count > 0) sb.Append($"_0x{chain[chain.Count - 1]}");
             }
-            else { sb.Append($"0x{baseAddrStr}"); descriptionForType = noteHeader; }
+            else
+            {
+                // Root selection
+                sb.Append($"0x{baseAddrStr}");
+                descriptionForType = noteHeader;
+            }
 
+            // Attempt to detect type/size from the description (e.g. [Float], [16-bit])
             var typeMatch = Regex.Match(descriptionForType, @"\[(.*?)]");
             if (typeMatch.Success)
             {
@@ -176,11 +248,12 @@ namespace RALogicEditor.Parsers
                 if (tag.Equals("Float", StringComparison.OrdinalIgnoreCase) || tag.Equals("Flaot", StringComparison.OrdinalIgnoreCase)) { type = "Mem"; size = "Float"; }
                 else { size = tag; type = "Mem"; }
             }
-            else size = "8-bit";
+            else size = "8-bit"; // Default fallback
 
             return (sb.ToString(), type, size);
         }
 
+        // Reverse-engineers the chain of offsets from a specific node up to the root.
         public static List<long> GetOffsetsFromNode(NoteNode node)
         {
             var nodeChain = new List<long>();
@@ -188,8 +261,11 @@ namespace RALogicEditor.Parsers
             while (current != null && current.IndentLevel != -1)
             {
                 string raw = current.Offset.TrimStart('+');
-                if (long.TryParse(raw.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val)) nodeChain.Insert(0, val);
-                else return new List<long>();
+                if (long.TryParse(raw.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val))
+                    nodeChain.Insert(0, val);
+                else
+                    return new List<long>(); // Invalid chain
+
                 current = current.Parent;
             }
             return nodeChain;

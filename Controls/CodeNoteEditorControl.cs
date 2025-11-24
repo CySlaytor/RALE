@@ -24,6 +24,9 @@ namespace RALogicEditor.Controls
         private bool _isInternalUpdate = false;
         private string _fullNoteCache = "";
 
+        // Store full parsed tree for traversal even when UI is filtered
+        private List<NoteNode> _currentParsedNodes = new();
+
         // Cache for range-based notes (e.g. Structs covering [176 bytes])
         // Tuple: Start Address, End Address, Note Object
         private List<(long Start, long End, CodeNote Note, NoteNode Node)> _rangeCache = new();
@@ -190,10 +193,10 @@ namespace RALogicEditor.Controls
 
         private void RefreshVariableTree()
         {
-            // Delegate heavy parsing to PointerTreeParser
-            var flatList = PointerTreeParser.ParseNoteText(_fullNoteCache);
+            // Delegate heavy parsing to PointerTreeParser and store in class-level list
+            _currentParsedNodes = PointerTreeParser.ParseNoteText(_fullNoteCache);
 
-            IEnumerable<NoteNode> query = flatList;
+            IEnumerable<NoteNode> query = _currentParsedNodes;
 
             // Apply Search Filter to Variable Tree as well
             string filter = txtSearch.Text.Trim();
@@ -254,6 +257,9 @@ namespace RALogicEditor.Controls
 
         private void cmbVariables_SelectedIndexChanged(object sender, EventArgs e)
         {
+            // Critical: If internal update is active, skip logic to prevent overwriting virtual text
+            if (_isInternalUpdate) return;
+
             if (cmbVariables.SelectedItem is NoteNode node)
             {
                 bool wasUpdating = _isInternalUpdate;
@@ -419,92 +425,195 @@ namespace RALogicEditor.Controls
         // Bridge: Traverses the tree to find specific pointer offsets
         public void HighlightVariable(List<long> offsets)
         {
-            if (cmbVariables.Items.Count <= 1) return;
             if (offsets == null || offsets.Count == 0) return;
             if (cmbNotes.SelectedItem is not CodeNote baseNote) return;
 
-            var nodes = cmbVariables.DataSource as List<NoteNode>;
-            if (nodes == null) return;
+            // Use _currentParsedNodes for traversal (contains full tree) instead of filtered DataSource
+            var nodes = _currentParsedNodes;
+            if (nodes == null || nodes.Count == 0) return;
 
-            // 1. Try Exact Match
-            foreach (var node in nodes)
+            NoteNode? bestMatchNode = null;
+            int matchedDepth = 0;
+            long finalRemainder = 0;
+
+            long ParseOffsetString(string offsetStr)
             {
-                if (node.IndentLevel == -2) continue;
-                var nodeChain = PointerTreeParser.GetOffsetsFromNode(node);
-                if (nodeChain.Count == offsets.Count)
+                string clean = offsetStr.Trim().Replace("+", "").Replace("-", "").Replace("0x", "");
+                if (long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val))
                 {
-                    bool match = true;
-                    for (int i = 0; i < nodeChain.Count; i++) { if (nodeChain[i] != offsets[i]) { match = false; break; } }
-                    if (match)
+                    if (offsetStr.Contains("-")) return -val;
+                    return val;
+                }
+                return long.MinValue;
+            }
+
+            // 1. Find Root
+            var rootNodes = nodes.Where(n => n.IndentLevel == 0 || (n.Parent != null && n.Parent.IndentLevel == -1) || (n.Parent == null && n.IndentLevel != -2)).ToList();
+
+            // Try Exact Root
+            var current = rootNodes.FirstOrDefault(n => ParseOffsetString(n.Offset) == offsets[0]);
+
+            // Try Range Root
+            if (current == null)
+            {
+                foreach (var n in rootNodes)
+                {
+                    long start = ParseOffsetString(n.Offset);
+                    if (offsets[0] >= start && offsets[0] < start + n.Size)
                     {
-                        ClearVirtualState();
-                        cmbVariables.SelectedItem = node;
-                        return;
+                        current = n;
+                        finalRemainder = offsets[0] - start;
+                        break;
                     }
                 }
             }
 
-            // 2. Try Range Match (Pointer Chain Range)
-            foreach (var node in nodes)
+            if (current != null)
             {
-                if (node.IndentLevel == -2) continue;
+                bestMatchNode = current;
+                matchedDepth = 1;
 
-                var nodeChain = PointerTreeParser.GetOffsetsFromNode(node);
-
-                if (nodeChain.Count == offsets.Count)
+                // Traverse
+                while (matchedDepth < offsets.Count)
                 {
-                    bool pathMatch = true;
-                    for (int i = 0; i < offsets.Count - 1; i++)
-                    {
-                        if (nodeChain[i] != offsets[i]) { pathMatch = false; break; }
-                    }
+                    // If we already have a remainder from a previous step (Range Match), 
+                    // we cannot traverse deeper because the structure doesn't align with the pointer chain.
+                    if (finalRemainder != 0) break;
 
-                    if (pathMatch)
-                    {
-                        long nodeStart = nodeChain.Last();
-                        long target = offsets.Last();
+                    long nextOffset = offsets[matchedDepth];
 
-                        if (target >= nodeStart && target < nodeStart + node.Size)
+                    // Exact Child
+                    var nextNode = current.Children.FirstOrDefault(n => ParseOffsetString(n.Offset) == nextOffset);
+
+                    // Range Child
+                    if (nextNode == null)
+                    {
+                        foreach (var n in current.Children)
                         {
-                            long delta = target - nodeStart;
-
-                            var (baseLogic, type, size) = PointerTreeParser.GeneratePointerLogic(baseNote, node);
-
-                            string finalLogic = baseLogic;
-                            int lastUnderscore = baseLogic.LastIndexOf('_');
-                            if (lastUnderscore != -1)
+                            long start = ParseOffsetString(n.Offset);
+                            if (nextOffset >= start && nextOffset < start + n.Size)
                             {
-                                finalLogic = baseLogic.Substring(0, lastUnderscore + 1) + $"0x{target:x}";
+                                nextNode = n;
+                                finalRemainder = nextOffset - start;
+                                break;
                             }
-                            else
-                            {
-                                int firstI = baseLogic.IndexOf("I:");
-                                if (firstI != -1)
-                                {
-                                    finalLogic = baseLogic.Substring(0, baseLogic.LastIndexOf('_') + 1) + $"0x{target:x}";
-                                }
-                            }
-
-                            string desc = node.Description;
-                            if (delta > 0) desc += $" +0x{delta:X}";
-
-                            txtNoteBody.Text = desc;
-                            txtNoteBody.ReadOnly = true;
-
-                            SetVirtualState(true,
-                                $"[Indirect from {node.Parent?.Offset ?? "Base"}] {desc}",
-                                finalLogic,
-                                type,
-                                size
-                            );
-
-                            cmbVariables.SelectedItem = node;
-                            cmbVariables.Enabled = false;
-                            cmbVariables.BackColor = SystemColors.Control;
-                            return;
                         }
                     }
+
+                    if (nextNode != null)
+                    {
+                        current = nextNode;
+                        bestMatchNode = current;
+                        matchedDepth++;
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
+            }
+
+            // Helper to safely select a node in the dropdown only if it is currently visible
+            void SafeSelectNode(NoteNode node)
+            {
+                bool wasUpdating = _isInternalUpdate;
+                _isInternalUpdate = true;
+                try
+                {
+                    // Only try to select if the item exists in the current filtered view
+                    if (cmbVariables.Items.Contains(node))
+                    {
+                        cmbVariables.SelectedItem = node;
+                    }
+                    else
+                    {
+                        // If hidden, clear selection but proceed to set text manually
+                        cmbVariables.SelectedIndex = -1;
+                    }
+                }
+                finally
+                {
+                    _isInternalUpdate = wasUpdating;
+                }
+            }
+
+            // Scenario A: Exact Full Match (Depth matches AND no remainder)
+            if (bestMatchNode != null && matchedDepth == offsets.Count && finalRemainder == 0)
+            {
+                SafeSelectNode(bestMatchNode);
+
+                // MANUALLY UPDATE TEXT BOX to ensure correct display even if selection failed (filtered)
+                // Use Content if available (leaf logic), otherwise Description
+                if (!string.IsNullOrWhiteSpace(bestMatchNode.Content)) txtNoteBody.Text = bestMatchNode.Content;
+                else if (!string.IsNullOrWhiteSpace(bestMatchNode.Description)) txtNoteBody.Text = bestMatchNode.Description;
+                else txtNoteBody.Text = bestMatchNode.ToString();
+
+                ClearVirtualState();
+                return;
+            }
+
+            // Scenario B: Partial / Range Match
+            if (bestMatchNode != null)
+            {
+                SafeSelectNode(bestMatchNode);
+
+                var (baseLogic, type, size) = PointerTreeParser.GeneratePointerLogic(baseNote, bestMatchNode);
+
+                // Rebuild Logic String for the chain including offsets
+                string baseAddrStr = baseNote.Address.StartsWith("0x") ? baseNote.Address.Substring(2) : baseNote.Address;
+                StringBuilder sbLogic = new StringBuilder();
+                sbLogic.Append($"I:0x{baseAddrStr}");
+                for (int i = 0; i < offsets.Count; i++)
+                {
+                    sbLogic.Append("_");
+                    if (i == offsets.Count - 1) sbLogic.Append($"0x{offsets[i]:x}");
+                    else sbLogic.Append($"I:0x{offsets[i]:x}");
+                }
+
+                // Construct Description using Node Description + Remainders
+                string desc = bestMatchNode.Description.Trim();
+
+                // Append remaining full offsets
+                for (int i = matchedDepth; i < offsets.Count; i++)
+                {
+                    desc += $" +0x{offsets[i]:X}";
+                }
+
+                // Append final remainder from range match
+                if (finalRemainder != 0)
+                {
+                    desc += $" +0x{finalRemainder:X}";
+                }
+
+                txtNoteBody.Text = desc;
+                txtNoteBody.ReadOnly = true;
+
+                SetVirtualState(true, desc, sbLogic.ToString(), type, size);
+                return;
+            }
+
+            // Scenario C: No Match
+            if (bestMatchNode == null)
+            {
+                string baseAddrStr = baseNote.Address.StartsWith("0x") ? baseNote.Address.Substring(2) : baseNote.Address;
+                StringBuilder sb = new StringBuilder();
+                sb.Append($"I:0x{baseAddrStr}");
+
+                for (int i = 0; i < offsets.Count; i++)
+                {
+                    sb.Append("_");
+                    if (i == offsets.Count - 1) sb.Append($"0x{offsets[i]:x}");
+                    else sb.Append($"I:0x{offsets[i]:x}");
+                }
+
+                // Cleaner fallback description
+                string desc = $"{baseNote.Address} Chain";
+                foreach (var o in offsets) desc += $" +0x{o:X}";
+
+                txtNoteBody.Text = desc;
+                txtNoteBody.ReadOnly = true;
+                SetVirtualState(true, desc, sb.ToString(), "Mem", "32-bit");
+                return;
             }
         }
 
