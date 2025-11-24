@@ -26,7 +26,7 @@ namespace RALogicEditor.Models
         public bool Success { get; set; }
         public int GameId { get; set; }
         public string Title { get; set; } = "";
-        public string RichPresencePatch { get; set; } = "";
+        // RichPresencePatch removed as requested
         public List<RaSet> Sets { get; set; } = new List<RaSet>();
     }
 

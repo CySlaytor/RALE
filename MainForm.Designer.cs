@@ -405,7 +405,6 @@
             // triggerEditor
             // 
             triggerEditor.Dock = DockStyle.Fill;
-            triggerEditor.GroupSeparator = 'S';
             triggerEditor.Location = new Point(0, 0);
             triggerEditor.Name = "triggerEditor";
             triggerEditor.Size = new Size(703, 400);

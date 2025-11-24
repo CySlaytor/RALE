@@ -1,11 +1,12 @@
 #nullable enable
 using RALogicEditor.Controls;
+using RALogicEditor.Definitions;
 using RALogicEditor.Forms;
 using RALogicEditor.Helpers;
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Services;
-using RALogicEditor.Definitions;
+using RALogicEditor.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -206,11 +207,15 @@ namespace RALogicEditor
 
             foreach (var asset in allAssets)
             {
-                // Parse logic string into object model
-                var groups = AchievementParser.ParseAchievementTrigger(asset.Logic, 'S', asset.IsLeaderboard);
+                // Parse logic string into object model using the new Strategy pattern
+                IAssetStrategy strategy = asset.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
+                var segments = strategy.ParseLogic(asset.Logic);
+
+                // Flatten segments (Core/Alt or Start/Cancel/etc) into a single list for the validator
+                var allGroups = segments.Values.SelectMany(g => g).ToList();
 
                 // Run validation
-                var issues = LogicValidator.ValidateAsset(groups, asset);
+                var issues = LogicValidator.ValidateAsset(allGroups, asset);
 
                 _globalIssues.AddRange(issues);
             }
@@ -452,6 +457,8 @@ namespace RALogicEditor
                 var mergedAchievements = _projectRepo.GetMergedList<RaAchievement>(false);
                 var mergedLeaderboards = _projectRepo.GetMergedList<RaLeaderboard>(true);
 
+                var lbStrategy = new LeaderboardStrategy();
+
                 foreach (var a in mergedAchievements)
                 {
                     if (a.State == AssetState.Synced) continue; // Don't save synced items to User.txt
@@ -461,13 +468,32 @@ namespace RALogicEditor
                 foreach (var l in mergedLeaderboards)
                 {
                     if (l.State == AssetState.Synced) continue;
-                    // Reformat Logic for LB string
-                    var parts = l.Logic.Split(new[] { "::" }, StringSplitOptions.None);
-                    string pSta = parts.Length > 0 ? parts[0].Replace("STA:", "") : "";
-                    string pCan = parts.Length > 1 ? parts[1].Replace("CAN:", "") : "";
-                    string pSub = parts.Length > 2 ? parts[2].Replace("SUB:", "") : "";
-                    string pVal = parts.Length > 3 ? parts[3].Replace("VAL:", "") : "";
-                    sb.AppendLine($"L{l.ID}:\"{pSta}\":\"{pCan}\":\"{pSub}\":\"{pVal}\":{l.Format}:{l.Title}:{l.Description}:{l.LowerIsBetter}");
+
+                    // Use strategy to ensure we get clean segments for the file format
+                    var segments = lbStrategy.ParseLogic(l.Logic);
+
+                    // Helper to build a specific segment string for the file line (e.g. "STA:...")
+                    // File format expects: L{ID}:"START_LOGIC":"CANCEL_LOGIC":"SUBMIT_LOGIC":"VALUE_LOGIC":...
+                    // We construct each part manually to ensure separators match file spec (LogicFormatter)
+
+                    string GetSeg(string key)
+                    {
+                        if (!segments.ContainsKey(key)) return "";
+                        var groups = segments[key];
+                        StringBuilder segSb = new StringBuilder();
+                        for (int i = 0; i < groups.Count; i++)
+                        {
+                            if (i > 0) segSb.Append('S');
+                            for (int c = 0; c < groups[i].Conditions.Count; c++)
+                            {
+                                if (c > 0) segSb.Append('_');
+                                segSb.Append(LogicFormatter.ConditionToString(groups[i].Conditions[c]));
+                            }
+                        }
+                        return segSb.ToString();
+                    }
+
+                    sb.AppendLine($"L{l.ID}:\"{GetSeg("Start")}\":\"{GetSeg("Cancel")}\":\"{GetSeg("Submit")}\":\"{GetSeg("Value")}\":{l.Format}:{l.Title}:{l.Description}:{l.LowerIsBetter}");
                 }
 
                 // Save notes - Filter out notes that match the server data
@@ -668,7 +694,9 @@ namespace RALogicEditor
             if (_isLoading || _selectedAsset == null) return;
             _projectRepo.EnsureLocalDataExists();
             EnsureAssetIsLocal();
-            _selectedAsset.Logic = triggerEditor.TriggerText;
+
+            // The BoundAsset Logic property is updated by the ViewModel inside TriggerEditorControl
+            // We just need to refresh the state tracking
             UpdateAssetState(_selectedAsset);
         }
 

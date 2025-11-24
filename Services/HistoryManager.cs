@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿#nullable enable
+using System.Collections.Generic;
+using System.Linq;
 
 namespace RALogicEditor.Services
 {
@@ -14,11 +16,12 @@ namespace RALogicEditor.Services
             if (IsUndoingRedoing) return;
 
             // Prevent duplicate states if the new state matches the top of stack
-            // Note: This equality check might be shallow for complex objects. 
-            // For the complex state we are about to introduce, we might rely on the caller to ensure they aren't pushing redundant states
-            // or implement deep comparison. For now, we keep the standard check.
-            if (_undoStack.Count > 0 && EqualityComparer<T>.Default.Equals(_undoStack.Peek(), state))
-                return;
+            if (_undoStack.Count > 0)
+            {
+                T top = _undoStack.Peek();
+                if (top != null && top.Equals(state))
+                    return;
+            }
 
             _undoStack.Push(state);
             _redoStack.Clear();
@@ -60,7 +63,6 @@ namespace RALogicEditor.Services
     public class TriggerEditorState
     {
         public string LogicString { get; set; } = "";
-        // We must clone the dictionary to avoid reference issues in the stack
         public Dictionary<int, RALogicEditor.Models.GeneratorDefinition> GeneratorRules { get; set; } = new();
 
         public TriggerEditorState Clone()
@@ -76,6 +78,38 @@ namespace RALogicEditor.Services
                 clone.GeneratorRules[kvp.Key] = ruleClone;
             }
             return clone;
+        }
+
+        // Fixed nullability for override: object? instead of object
+        public override bool Equals(object? obj)
+        {
+            if (obj is not TriggerEditorState other) return false;
+            if (LogicString != other.LogicString) return false;
+
+            // Deep compare generators logic
+            if (GeneratorRules.Count != other.GeneratorRules.Count) return false;
+
+            foreach (var kvp in GeneratorRules)
+            {
+                if (!other.GeneratorRules.ContainsKey(kvp.Key)) return false;
+                var r1 = kvp.Value;
+                var r2 = other.GeneratorRules[kvp.Key];
+                if (r1.Copies != r2.Copies) return false;
+                if (r1.Rules.Count != r2.Rules.Count) return false;
+                // Simple rule check assuming order might matter or strict equality
+                for (int i = 0; i < r1.Rules.Count; i++)
+                {
+                    if (r1.Rules[i].SourceAddress != r2.Rules[i].SourceAddress) return false;
+                    if (r1.Rules[i].Stride != r2.Rules[i].Stride) return false;
+                }
+            }
+
+            return true;
+        }
+
+        public override int GetHashCode()
+        {
+            return LogicString.GetHashCode() ^ GeneratorRules.Count.GetHashCode();
         }
     }
 }

@@ -32,6 +32,8 @@ namespace RALogicEditor.Controls
             pointerCalculatorToolStripMenuItem = new ToolStripMenuItem();
             createGeneratorToolStripMenuItem = new ToolStripMenuItem();
             commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparator5 = new ToolStripSeparator();
+            explainLogicToolStripMenuItem = new ToolStripMenuItem();
             splitGroups = new SplitContainer();
             groupsList = new ListView();
             colGroups = new ColumnHeader();
@@ -56,7 +58,6 @@ namespace RALogicEditor.Controls
             copyRowToolStripMenuItem = new ToolStripMenuItem();
             pasteToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator3 = new ToolStripSeparator();
-            toolStripSeparator5 = new ToolStripSeparator();
             saveAsSnippetToolStripMenuItem = new ToolStripMenuItem();
             insertSnippetToolStripMenuItem = new ToolStripMenuItem();
             statusStripEditor = new StatusStrip();
@@ -234,9 +235,9 @@ namespace RALogicEditor.Controls
             // 
             // toolsContextMenu
             // 
-            toolsContextMenu.Items.AddRange(new ToolStripItem[] { pointerCalculatorToolStripMenuItem, createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem });
+            toolsContextMenu.Items.AddRange(new ToolStripItem[] { pointerCalculatorToolStripMenuItem, createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, toolStripSeparator5, explainLogicToolStripMenuItem });
             toolsContextMenu.Name = "toolsContextMenu";
-            toolsContextMenu.Size = new Size(209, 92);
+            toolsContextMenu.Size = new Size(209, 120);
             // 
             // pointerCalculatorToolStripMenuItem
             // 
@@ -258,6 +259,18 @@ namespace RALogicEditor.Controls
             commitGeneratorToolStripMenuItem.Size = new Size(208, 22);
             commitGeneratorToolStripMenuItem.Text = "Commit Generator (Bake)";
             commitGeneratorToolStripMenuItem.Click += commitGeneratorToolStripMenuItem_Click;
+            // 
+            // toolStripSeparator5
+            // 
+            toolStripSeparator5.Name = "toolStripSeparator5";
+            toolStripSeparator5.Size = new Size(205, 6);
+            // 
+            // explainLogicToolStripMenuItem
+            // 
+            explainLogicToolStripMenuItem.Name = "explainLogicToolStripMenuItem";
+            explainLogicToolStripMenuItem.Size = new Size(208, 22);
+            explainLogicToolStripMenuItem.Text = "Explain Logic (Preview)";
+            explainLogicToolStripMenuItem.Click += explainLogicToolStripMenuItem_Click;
             // 
             // splitGroups
             // 
@@ -375,16 +388,18 @@ namespace RALogicEditor.Controls
             conditionGrid.Dock = DockStyle.Fill;
             conditionGrid.Location = new Point(0, 0);
             conditionGrid.Name = "conditionGrid";
-            conditionGrid.RowHeadersVisible = false;
+            conditionGrid.RowHeadersVisible = true;
+            conditionGrid.RowHeadersWidth = 25;
+            conditionGrid.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
             conditionGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             conditionGrid.Size = new Size(634, 293);
             conditionGrid.TabIndex = 0;
             // 
             // gridContextMenu
             // 
-            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, toolStripSeparator5, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
+            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
             gridContextMenu.Name = "gridContextMenu";
-            gridContextMenu.Size = new Size(209, 270);
+            gridContextMenu.Size = new Size(209, 248);
             // 
             // moveUpToolStripMenuItem
             // 
@@ -463,11 +478,6 @@ namespace RALogicEditor.Controls
             // 
             toolStripSeparator3.Name = "toolStripSeparator3";
             toolStripSeparator3.Size = new Size(205, 6);
-            // 
-            // toolStripSeparator5
-            // 
-            toolStripSeparator5.Name = "toolStripSeparator5";
-            toolStripSeparator5.Size = new Size(205, 6);
             // 
             // saveAsSnippetToolStripMenuItem
             // 
@@ -602,6 +612,7 @@ namespace RALogicEditor.Controls
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator5 = null!;
         private System.Windows.Forms.ToolStripMenuItem saveAsSnippetToolStripMenuItem = null!;
         private System.Windows.Forms.ToolStripMenuItem insertSnippetToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem explainLogicToolStripMenuItem = null!;
         private System.Windows.Forms.Button btnCopyDef = null!;
     }
 }
