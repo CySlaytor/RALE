@@ -130,7 +130,7 @@ namespace RALogicEditor.Helpers
 
             long targetVal = ParseHex(address);
 
-            // 1. Strict Pointer Chain Logic
+            // 1. Strict Pointer Chain Logic (Offsets)
             // We verify that the sequence of 'Add Address' offsets in the Grid matches the hierarchy in the Notes.
             if (group != null && rowIndex > 0)
             {
@@ -162,12 +162,8 @@ namespace RALogicEditor.Helpers
                     if (notesLookup.TryGetValue(normalizedBase, out var nodes))
                     {
                         // Find valid top-level nodes (children of logical root)
-                        // PointerTreeParser nodes have IndentLevel starting at 0 for top level usually,
-                        // or we check for Parent.IndentLevel == -1.
-                        // 'nodes' is a flat list containing all nodes.
                         var currentLevelNodes = nodes.Where(n => n.IndentLevel != -2 && (n.Parent == null || n.Parent.IndentLevel == -1)).ToList();
                         bool chainValid = true;
-                        NoteNode? contextNode = null;
 
                         // Traverse the intermediate offsets (if any)
                         while (chainStack.Count > 0)
@@ -192,7 +188,6 @@ namespace RALogicEditor.Helpers
 
                             if (match != null)
                             {
-                                contextNode = match;
                                 currentLevelNodes = match.Children; // Go deeper
                             }
                             else
@@ -215,6 +210,7 @@ namespace RALogicEditor.Helpers
                                     if (targetVal >= nodeOff && targetVal < nodeOff + node.Size)
                                     {
                                         string desc = node.Description;
+                                        // For offsets (children in a chain), we always strip ALL tags for cleaner look
                                         desc = Regex.Replace(desc, @"\[.*?\]", "").Trim();
 
                                         long delta = targetVal - nodeOff;
@@ -234,12 +230,6 @@ namespace RALogicEditor.Helpers
             }
 
             // 2. Direct Lookup (Base Address or simple memory)
-            // Only used if we are NOT deep in a pointer chain context, or if the chain logic above returned nothing.
-            // However, if we are in a chain but it broke, we generally fall back to displaying the raw address 
-            // (handled by returning empty string here), OR we check if the address itself happens to be a global static address.
-            // To prevent incorrect matches, we should only do global lookup if this row is NOT part of an Add Address chain context that failed.
-            // But checking grid context again is expensive. Standard behavior: try global lookup if local failed.
-
             if (notesLookup.TryGetValue(address, out var directNodes))
             {
                 var root = directNodes.FirstOrDefault();
@@ -255,7 +245,17 @@ namespace RALogicEditor.Helpers
                             desc = main.Content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
                         }
                     }
-                    return Regex.Replace(desc, @"\[.*?\]", "").Trim();
+
+                    // Base Addresses: Simplify pointer tags to [Pointer]
+                    desc = Regex.Replace(desc, @"\[.*?\]", m =>
+                    {
+                        if (m.Value.IndexOf("Pointer", StringComparison.OrdinalIgnoreCase) >= 0) return "[Pointer]";
+                        return ""; // Strip other tags like [8-bit]
+                    }).Trim();
+
+                    // Clean up potential double spaces from removals
+                    desc = Regex.Replace(desc, @"\s{2,}", " ");
+                    return desc;
                 }
             }
 
@@ -272,7 +272,13 @@ namespace RALogicEditor.Helpers
                         desc = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
                     }
 
-                    desc = Regex.Replace(desc, @"\[.*?\]", "").Trim();
+                    // Ranged Base Addresses: Simplify pointer tags to [Pointer]
+                    desc = Regex.Replace(desc, @"\[.*?\]", m =>
+                    {
+                        if (m.Value.IndexOf("Pointer", StringComparison.OrdinalIgnoreCase) >= 0) return "[Pointer]";
+                        return "";
+                    }).Trim();
+                    desc = Regex.Replace(desc, @"\s{2,}", " ");
 
                     long delta = targetVal - match.Start;
                     if (delta > 0)

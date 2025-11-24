@@ -66,7 +66,8 @@ namespace RALogicEditor.Services
                     long offset = (long)stride * multiplier;
                     long newVal = baseVal + offset;
                     int padding = cleanOp.Length;
-                    op.Value = "0x" + newVal.ToString($"X{padding}");
+                    // Changed from X to x to ensure lowercase output (e.g. 0x4c instead of 0x4C)
+                    op.Value = "0x" + newVal.ToString($"x{padding}");
                 }
             }
         }

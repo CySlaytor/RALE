@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using RALogicEditor.Definitions;
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Utilities;
@@ -167,7 +168,8 @@ namespace RALogicEditor.Controls
             _isInternalUpdate = true;
             try
             {
-                _fullNoteCache = note.Note.Replace("\n", "\r\n");
+                // Fix: Robust normalization to prevent \r\r\n double spacing issues
+                _fullNoteCache = note.Note.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
 
                 // Ensure text box is editable when loading a standard note
                 txtNoteBody.ReadOnly = false;
@@ -252,19 +254,52 @@ namespace RALogicEditor.Controls
 
         private void cmbVariables_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (_isInternalUpdate) return;
             if (cmbVariables.SelectedItem is NoteNode node)
             {
-                _isInternalUpdate = true;
-                if (node.IndentLevel == -2) { txtNoteBody.Text = _fullNoteCache; UpdateStatusStrip(null); }
-                else
+                bool wasUpdating = _isInternalUpdate;
+                _isInternalUpdate = true; // Lock while updating text box
+
+                try
                 {
-                    // Show specific content for that node or a fallback message
-                    if (!string.IsNullOrWhiteSpace(node.Content)) txtNoteBody.Text = node.Content;
-                    else txtNoteBody.Text = $"{node.Description}\r\n(No specific details nested under this pointer)";
-                    UpdateStatusStrip(node);
+                    if (node.IndentLevel == -2)
+                    {
+                        txtNoteBody.Text = _fullNoteCache;
+                        UpdateStatusStrip(null);
+                    }
+                    else
+                    {
+                        // Display Logic:
+                        // 1. If Node has CONTENT (extra lines below), show it.
+                        // 2. Else if Node has DESCRIPTION (the line itself), show it.
+                        // 3. Else show Full Note (fallback).
+
+                        if (!string.IsNullOrWhiteSpace(node.Content))
+                        {
+                            txtNoteBody.Text = node.Content;
+                        }
+                        else if (!string.IsNullOrWhiteSpace(node.Description))
+                        {
+                            txtNoteBody.Text = node.Description;
+                        }
+                        else
+                        {
+                            // Fallback to Base Note
+                            if (!string.IsNullOrWhiteSpace(_fullNoteCache))
+                            {
+                                txtNoteBody.Text = _fullNoteCache;
+                            }
+                            else
+                            {
+                                txtNoteBody.Text = "No Code Note found for this address.";
+                            }
+                        }
+                        UpdateStatusStrip(node);
+                    }
                 }
-                _isInternalUpdate = false;
+                finally
+                {
+                    _isInternalUpdate = wasUpdating; // Restore previous state
+                }
             }
         }
 
@@ -410,25 +445,14 @@ namespace RALogicEditor.Controls
             }
 
             // 2. Try Range Match (Pointer Chain Range)
-            // Traverse the tree following the offsets. The last offset might be an offset INTO a node.
-            // Only traverse logical nodes (IndentLevel != -2)
-
-            // We want to find a node whose chain matches the beginning of `offsets`, 
-            // and the final requested offset fits within that node's size.
-
             foreach (var node in nodes)
             {
                 if (node.IndentLevel == -2) continue;
 
                 var nodeChain = PointerTreeParser.GetOffsetsFromNode(node);
 
-                // We check if the node structure is N levels deep, matching the first N-1 offsets of our target,
-                // and the last offset in our target list falls within the bounds of the node.
-
                 if (nodeChain.Count == offsets.Count)
                 {
-                    // Exact structure depth match. 
-                    // Verify path to parent (everything except the last element)
                     bool pathMatch = true;
                     for (int i = 0; i < offsets.Count - 1; i++)
                     {
@@ -437,19 +461,15 @@ namespace RALogicEditor.Controls
 
                     if (pathMatch)
                     {
-                        // Check last offset against node start + size
                         long nodeStart = nodeChain.Last();
                         long target = offsets.Last();
 
-                        // Check if: nodeStart <= target < nodeStart + Size
                         if (target >= nodeStart && target < nodeStart + node.Size)
                         {
                             long delta = target - nodeStart;
 
-                            // Reconstruct logic for this virtual node
                             var (baseLogic, type, size) = PointerTreeParser.GeneratePointerLogic(baseNote, node);
 
-                            // Adjust the logic string to point to the specific target offset
                             string finalLogic = baseLogic;
                             int lastUnderscore = baseLogic.LastIndexOf('_');
                             if (lastUnderscore != -1)
@@ -458,7 +478,6 @@ namespace RALogicEditor.Controls
                             }
                             else
                             {
-                                // Handle case where logic is single level (I:Base_0xOffset)
                                 int firstI = baseLogic.IndexOf("I:");
                                 if (firstI != -1)
                                 {
@@ -469,7 +488,6 @@ namespace RALogicEditor.Controls
                             string desc = node.Description;
                             if (delta > 0) desc += $" +0x{delta:X}";
 
-                            // Update Text Box
                             txtNoteBody.Text = desc;
                             txtNoteBody.ReadOnly = true;
 
@@ -480,9 +498,7 @@ namespace RALogicEditor.Controls
                                 size
                             );
 
-                            // Select the containing node visually but lock interaction
                             cmbVariables.SelectedItem = node;
-                            // Re-apply lock because SelectedItem change might unlock it
                             cmbVariables.Enabled = false;
                             cmbVariables.BackColor = SystemColors.Control;
                             return;
@@ -502,7 +518,7 @@ namespace RALogicEditor.Controls
 
             if (active)
             {
-                UpdateStatusStrip(null); // Will use virtual description
+                UpdateStatusStrip(null);
                 cmbVariables.Enabled = false;
                 cmbVariables.BackColor = SystemColors.Control;
             }
@@ -516,7 +532,6 @@ namespace RALogicEditor.Controls
         private void ClearVirtualState()
         {
             SetVirtualState(false, "", "", "", "");
-            // Also reset text box to editable
             txtNoteBody.ReadOnly = false;
         }
 
@@ -527,6 +542,104 @@ namespace RALogicEditor.Controls
             var note = _allNotes.FirstOrDefault(n => ParseAddress(n.Address) == targetVal);
             if (note != null) return note.Note.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
             return "";
+        }
+
+        // Context Menu Handlers
+        private void cutToolStripMenuItem_Click(object sender, EventArgs e) { if (!txtNoteBody.ReadOnly) txtNoteBody.Cut(); }
+        private void pasteToolStripMenuItem_Click(object sender, EventArgs e) { if (!txtNoteBody.ReadOnly) txtNoteBody.Paste(); }
+
+        private void copyToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(txtNoteBody.SelectedText))
+            {
+                string raw = txtNoteBody.SelectedText;
+                string normalized = raw.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+                Clipboard.SetText(normalized);
+                lblOffsetChain.Text = "Copied selection to clipboard.";
+            }
+        }
+
+        private void btnCopyAll_Click(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(txtNoteBody.Text))
+            {
+                string raw = txtNoteBody.Text;
+                string normalized = raw.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+                Clipboard.SetText(normalized);
+                lblOffsetChain.Text = "Copied full note to clipboard.";
+            }
+        }
+
+        // Check for Code Note Size Implementation
+        private void checkSizeToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var lines = txtNoteBody.Lines;
+            var errors = new List<string>();
+
+            // Regular expression to parse lines:
+            // Group 1: Indentation/Prefix (e.g., "+", ".+", "..+")
+            // Group 2: Sign (+ or -)
+            // Group 3: Hex (0x...)
+            // Group 4: Remainder (Description)
+            var lineRegex = new Regex(@"^([.\s]*)([-+])?(0x[0-9A-Fa-f]+)(.*)$", RegexOptions.IgnoreCase);
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                var match = lineRegex.Match(line);
+                if (!match.Success) continue; // Not a hex definition
+
+                string indent = match.Groups[1].Value;
+                string sign = match.Groups[2].Value;
+                string rawDesc = match.Groups[4].Value.Trim();
+
+                // RULE: If it's indented (has dots) but has NO sign (+/-), it's likely a value definition (e.g. ....0x7F = Inf). Skip it.
+                if (!string.IsNullOrEmpty(indent) && indent.Contains(".") && string.IsNullOrEmpty(sign)) continue;
+
+                // Clean leading separators commonly used in RA notes
+                while (rawDesc.Length > 0 && (rawDesc[0] == '|' || rawDesc[0] == ':' || rawDesc[0] == '=' || rawDesc[0] == '-'))
+                {
+                    rawDesc = rawDesc.Substring(1).Trim();
+                }
+
+                // SKIP Empty descriptions (just structural offsets)
+                if (string.IsNullOrWhiteSpace(rawDesc)) continue;
+
+                // SKIP "Pointer" descriptions (they define structure, not leaf data)
+                if (rawDesc.Contains("Pointer", StringComparison.OrdinalIgnoreCase)) continue;
+
+                // Check for Size Tag [x]
+                var tagMatch = Regex.Match(rawDesc, @"\[(.*?)\]");
+
+                if (!tagMatch.Success)
+                {
+                    errors.Add($"Line {i + 1}: Missing size tag. Content: '{rawDesc}'");
+                }
+                else
+                {
+                    // Typo check
+                    string tag = tagMatch.Groups[1].Value;
+                    bool isValid = RaLogicSyntax.MemorySizes.Contains(tag) ||
+                                   tag.Equals("Float", StringComparison.OrdinalIgnoreCase) ||
+                                   tag.EndsWith(" bytes");
+
+                    if (!isValid)
+                    {
+                        errors.Add($"Line {i + 1}: Typo detected in tag '[{tag}]'.");
+                    }
+                }
+            }
+
+            if (errors.Count > 0)
+            {
+                MessageBox.Show(string.Join("\n", errors), "Code Note Issues", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            else
+            {
+                MessageBox.Show("No size syntax errors found!", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
     }
 }
