@@ -10,11 +10,12 @@ namespace RALogicEditor.Parsers
 {
     // Parses raw Code Note text into a hierarchical tree of NoteNodes.
     // Handles standard RetroAchievements pointer notation (indentation with dots/pluses).
-    public static class PointerTreeParser
+    // Refactored to instance-based class implementing IPointerTreeParser.
+    public class PointerTreeParser : IPointerTreeParser
     {
         // Main entry point: Converts a multiline string into a flat list of nodes
         // preserving hierarchy via Parent/Children references.
-        public static List<NoteNode> ParseNoteText(string noteText)
+        public List<NoteNode> ParseNoteText(string noteText)
         {
             string[] lines = noteText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             bool isPointerNote = noteText.Contains("Pointer", StringComparison.OrdinalIgnoreCase);
@@ -152,7 +153,7 @@ namespace RALogicEditor.Parsers
         }
 
         // Parses data size from tags in the description (e.g., [16-bit] or [32 bytes]).
-        private static long ParseSizeFromDescription(string desc)
+        private long ParseSizeFromDescription(string desc)
         {
             if (string.IsNullOrEmpty(desc)) return 1;
 
@@ -171,14 +172,14 @@ namespace RALogicEditor.Parsers
         }
 
         // Helper to traverse tree and populate the list.
-        private static void CollectAllNodes(NoteNode node, List<NoteNode> flatList)
+        private void CollectAllNodes(NoteNode node, List<NoteNode> flatList)
         {
             if (node.IndentLevel != -1) flatList.Add(node);
             foreach (var child in node.Children) CollectAllNodes(child, flatList);
         }
 
         // Constructs the RA Logic String (e.g., I:0x1234_0x10) for a specific node in the tree.
-        public static (string Logic, string Type, string Size) GeneratePointerLogic(CodeNote baseNote, NoteNode selectedNode)
+        public (string Logic, string Type, string Size) GeneratePointerLogic(CodeNote baseNote, NoteNode selectedNode)
         {
             if (baseNote == null) return ("", "", "");
 
@@ -254,7 +255,7 @@ namespace RALogicEditor.Parsers
         }
 
         // Reverse-engineers the chain of offsets from a specific node up to the root.
-        public static List<long> GetOffsetsFromNode(NoteNode node)
+        public List<long> GetOffsetsFromNode(NoteNode node)
         {
             var nodeChain = new List<long>();
             var current = node;

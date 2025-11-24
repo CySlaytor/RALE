@@ -22,7 +22,7 @@ namespace RALogicEditor.Controls
     {
         // -- ViewModel Handles State and Parsing --
         // This moves business logic out of the View, enabling better testing and history management
-        private readonly TriggerViewModel _viewModel = new();
+        private readonly TriggerViewModel _viewModel;
 
         // Handles all DataGridView interactions (Sorting, Context Menus, Edit Controls)
         private readonly ConditionGridManager _gridManager;
@@ -71,6 +71,13 @@ namespace RALogicEditor.Controls
         public TriggerEditorControl()
         {
             InitializeComponent();
+
+            // Manual Dependency Injection (Service Location)
+            // In a full framework, this would come from an IoC container.
+            ILogicValidator validator = new LogicValidator();
+            ILogicGenerator generator = new LogicGeneratorService();
+            _viewModel = new TriggerViewModel(validator, generator);
+
             _gridManager = new ConditionGridManager(conditionGrid);
             InitializeEvents();
             InitializeGrids();
@@ -155,10 +162,14 @@ namespace RALogicEditor.Controls
             _gridManager.RangeCache.Clear();
             if (notes == null) return;
 
+            // Instantiate Parser locally (Step 2: Interface Extraction)
+            // This helper is used purely for caching note trees for tooltips/aliases
+            var parser = new PointerTreeParser();
+
             foreach (var note in notes)
             {
                 string key = LogicFormatter.NormalizeAddress(note.Address);
-                var nodes = PointerTreeParser.ParseNoteText(note.Note);
+                var nodes = parser.ParseNoteText(note.Note);
                 _notesLookup[key] = nodes;
 
                 // Pre-cache struct ranges for faster lookup
@@ -470,7 +481,9 @@ namespace RALogicEditor.Controls
 
         private void RunValidation()
         {
-            _currentIssues = LogicValidator.ValidateAsset(_viewModel.ActiveGroups, _viewModel.BoundAsset);
+            // Use the ViewModel to run validation (which uses the injected service)
+            _currentIssues = _viewModel.ValidateCurrentLogic();
+
             ValidationCompleted?.Invoke(this, _currentIssues);
 
             if (_currentIssues.Any(i => i.Severity >= FeedbackSeverity.Error)) SetStatus("❌ Error(s) found in logic.");
@@ -589,6 +602,7 @@ namespace RALogicEditor.Controls
             NoteNode? activeNoteNode = null;
 
             // Helper to build node hierarchy
+            // Re-added _gridManager.RangeCache usage here for lookup fallback
             (GeneratorConfigForm.GeneratorItemViewModel Item, NoteNode? FoundNode) GetOrCreateNode(string addr, bool isPointerBase, GeneratorConfigForm.GeneratorItemViewModel? parent, NoteNode? contextNode)
             {
                 string normAddr = LogicFormatter.NormalizeAddress(addr);
@@ -640,6 +654,28 @@ namespace RALogicEditor.Controls
                                     syntheticContext.Children.Add(n);
                             }
                             currentNote = syntheticContext;
+                        }
+                    }
+                    // 2a. Try Range Cache Lookup (FIX: Re-added to support struct ranges like [176 bytes])
+                    else if (_gridManager.RangeCache != null)
+                    {
+                        long targetVal = long.TryParse(normAddr.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long tv) ? tv : -1;
+                        if (targetVal != -1)
+                        {
+                            var match = _gridManager.RangeCache.FirstOrDefault(r => targetVal >= r.Start && targetVal < r.End);
+                            if (match.Node != null)
+                            {
+                                desc = match.Node.Description;
+                                if (string.IsNullOrEmpty(desc) || desc.Equals("Full Note")) desc = match.Node.Content.Split('\n')[0];
+
+                                // Auto-detect stride from range size
+                                if (autoStride == 0 && match.Node.Size > 1) autoStride = (int)match.Node.Size;
+                                if (match.Node.Size > 1)
+                                {
+                                    if (!sizeCounts.ContainsKey(match.Node.Size)) sizeCounts[match.Node.Size] = 0;
+                                    sizeCounts[match.Node.Size]++;
+                                }
+                            }
                         }
                     }
                 }

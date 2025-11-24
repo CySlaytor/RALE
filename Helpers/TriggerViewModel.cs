@@ -1,4 +1,5 @@
-﻿using RALogicEditor.Models;
+﻿using RALogicEditor.Definitions;
+using RALogicEditor.Models;
 using RALogicEditor.Services;
 using System;
 using System.Collections.Generic;
@@ -10,6 +11,10 @@ namespace RALogicEditor.Helpers
     // Decouples the WinForms UI from the Business Logic.
     public class TriggerViewModel
     {
+        // Injected Services
+        private readonly ILogicValidator _validator;
+        private readonly ILogicGenerator _generator;
+
         // History Manager handles Undo/Redo stacks
         private readonly HistoryManager<TriggerEditorState> _history = new();
 
@@ -43,8 +48,11 @@ namespace RALogicEditor.Helpers
         public event EventHandler? LogicChanged;
         public event EventHandler? SegmentsChanged; // Fired when loading new asset
 
-        public TriggerViewModel()
+        // Constructor Injection
+        public TriggerViewModel(ILogicValidator validator, ILogicGenerator generator)
         {
+            _validator = validator;
+            _generator = generator;
             // Default strategy
             AssetStrategy = new AchievementStrategy();
         }
@@ -85,8 +93,8 @@ namespace RALogicEditor.Helpers
         {
             if (BoundAsset == null) return;
 
-            // 1. Apply Generators before building string
-            LogicGeneratorService.ApplyGeneratorRules(ActiveGroups, GeneratorRules);
+            // 1. Apply Generators before building string (Using injected service)
+            _generator.ApplyGeneratorRules(ActiveGroups, GeneratorRules);
 
             // 2. Build String
             string newLogic = AssetStrategy.BuildLogic(_allSegments);
@@ -94,13 +102,10 @@ namespace RALogicEditor.Helpers
             // 3. Push Undo State if requested
             if (pushUndo && newLogic != BoundAsset.Logic)
             {
-                // CRITICAL FIX: When pushing undo from an implicit update (like grid edit),
-                // the _allSegments are already modified. We must push the PREVIOUS state (BoundAsset.Logic)
-                // to the undo stack, not the new state.
                 var state = new TriggerEditorState
                 {
                     LogicString = BoundAsset.Logic,
-                    GeneratorRules = GeneratorRules // Assumes rules didn't change during grid edit
+                    GeneratorRules = GeneratorRules
                 };
                 _history.PushState(state.Clone());
             }
@@ -131,7 +136,7 @@ namespace RALogicEditor.Helpers
             var state = new TriggerEditorState
             {
                 LogicString = AssetStrategy.BuildLogic(_allSegments),
-                GeneratorRules = GeneratorRules // HistoryManager handles cloning this
+                GeneratorRules = GeneratorRules
             };
             _history.PushState(state.Clone());
         }
@@ -226,5 +231,11 @@ namespace RALogicEditor.Helpers
         }
 
         #endregion
+
+        // Expose validation via the injected service
+        public List<ValidationIssue> ValidateCurrentLogic()
+        {
+            return _validator.ValidateAsset(ActiveGroups, BoundAsset);
+        }
     }
 }

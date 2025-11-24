@@ -1,5 +1,6 @@
 ﻿#nullable enable
 using RALogicEditor.Definitions;
+using RALogicEditor.Helpers;
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Utilities;
@@ -19,37 +20,29 @@ namespace RALogicEditor.Controls
     {
         public event EventHandler? ReloadRequested;
 
-        private List<CodeNote> _allNotes = new();
+        // The ViewModel handles the heavy logic (Moved out of View)
+        private readonly CodeNoteViewModel _viewModel;
+
+        // UI State for filtering
         private List<CodeNote> _filteredNotes = new();
         private bool _isInternalUpdate = false;
-        private string _fullNoteCache = "";
-
-        // Store full parsed tree for traversal even when UI is filtered
-        private List<NoteNode> _currentParsedNodes = new();
-
-        // Cache for range-based notes (e.g. Structs covering [176 bytes])
-        // Tuple: Start Address, End Address, Note Object
-        private List<(long Start, long End, CodeNote Note, NoteNode Node)> _rangeCache = new();
-
-        // Virtual State for handling Indirect/Ranged selections that don't strictly exist in the dropdowns
-        private class VirtualNoteState
-        {
-            public bool IsActive;
-            public string Description = "";
-            public string LogicCode = "";
-            public string LogicType = "";
-            public string LogicSize = "";
-        }
-        private VirtualNoteState _virtualState = new();
 
         public CodeNoteEditorControl()
         {
             InitializeComponent();
-            // Re-parse note when "Show Leafs" toggles to update the dropdown structure
-            chkShowLeafsOnly.CheckedChanged += (s, e) =>
-            {
-                if (cmbNotes.SelectedItem is CodeNote note) LoadNoteToTextBox(note);
-            };
+
+            // Dependency Injection (Manual for now)
+            IPointerTreeParser parser = new PointerTreeParser();
+            _viewModel = new CodeNoteViewModel(parser);
+
+            // Wire up ViewModel Events
+            _viewModel.NotesLoaded += (s, e) => ApplyFilter(false);
+            _viewModel.NoteContentChanged += ViewModel_NoteContentChanged;
+            _viewModel.VirtualStateChanged += ViewModel_VirtualStateChanged;
+            _viewModel.SelectionRequested += ViewModel_SelectionRequested;
+
+            // Re-parse view when filter toggles
+            chkShowLeafsOnly.CheckedChanged += (s, e) => RefreshVariableTreeDisplay();
         }
 
         private void btnReload_Click(object sender, EventArgs e)
@@ -57,48 +50,27 @@ namespace RALogicEditor.Controls
             ReloadRequested?.Invoke(this, EventArgs.Empty);
         }
 
-        // Called by Main Form to load the note list
+        // Called by Main Form
         public void SetNotes(List<CodeNote> notes)
         {
             _isInternalUpdate = true;
             try
             {
-                // 1. Capture current selection to restore it after reload
                 string? previousAddress = null;
                 if (cmbNotes.SelectedItem is CodeNote current)
-                {
                     previousAddress = current.Address;
-                }
 
-                _allNotes = notes ?? new List<CodeNote>();
-                _rangeCache.Clear();
+                _viewModel.LoadNotes(notes); // VM processes range cache etc
 
-                // 2. Build Range Cache
-                foreach (var note in _allNotes)
-                {
-                    // Clean address
-                    string cleanAddr = note.Address.Replace("0x", "").Trim();
-                    if (long.TryParse(cleanAddr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long startAddr))
-                    {
-                        var rootNode = PointerTreeParser.ParseNoteText(note.Note).FirstOrDefault();
-                        if (rootNode != null && rootNode.Size > 1)
-                        {
-                            long endAddr = startAddr + rootNode.Size;
-                            _rangeCache.Add((startAddr, endAddr, note, rootNode));
-                        }
-                    }
-                }
-
-                // 3. Reset UI
+                // UI Refresh
                 cmbNotes.DataSource = null;
                 cmbNotes.Items.Clear();
                 txtNoteBody.Text = "";
-                ClearVirtualState();
+                _viewModel.ClearVirtualState();
 
-                // 4. Apply Filter (forces a rebuild of the display list from the new _allNotes)
                 ApplyFilter(false);
 
-                // 5. Restore selection
+                // Restore selection
                 bool selectionRestored = false;
                 if (previousAddress != null)
                 {
@@ -106,16 +78,15 @@ namespace RALogicEditor.Controls
                     if (match != null)
                     {
                         cmbNotes.SelectedItem = match;
-                        LoadNoteToTextBox(match);
+                        _viewModel.SelectBaseNote(match);
                         selectionRestored = true;
                     }
                 }
 
-                // 6. Fallback if nothing restored or selected
                 if (!selectionRestored && _filteredNotes.Count > 0)
                 {
                     cmbNotes.SelectedIndex = 0;
-                    LoadNoteToTextBox(_filteredNotes[0]);
+                    _viewModel.SelectBaseNote(_filteredNotes[0]);
                 }
             }
             finally
@@ -124,35 +95,31 @@ namespace RALogicEditor.Controls
             }
         }
 
-        // Filters note list based on search text
         private void ApplyFilter(bool autoSelectFirst = true)
         {
             string filter = txtSearch.Text.Trim();
             if (string.IsNullOrWhiteSpace(filter))
             {
-                // Always create a new list from _allNotes.
-                _filteredNotes = new List<CodeNote>(_allNotes);
+                _filteredNotes = new List<CodeNote>(_viewModel.AllNotes);
             }
             else
             {
-                _filteredNotes = _allNotes
+                _filteredNotes = _viewModel.AllNotes
                     .Where(n => n.Address.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                                 n.Note.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
             }
 
-            // Reset DataSource to force the ComboBox to repaint with new data
             cmbNotes.DataSource = null;
             cmbNotes.DataSource = _filteredNotes;
 
             if (autoSelectFirst && _filteredNotes.Count > 0)
             {
                 cmbNotes.SelectedIndex = 0;
-                LoadNoteToTextBox(_filteredNotes[0]);
+                _viewModel.SelectBaseNote(_filteredNotes[0]);
             }
             else if (_filteredNotes.Count == 0)
             {
                 txtNoteBody.Text = "";
-                _fullNoteCache = "";
                 cmbVariables.DataSource = null;
                 UpdateStatusStrip(null);
             }
@@ -163,26 +130,30 @@ namespace RALogicEditor.Controls
             if (!_isInternalUpdate) ApplyFilter(true);
         }
 
-        // Parses the selected note text to find pointer offsets
-        private void LoadNoteToTextBox(CodeNote note)
+        // Event from VM: Base Note changed or Content re-parsed
+        private void ViewModel_NoteContentChanged(object? sender, EventArgs e)
         {
-            // Preserve existing state to prevent prematurely enabling events
+            if (_viewModel.CurrentBaseNote == null) return;
+
             bool wasUpdating = _isInternalUpdate;
             _isInternalUpdate = true;
             try
             {
-                // Fix: Robust normalization to prevent \r\r\n double spacing issues
-                _fullNoteCache = note.Note.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+                // 1. Update Text Box (if not virtual)
+                if (!_viewModel.VirtualState.IsActive)
+                {
+                    string normalized = _viewModel.CurrentBaseNote.Note.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+                    txtNoteBody.ReadOnly = false;
+                    txtNoteBody.Text = normalized;
+                }
 
-                // Ensure text box is editable when loading a standard note
-                txtNoteBody.ReadOnly = false;
-                txtNoteBody.Text = _fullNoteCache;
+                // 2. Refresh Tree Dropdown
+                RefreshVariableTreeDisplay();
 
-                // Clear virtual state when explicitly loading a note via UI
-                ClearVirtualState();
+                // 3. Select Root
+                if (cmbVariables.Items.Count > 0) cmbVariables.SelectedIndex = 0;
+                else cmbVariables.SelectedIndex = -1;
 
-                RefreshVariableTree();
-                if (cmbVariables.Items.Count > 0) cmbVariables.SelectedIndex = 0; else cmbVariables.SelectedIndex = -1;
                 UpdateStatusStrip(null);
             }
             finally
@@ -191,129 +162,181 @@ namespace RALogicEditor.Controls
             }
         }
 
-        private void RefreshVariableTree()
+        private void RefreshVariableTreeDisplay()
         {
-            // Delegate heavy parsing to PointerTreeParser and store in class-level list
-            _currentParsedNodes = PointerTreeParser.ParseNoteText(_fullNoteCache);
+            // Filter the *already parsed* nodes from the VM for display
+            IEnumerable<NoteNode> query = _viewModel.CurrentParsedNodes;
 
-            IEnumerable<NoteNode> query = _currentParsedNodes;
-
-            // Apply Search Filter to Variable Tree as well
             string filter = txtSearch.Text.Trim();
             if (!string.IsNullOrEmpty(filter))
             {
                 query = query.Where(n =>
                     n.Description.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                     n.Offset.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                    (n.IndentLevel == -2 && n.Content.Contains(filter, StringComparison.OrdinalIgnoreCase)) // Keep root if content matches
+                    (n.IndentLevel == -2 && n.Content.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 );
             }
 
-            // Filter view if "Show Leafs Only" is checked
             if (chkShowLeafsOnly.Checked)
             {
-                // Leafs = Root (-2) OR Nodes with no children
                 query = query.Where(n => n.IndentLevel == -2 || (n.Children.Count == 0 && n.IndentLevel != -1));
             }
 
             var finalList = query.ToList();
             cmbVariables.DataSource = finalList;
-
-            cmbVariables.Enabled = finalList.Count > 1;
-            // Ensure background is reset if it was grayed out by virtual mode
-            cmbVariables.BackColor = SystemColors.Window;
+            cmbVariables.Enabled = finalList.Count > 1 && !_viewModel.VirtualState.IsActive;
+            cmbVariables.BackColor = _viewModel.VirtualState.IsActive ? SystemColors.Control : SystemColors.Window;
         }
 
-        // Renders indentation in the dropdown list
-        private void cmbVariables_Format(object sender, ListControlConvertEventArgs e)
+        private void ViewModel_VirtualStateChanged(object? sender, EventArgs e)
         {
-            if (e.ListItem is NoteNode node)
+            var state = _viewModel.VirtualState;
+
+            if (state.IsActive)
             {
-                string text = node.ToString();
-                if (!chkShowLeafsOnly.Checked && node.IndentLevel > 0)
+                lblOffsetChain.Text = state.Description;
+                cmbVariables.Enabled = false;
+                cmbVariables.BackColor = SystemColors.Control;
+
+                txtNoteBody.Text = state.DisplayText;
+                txtNoteBody.ReadOnly = true;
+            }
+            else
+            {
+                cmbVariables.Enabled = true;
+                cmbVariables.BackColor = SystemColors.Window;
+                txtNoteBody.ReadOnly = false;
+                // Text reset handled by selection change usually
+            }
+        }
+
+        private void ViewModel_SelectionRequested(object? sender, NoteNode node)
+        {
+            // VM asks us to select a node. We try to find it in the visible list.
+            bool wasUpdating = _isInternalUpdate;
+            _isInternalUpdate = true;
+            try
+            {
+                if (cmbVariables.Items.Contains(node))
                 {
-                    string pad = new string(' ', node.IndentLevel * 2);
-                    text = pad + text;
+                    cmbVariables.SelectedItem = node;
                 }
-                e.Value = text;
+                else
+                {
+                    // Node is filtered out of view, just clear selection
+                    cmbVariables.SelectedIndex = -1;
+                }
+
+                // IMPORTANT: Since we suppressed events, we must manually update the text body
+                // IF we are not in virtual mode. If virtual mode is active, StateChanged handles text.
+                if (!_viewModel.VirtualState.IsActive)
+                {
+                    if (!string.IsNullOrWhiteSpace(node.Content)) txtNoteBody.Text = node.Content;
+                    else if (!string.IsNullOrWhiteSpace(node.Description)) txtNoteBody.Text = node.Description;
+                    else txtNoteBody.Text = node.ToString();
+                }
+            }
+            finally
+            {
+                _isInternalUpdate = wasUpdating;
             }
         }
 
-        // Generates RA Logic string for the selected variable (pointer chain)
-        public (string Logic, string Type, string Size) GetSelectedLogic()
+        private void cmbNotes_SelectedIndexChanged(object sender, EventArgs e)
         {
-            // Priority 1: Virtual State (Indirect/Range selection)
-            if (_virtualState.IsActive)
+            if (_isInternalUpdate) return;
+            if (cmbNotes.SelectedItem is CodeNote note)
             {
-                return (_virtualState.LogicCode, _virtualState.LogicType, _virtualState.LogicSize);
+                _viewModel.SelectBaseNote(note);
             }
-
-            // Priority 2: Selected Variable in Dropdown
-            if (cmbNotes.SelectedItem is not CodeNote baseNote) return ("", "", "");
-            var selectedNode = cmbVariables.SelectedItem as NoteNode;
-            if (selectedNode == null) return ("", "", "");
-            return PointerTreeParser.GeneratePointerLogic(baseNote, selectedNode);
         }
 
         private void cmbVariables_SelectedIndexChanged(object sender, EventArgs e)
         {
-            // Critical: If internal update is active, skip logic to prevent overwriting virtual text
             if (_isInternalUpdate) return;
 
             if (cmbVariables.SelectedItem is NoteNode node)
             {
-                bool wasUpdating = _isInternalUpdate;
-                _isInternalUpdate = true; // Lock while updating text box
-
-                try
+                // UI Update Logic:
+                if (node.IndentLevel == -2)
                 {
-                    if (node.IndentLevel == -2)
-                    {
-                        txtNoteBody.Text = _fullNoteCache;
-                        UpdateStatusStrip(null);
-                    }
-                    else
-                    {
-                        // Display Logic:
-                        // 1. If Node has CONTENT (extra lines below), show it.
-                        // 2. Else if Node has DESCRIPTION (the line itself), show it.
-                        // 3. Else show Full Note (fallback).
-
-                        if (!string.IsNullOrWhiteSpace(node.Content))
-                        {
-                            txtNoteBody.Text = node.Content;
-                        }
-                        else if (!string.IsNullOrWhiteSpace(node.Description))
-                        {
-                            txtNoteBody.Text = node.Description;
-                        }
-                        else
-                        {
-                            // Fallback to Base Note
-                            if (!string.IsNullOrWhiteSpace(_fullNoteCache))
-                            {
-                                txtNoteBody.Text = _fullNoteCache;
-                            }
-                            else
-                            {
-                                txtNoteBody.Text = "No Code Note found for this address.";
-                            }
-                        }
-                        UpdateStatusStrip(node);
-                    }
+                    // Root node
+                    if (_viewModel.CurrentBaseNote != null)
+                        txtNoteBody.Text = _viewModel.CurrentBaseNote.Note.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+                    UpdateStatusStrip(null);
                 }
-                finally
+                else
                 {
-                    _isInternalUpdate = wasUpdating; // Restore previous state
+                    if (!string.IsNullOrWhiteSpace(node.Content)) txtNoteBody.Text = node.Content;
+                    else if (!string.IsNullOrWhiteSpace(node.Description)) txtNoteBody.Text = node.Description;
+                    else txtNoteBody.Text = "No Code Note found for this address.";
+
+                    UpdateStatusStrip(node);
+                }
+                // Ensure virtual state is cleared if user manually picks a node
+                _viewModel.ClearVirtualState();
+            }
+        }
+
+        private void txtNoteBody_TextChanged(object sender, EventArgs e)
+        {
+            if (_isInternalUpdate) return;
+            if (_viewModel.VirtualState.IsActive) return;
+            if (cmbVariables.SelectedIndex != -1 && cmbVariables.SelectedIndex != 0) return;
+
+            // Pass update to VM
+            _viewModel.UpdateNoteContent(txtNoteBody.Text);
+
+            // Refresh UI list without resetting text
+            bool wasUpdating = _isInternalUpdate;
+            _isInternalUpdate = true;
+            RefreshVariableTreeDisplay();
+            _isInternalUpdate = wasUpdating;
+        }
+
+        // Public Bridge Methods calling VM
+        public void HighlightAddress(string address)
+        {
+            // Try to find note in VM
+            _viewModel.HighlightAddress(address);
+
+            // If HighlightAddress found an exact note, it called SelectBaseNote -> NoteContentChanged.
+            // We just need to ensure the Note ComboBox reflects the VM state.
+            if (_viewModel.CurrentBaseNote != null)
+            {
+                if (cmbNotes.SelectedItem != _viewModel.CurrentBaseNote)
+                {
+                    bool wasUpdating = _isInternalUpdate;
+                    _isInternalUpdate = true;
+
+                    // If not in filtered list, clear filter
+                    if (!_filteredNotes.Contains(_viewModel.CurrentBaseNote))
+                    {
+                        txtSearch.Text = ""; // This triggers ApplyFilter -> sets _filteredNotes -> sets DataSource
+                    }
+
+                    cmbNotes.SelectedItem = _viewModel.CurrentBaseNote;
+                    _isInternalUpdate = wasUpdating;
                 }
             }
         }
 
+        public void HighlightVariable(List<long> offsets)
+        {
+            _viewModel.HighlightVariable(offsets);
+        }
+
+        public (string Logic, string Type, string Size) GetSelectedLogic()
+        {
+            var selectedNode = cmbVariables.SelectedItem as NoteNode;
+            return _viewModel.GetSelectedLogic(selectedNode);
+        }
+
         private void UpdateStatusStrip(NoteNode? node)
         {
-            if (_virtualState.IsActive)
+            if (_viewModel.VirtualState.IsActive)
             {
-                lblOffsetChain.Text = _virtualState.Description;
+                lblOffsetChain.Text = _viewModel.VirtualState.Description;
                 return;
             }
 
@@ -334,323 +357,18 @@ namespace RALogicEditor.Controls
             }
         }
 
-        private void cmbNotes_SelectedIndexChanged(object sender, EventArgs e)
+        private void cmbVariables_Format(object sender, ListControlConvertEventArgs e)
         {
-            if (_isInternalUpdate) return;
-            if (cmbNotes.SelectedItem is CodeNote note) LoadNoteToTextBox(note);
-        }
-
-        private void txtNoteBody_TextChanged(object sender, EventArgs e)
-        {
-            if (_isInternalUpdate) return;
-            // Prevent editing sub-nodes directly or virtual nodes
-            if ((cmbVariables.SelectedIndex != -1 && cmbVariables.SelectedIndex != 0) || _virtualState.IsActive) return;
-
-            if (cmbNotes.SelectedItem is CodeNote note)
+            if (e.ListItem is NoteNode node)
             {
-                note.Note = txtNoteBody.Text;
-                _fullNoteCache = txtNoteBody.Text;
-                RefreshVariableTree();
-                cmbNotes.Invalidate();
-            }
-        }
-
-        private long ParseAddress(string addr)
-        {
-            if (string.IsNullOrEmpty(addr)) return -1;
-            string hex = addr.Trim();
-            if (hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) hex = hex.Substring(2);
-            if (long.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long result)) return result;
-            return -1;
-        }
-
-        // Bridge: Highlights an address requested by Trigger Editor
-        public void HighlightAddress(string address)
-        {
-            if (string.IsNullOrEmpty(address)) return;
-            string hex = address.Trim();
-            if (hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) hex = hex.Substring(2);
-            if (!long.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long targetVal)) return;
-
-            // 1. Try Exact Match
-            var note = _filteredNotes.FirstOrDefault(n => ParseAddress(n.Address) == targetVal);
-            if (note == null)
-            {
-                // Try searching in all notes
-                note = _allNotes.FirstOrDefault(n => ParseAddress(n.Address) == targetVal);
-                if (note != null) txtSearch.Text = ""; // Clear filter to show it
-            }
-
-            if (note != null)
-            {
-                // Found exact note
-                bool wasSame = cmbNotes.SelectedItem == note;
-                cmbNotes.SelectedItem = note;
-                if (wasSame) LoadNoteToTextBox(note); // Force refresh
-                ClearVirtualState(); // Ensure we aren't in virtual mode
-            }
-            else
-            {
-                // 2. Try Range Match (Virtual Note)
-                var rangeMatch = _rangeCache.FirstOrDefault(r => targetVal >= r.Start && targetVal < r.End);
-                if (rangeMatch.Note != null)
+                string text = node.ToString();
+                if (!chkShowLeafsOnly.Checked && node.IndentLevel > 0)
                 {
-                    // Select base note
-                    cmbNotes.SelectedItem = rangeMatch.Note;
-                    LoadNoteToTextBox(rangeMatch.Note); // Load base note text
-
-                    // Enter Virtual Mode
-                    long delta = targetVal - rangeMatch.Start;
-                    string desc = rangeMatch.Node.Description;
-                    if (string.IsNullOrEmpty(desc) || desc == "Full Note")
-                        desc = rangeMatch.Node.Content.Split('\n').FirstOrDefault()?.Trim() ?? "";
-
-                    string virtualDesc = $"{desc} +0x{delta:X}";
-
-                    // Update Text Box
-                    txtNoteBody.Text = virtualDesc;
-                    txtNoteBody.ReadOnly = true;
-
-                    SetVirtualState(
-                        true,
-                        $"[Indirect from {rangeMatch.Note.Address}] {virtualDesc}",
-                        $"0x{targetVal:x}", // Logic code is the calculated address
-                        "Mem", // Default type
-                        "8-bit" // Default size
-                    );
+                    string pad = new string(' ', node.IndentLevel * 2);
+                    text = pad + text;
                 }
+                e.Value = text;
             }
-        }
-
-        // Bridge: Traverses the tree to find specific pointer offsets
-        public void HighlightVariable(List<long> offsets)
-        {
-            if (offsets == null || offsets.Count == 0) return;
-            if (cmbNotes.SelectedItem is not CodeNote baseNote) return;
-
-            // Use _currentParsedNodes for traversal (contains full tree) instead of filtered DataSource
-            var nodes = _currentParsedNodes;
-            if (nodes == null || nodes.Count == 0) return;
-
-            NoteNode? bestMatchNode = null;
-            int matchedDepth = 0;
-            long finalRemainder = 0;
-
-            long ParseOffsetString(string offsetStr)
-            {
-                string clean = offsetStr.Trim().Replace("+", "").Replace("-", "").Replace("0x", "");
-                if (long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val))
-                {
-                    if (offsetStr.Contains("-")) return -val;
-                    return val;
-                }
-                return long.MinValue;
-            }
-
-            // 1. Find Root
-            var rootNodes = nodes.Where(n => n.IndentLevel == 0 || (n.Parent != null && n.Parent.IndentLevel == -1) || (n.Parent == null && n.IndentLevel != -2)).ToList();
-
-            // Try Exact Root
-            var current = rootNodes.FirstOrDefault(n => ParseOffsetString(n.Offset) == offsets[0]);
-
-            // Try Range Root
-            if (current == null)
-            {
-                foreach (var n in rootNodes)
-                {
-                    long start = ParseOffsetString(n.Offset);
-                    if (offsets[0] >= start && offsets[0] < start + n.Size)
-                    {
-                        current = n;
-                        finalRemainder = offsets[0] - start;
-                        break;
-                    }
-                }
-            }
-
-            if (current != null)
-            {
-                bestMatchNode = current;
-                matchedDepth = 1;
-
-                // Traverse
-                while (matchedDepth < offsets.Count)
-                {
-                    // If we already have a remainder from a previous step (Range Match), 
-                    // we cannot traverse deeper because the structure doesn't align with the pointer chain.
-                    if (finalRemainder != 0) break;
-
-                    long nextOffset = offsets[matchedDepth];
-
-                    // Exact Child
-                    var nextNode = current.Children.FirstOrDefault(n => ParseOffsetString(n.Offset) == nextOffset);
-
-                    // Range Child
-                    if (nextNode == null)
-                    {
-                        foreach (var n in current.Children)
-                        {
-                            long start = ParseOffsetString(n.Offset);
-                            if (nextOffset >= start && nextOffset < start + n.Size)
-                            {
-                                nextNode = n;
-                                finalRemainder = nextOffset - start;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (nextNode != null)
-                    {
-                        current = nextNode;
-                        bestMatchNode = current;
-                        matchedDepth++;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-            }
-
-            // Helper to safely select a node in the dropdown only if it is currently visible
-            void SafeSelectNode(NoteNode node)
-            {
-                bool wasUpdating = _isInternalUpdate;
-                _isInternalUpdate = true;
-                try
-                {
-                    // Only try to select if the item exists in the current filtered view
-                    if (cmbVariables.Items.Contains(node))
-                    {
-                        cmbVariables.SelectedItem = node;
-                    }
-                    else
-                    {
-                        // If hidden, clear selection but proceed to set text manually
-                        cmbVariables.SelectedIndex = -1;
-                    }
-                }
-                finally
-                {
-                    _isInternalUpdate = wasUpdating;
-                }
-            }
-
-            // Scenario A: Exact Full Match (Depth matches AND no remainder)
-            if (bestMatchNode != null && matchedDepth == offsets.Count && finalRemainder == 0)
-            {
-                SafeSelectNode(bestMatchNode);
-
-                // MANUALLY UPDATE TEXT BOX to ensure correct display even if selection failed (filtered)
-                // Use Content if available (leaf logic), otherwise Description
-                if (!string.IsNullOrWhiteSpace(bestMatchNode.Content)) txtNoteBody.Text = bestMatchNode.Content;
-                else if (!string.IsNullOrWhiteSpace(bestMatchNode.Description)) txtNoteBody.Text = bestMatchNode.Description;
-                else txtNoteBody.Text = bestMatchNode.ToString();
-
-                ClearVirtualState();
-                return;
-            }
-
-            // Scenario B: Partial / Range Match
-            if (bestMatchNode != null)
-            {
-                SafeSelectNode(bestMatchNode);
-
-                var (baseLogic, type, size) = PointerTreeParser.GeneratePointerLogic(baseNote, bestMatchNode);
-
-                // Rebuild Logic String for the chain including offsets
-                string baseAddrStr = baseNote.Address.StartsWith("0x") ? baseNote.Address.Substring(2) : baseNote.Address;
-                StringBuilder sbLogic = new StringBuilder();
-                sbLogic.Append($"I:0x{baseAddrStr}");
-                for (int i = 0; i < offsets.Count; i++)
-                {
-                    sbLogic.Append("_");
-                    if (i == offsets.Count - 1) sbLogic.Append($"0x{offsets[i]:x}");
-                    else sbLogic.Append($"I:0x{offsets[i]:x}");
-                }
-
-                // Construct Description using Node Description + Remainders
-                string desc = bestMatchNode.Description.Trim();
-
-                // Append remaining full offsets
-                for (int i = matchedDepth; i < offsets.Count; i++)
-                {
-                    desc += $" +0x{offsets[i]:X}";
-                }
-
-                // Append final remainder from range match
-                if (finalRemainder != 0)
-                {
-                    desc += $" +0x{finalRemainder:X}";
-                }
-
-                txtNoteBody.Text = desc;
-                txtNoteBody.ReadOnly = true;
-
-                SetVirtualState(true, desc, sbLogic.ToString(), type, size);
-                return;
-            }
-
-            // Scenario C: No Match
-            if (bestMatchNode == null)
-            {
-                string baseAddrStr = baseNote.Address.StartsWith("0x") ? baseNote.Address.Substring(2) : baseNote.Address;
-                StringBuilder sb = new StringBuilder();
-                sb.Append($"I:0x{baseAddrStr}");
-
-                for (int i = 0; i < offsets.Count; i++)
-                {
-                    sb.Append("_");
-                    if (i == offsets.Count - 1) sb.Append($"0x{offsets[i]:x}");
-                    else sb.Append($"I:0x{offsets[i]:x}");
-                }
-
-                // Cleaner fallback description
-                string desc = $"{baseNote.Address} Chain";
-                foreach (var o in offsets) desc += $" +0x{o:X}";
-
-                txtNoteBody.Text = desc;
-                txtNoteBody.ReadOnly = true;
-                SetVirtualState(true, desc, sb.ToString(), "Mem", "32-bit");
-                return;
-            }
-        }
-
-        private void SetVirtualState(bool active, string description, string logicCode, string type, string size)
-        {
-            _virtualState.IsActive = active;
-            _virtualState.Description = description;
-            _virtualState.LogicCode = logicCode;
-            _virtualState.LogicType = type;
-            _virtualState.LogicSize = size;
-
-            if (active)
-            {
-                UpdateStatusStrip(null);
-                cmbVariables.Enabled = false;
-                cmbVariables.BackColor = SystemColors.Control;
-            }
-            else
-            {
-                cmbVariables.Enabled = true;
-                cmbVariables.BackColor = SystemColors.Window;
-            }
-        }
-
-        private void ClearVirtualState()
-        {
-            SetVirtualState(false, "", "", "", "");
-            txtNoteBody.ReadOnly = false;
-        }
-
-        public string GetNoteText(string address)
-        {
-            long targetVal = ParseAddress(address);
-            if (targetVal == -1) return "";
-            var note = _allNotes.FirstOrDefault(n => ParseAddress(n.Address) == targetVal);
-            if (note != null) return note.Note.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
-            return "";
         }
 
         // Context Menu Handlers
@@ -679,17 +397,10 @@ namespace RALogicEditor.Controls
             }
         }
 
-        // Check for Code Note Size Implementation
         private void checkSizeToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var lines = txtNoteBody.Lines;
             var errors = new List<string>();
-
-            // Regular expression to parse lines:
-            // Group 1: Indentation/Prefix (e.g., "+", ".+", "..+")
-            // Group 2: Sign (+ or -)
-            // Group 3: Hex (0x...)
-            // Group 4: Remainder (Description)
             var lineRegex = new Regex(@"^([.\s]*)([-+])?(0x[0-9A-Fa-f]+)(.*)$", RegexOptions.IgnoreCase);
 
             for (int i = 0; i < lines.Length; i++)
@@ -698,57 +409,37 @@ namespace RALogicEditor.Controls
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
                 var match = lineRegex.Match(line);
-                if (!match.Success) continue; // Not a hex definition
+                if (!match.Success) continue;
 
                 string indent = match.Groups[1].Value;
                 string sign = match.Groups[2].Value;
                 string rawDesc = match.Groups[4].Value.Trim();
 
-                // RULE: If it's indented (has dots) but has NO sign (+/-), it's likely a value definition (e.g. ....0x7F = Inf). Skip it.
                 if (!string.IsNullOrEmpty(indent) && indent.Contains(".") && string.IsNullOrEmpty(sign)) continue;
 
-                // Clean leading separators commonly used in RA notes
                 while (rawDesc.Length > 0 && (rawDesc[0] == '|' || rawDesc[0] == ':' || rawDesc[0] == '=' || rawDesc[0] == '-'))
-                {
                     rawDesc = rawDesc.Substring(1).Trim();
-                }
 
-                // SKIP Empty descriptions (just structural offsets)
                 if (string.IsNullOrWhiteSpace(rawDesc)) continue;
-
-                // SKIP "Pointer" descriptions (they define structure, not leaf data)
                 if (rawDesc.Contains("Pointer", StringComparison.OrdinalIgnoreCase)) continue;
 
-                // Check for Size Tag [x]
                 var tagMatch = Regex.Match(rawDesc, @"\[(.*?)\]");
-
                 if (!tagMatch.Success)
                 {
                     errors.Add($"Line {i + 1}: Missing size tag. Content: '{rawDesc}'");
                 }
                 else
                 {
-                    // Typo check
                     string tag = tagMatch.Groups[1].Value;
                     bool isValid = RaLogicSyntax.MemorySizes.Contains(tag) ||
                                    tag.Equals("Float", StringComparison.OrdinalIgnoreCase) ||
                                    tag.EndsWith(" bytes");
-
-                    if (!isValid)
-                    {
-                        errors.Add($"Line {i + 1}: Typo detected in tag '[{tag}]'.");
-                    }
+                    if (!isValid) errors.Add($"Line {i + 1}: Typo detected in tag '[{tag}]'.");
                 }
             }
 
-            if (errors.Count > 0)
-            {
-                MessageBox.Show(string.Join("\n", errors), "Code Note Issues", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            else
-            {
-                MessageBox.Show("No size syntax errors found!", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
+            if (errors.Count > 0) MessageBox.Show(string.Join("\n", errors), "Code Note Issues", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            else MessageBox.Show("No size syntax errors found!", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 }

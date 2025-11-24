@@ -27,6 +27,9 @@ namespace RALogicEditor
         // Manages the Recent Files list in the File menu
         private readonly RecentFilesManager _recentFiles = new();
 
+        // Logic Validator Service (Instantiated locally for now, could be injected)
+        private readonly ILogicValidator _validator = new LogicValidator();
+
         // -- State Tracking --
         private IAssetItem? _selectedAsset; // The achievement/leaderboard currently being edited
         private bool _isLoading;            // Flag to suppress events during bulk updates
@@ -214,8 +217,8 @@ namespace RALogicEditor
                 // Flatten segments (Core/Alt or Start/Cancel/etc) into a single list for the validator
                 var allGroups = segments.Values.SelectMany(g => g).ToList();
 
-                // Run validation
-                var issues = LogicValidator.ValidateAsset(allGroups, asset);
+                // Run validation using the instance service
+                var issues = _validator.ValidateAsset(allGroups, asset);
 
                 _globalIssues.AddRange(issues);
             }

@@ -6,9 +6,9 @@ using System.Linq;
 
 namespace RALogicEditor.Services
 {
-    public static class LogicValidator
+    public class LogicValidator : ILogicValidator
     {
-        private static List<ValidationIssue> ValidateGroup(AchievementConditionGroup group, bool otherGroupsHaveReset, IAssetItem? asset)
+        private List<ValidationIssue> ValidateGroup(AchievementConditionGroup group, bool otherGroupsHaveReset, IAssetItem? asset)
         {
             var issues = new List<ValidationIssue>();
             if (group.Conditions.Count == 0) return issues;
@@ -29,7 +29,7 @@ namespace RALogicEditor.Services
         }
 
         // Validates the entire asset (all groups) for cross-group logic like Delta checks
-        public static List<ValidationIssue> ValidateAsset(List<AchievementConditionGroup> groups, IAssetItem? asset = null)
+        public List<ValidationIssue> ValidateAsset(List<AchievementConditionGroup> groups, IAssetItem? asset = null)
         {
             var allIssues = new List<ValidationIssue>();
             if (groups == null) return allIssues;
@@ -53,7 +53,7 @@ namespace RALogicEditor.Services
             return allIssues;
         }
 
-        private static void CheckBadChains(AchievementConditionGroup group, List<ValidationIssue> issues, IAssetItem? asset)
+        private void CheckBadChains(AchievementConditionGroup group, List<ValidationIssue> issues, IAssetItem? asset)
         {
             var last = group.Conditions.Last();
             if (RaLogicSyntax.ArithmeticFlags.Contains(last.Flag) && last.Flag != "Remember")
@@ -69,7 +69,7 @@ namespace RALogicEditor.Services
             }
         }
 
-        private static void CheckPauseLocks(AchievementConditionGroup group, List<ValidationIssue> issues, bool otherGroupsHaveReset, IAssetItem? asset)
+        private void CheckPauseLocks(AchievementConditionGroup group, List<ValidationIssue> issues, bool otherGroupsHaveReset, IAssetItem? asset)
         {
             // We check for ResetIf anywhere in the current group
             bool hasLocalResetIf = group.Conditions.Any(c => c.Flag == "Reset If");
@@ -121,7 +121,7 @@ namespace RALogicEditor.Services
             }
         }
 
-        private static void CheckStaleAddAddress(AchievementConditionGroup group, List<ValidationIssue> issues, IAssetItem? asset)
+        private void CheckStaleAddAddress(AchievementConditionGroup group, List<ValidationIssue> issues, IAssetItem? asset)
         {
             foreach (var cond in group.Conditions)
             {
@@ -142,7 +142,7 @@ namespace RALogicEditor.Services
             }
         }
 
-        private static void CheckSizeMismatches(AchievementConditionGroup group, List<ValidationIssue> issues, IAssetItem? asset)
+        private void CheckSizeMismatches(AchievementConditionGroup group, List<ValidationIssue> issues, IAssetItem? asset)
         {
             foreach (var cond in group.Conditions)
             {
@@ -169,23 +169,17 @@ namespace RALogicEditor.Services
             }
         }
 
-        private static void CheckMissingDeltas(List<AchievementConditionGroup> groups, List<ValidationIssue> issues, IAssetItem? asset)
+        private void CheckMissingDeltas(List<AchievementConditionGroup> groups, List<ValidationIssue> issues, IAssetItem? asset)
         {
             if (groups == null || groups.Count == 0) return;
 
             // Helper: Is this group explicitly disabled (e.g. 0=1)?
-            // If a group is always false, it can't trigger, so it doesn't need a delta.
             bool IsGroupAlwaysFalse(AchievementConditionGroup g)
             {
                 foreach (var cond in g.Conditions)
                 {
-                    // Check for static value comparison: Value = Value
-                    // e.g. 0 = 1, 1 > 2
                     if (cond.LeftOperand.Type == "Value" && cond.RightOperand.Type == "Value")
                     {
-                        // Parse values to check if condition is false
-                        // Simplifying assumption: User puts 0=1 for false.
-                        // A rigorous check would parse all operators, but generally 0=1 is standard.
                         if (cond.Operator == "=" && cond.LeftOperand.Value != cond.RightOperand.Value) return true;
                     }
                 }
@@ -204,12 +198,8 @@ namespace RALogicEditor.Services
             if (coreHasDelta) return;
 
             // If Core is empty or valid but no delta, check Alts.
-
             if (groups.Count == 1)
             {
-                // If single group (Core) and it's always false, suppress warning? 
-                // No, because then the achievement does nothing. 
-                // But technically it satisfies the "Safe" requirement of not triggering instantly.
                 if (IsGroupAlwaysFalse(groups[0])) return;
 
                 issues.Add(new ValidationIssue(
@@ -227,7 +217,6 @@ namespace RALogicEditor.Services
             bool allAltsHaveDelta = true;
             for (int i = 1; i < groups.Count; i++)
             {
-                // If an alt group is "Always False" (disabled), it doesn't need a delta.
                 if (IsGroupAlwaysFalse(groups[i])) continue;
 
                 if (!GroupHasDelta(groups[i]))

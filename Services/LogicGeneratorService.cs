@@ -6,9 +6,9 @@ using System.Text.RegularExpressions;
 
 namespace RALogicEditor.Services
 {
-    public static class LogicGeneratorService
+    public class LogicGeneratorService : ILogicGenerator
     {
-        public static void ApplyGeneratorRules(
+        public void ApplyGeneratorRules(
             List<AchievementConditionGroup> activeGroups,
             Dictionary<int, GeneratorDefinition> generatorRules)
         {
@@ -51,7 +51,7 @@ namespace RALogicEditor.Services
             }
         }
 
-        private static void ApplyOffsetToOperand(Operand op, string targetAddress, int stride, int multiplier)
+        private void ApplyOffsetToOperand(Operand op, string targetAddress, int stride, int multiplier)
         {
             if (op == null || string.IsNullOrEmpty(op.Value)) return;
             if (op.Type == "Recall") return;
@@ -66,7 +66,6 @@ namespace RALogicEditor.Services
                     long offset = (long)stride * multiplier;
                     long newVal = baseVal + offset;
                     int padding = cleanOp.Length;
-                    // Changed from X to x to ensure lowercase output (e.g. 0x4c instead of 0x4C)
                     op.Value = "0x" + newVal.ToString($"x{padding}");
                 }
             }

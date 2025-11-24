@@ -15,298 +15,292 @@
 
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
-            this.panelTop = new System.Windows.Forms.Panel();
-            this.panelRowVariable = new System.Windows.Forms.Panel();
-            this.chkShowLeafsOnly = new System.Windows.Forms.CheckBox();
-            this.cmbVariables = new System.Windows.Forms.ComboBox();
-            this.lblVariable = new System.Windows.Forms.Label();
-            this.panelRowAddress = new System.Windows.Forms.Panel();
-            this.cmbNotes = new System.Windows.Forms.ComboBox();
-            this.lblSelect = new System.Windows.Forms.Label();
-            this.panelRowSearch = new System.Windows.Forms.Panel();
-            this.txtSearch = new System.Windows.Forms.TextBox();
-            this.btnReload = new System.Windows.Forms.Button();
-            this.lblSearch = new System.Windows.Forms.Label();
-            this.txtNoteBody = new System.Windows.Forms.TextBox();
-            this.cmsNoteContext = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.cutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.copyToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.pasteToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
-            this.checkSizeToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.statusStripBottom = new System.Windows.Forms.StatusStrip();
-            this.lblOffsetChain = new System.Windows.Forms.ToolStripStatusLabel();
-            this.panelBottom = new System.Windows.Forms.Panel();
-            this.btnCopyAll = new System.Windows.Forms.Button();
-            this.panelTop.SuspendLayout();
-            this.panelRowVariable.SuspendLayout();
-            this.panelRowAddress.SuspendLayout();
-            this.panelRowSearch.SuspendLayout();
-            this.cmsNoteContext.SuspendLayout();
-            this.statusStripBottom.SuspendLayout();
-            this.panelBottom.SuspendLayout();
-            this.SuspendLayout();
+            components = new System.ComponentModel.Container();
+            panelTop = new Panel();
+            panelRowVariable = new Panel();
+            chkShowLeafsOnly = new CheckBox();
+            cmbVariables = new ComboBox();
+            lblVariable = new Label();
+            panelRowAddress = new Panel();
+            cmbNotes = new ComboBox();
+            lblSelect = new Label();
+            panelRowSearch = new Panel();
+            txtSearch = new TextBox();
+            btnReload = new Button();
+            lblSearch = new Label();
+            txtNoteBody = new TextBox();
+            cmsNoteContext = new ContextMenuStrip(components);
+            cutToolStripMenuItem = new ToolStripMenuItem();
+            copyToolStripMenuItem = new ToolStripMenuItem();
+            pasteToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparator1 = new ToolStripSeparator();
+            checkSizeToolStripMenuItem = new ToolStripMenuItem();
+            statusStripBottom = new StatusStrip();
+            lblOffsetChain = new ToolStripStatusLabel();
+            panelBottom = new Panel();
+            btnCopyAll = new Button();
+            panelTop.SuspendLayout();
+            panelRowVariable.SuspendLayout();
+            panelRowAddress.SuspendLayout();
+            panelRowSearch.SuspendLayout();
+            cmsNoteContext.SuspendLayout();
+            statusStripBottom.SuspendLayout();
+            panelBottom.SuspendLayout();
+            SuspendLayout();
             // 
             // panelTop
             // 
-            this.panelTop.Controls.Add(this.panelRowVariable);
-            this.panelTop.Controls.Add(this.panelRowAddress);
-            this.panelTop.Controls.Add(this.panelRowSearch);
-            this.panelTop.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelTop.Location = new System.Drawing.Point(0, 0);
-            this.panelTop.Name = "panelTop";
-            this.panelTop.Size = new System.Drawing.Size(300, 96);
-            this.panelTop.TabIndex = 0;
+            panelTop.Controls.Add(panelRowVariable);
+            panelTop.Controls.Add(panelRowAddress);
+            panelTop.Controls.Add(panelRowSearch);
+            panelTop.Dock = DockStyle.Top;
+            panelTop.Location = new Point(0, 0);
+            panelTop.Name = "panelTop";
+            panelTop.Size = new Size(300, 96);
+            panelTop.TabIndex = 0;
             // 
             // panelRowVariable
             // 
-            this.panelRowVariable.Controls.Add(this.chkShowLeafsOnly);
-            this.panelRowVariable.Controls.Add(this.cmbVariables);
-            this.panelRowVariable.Controls.Add(this.lblVariable);
-            this.panelRowVariable.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelRowVariable.Location = new System.Drawing.Point(0, 64);
-            this.panelRowVariable.Name = "panelRowVariable";
-            this.panelRowVariable.Padding = new System.Windows.Forms.Padding(5, 2, 5, 2);
-            this.panelRowVariable.Size = new System.Drawing.Size(300, 30);
-            this.panelRowVariable.TabIndex = 2;
+            panelRowVariable.Controls.Add(chkShowLeafsOnly);
+            panelRowVariable.Controls.Add(cmbVariables);
+            panelRowVariable.Controls.Add(lblVariable);
+            panelRowVariable.Dock = DockStyle.Top;
+            panelRowVariable.Location = new Point(0, 64);
+            panelRowVariable.Name = "panelRowVariable";
+            panelRowVariable.Padding = new Padding(5, 2, 5, 2);
+            panelRowVariable.Size = new Size(300, 30);
+            panelRowVariable.TabIndex = 2;
             // 
             // chkShowLeafsOnly
             // 
-            this.chkShowLeafsOnly.AutoSize = true;
-            this.chkShowLeafsOnly.Dock = System.Windows.Forms.DockStyle.Right;
-            this.chkShowLeafsOnly.Location = new System.Drawing.Point(200, 2);
-            this.chkShowLeafsOnly.Name = "chkShowLeafsOnly";
-            this.chkShowLeafsOnly.Padding = new System.Windows.Forms.Padding(5, 0, 0, 0);
-            this.chkShowLeafsOnly.Size = new System.Drawing.Size(95, 26);
-            this.chkShowLeafsOnly.TabIndex = 2;
-            this.chkShowLeafsOnly.Text = "Show Leafs Only";
-            this.chkShowLeafsOnly.UseVisualStyleBackColor = true;
+            chkShowLeafsOnly.AutoSize = true;
+            chkShowLeafsOnly.Dock = DockStyle.Right;
+            chkShowLeafsOnly.Location = new Point(177, 2);
+            chkShowLeafsOnly.Name = "chkShowLeafsOnly";
+            chkShowLeafsOnly.Padding = new Padding(5, 0, 0, 0);
+            chkShowLeafsOnly.Size = new Size(118, 26);
+            chkShowLeafsOnly.TabIndex = 2;
+            chkShowLeafsOnly.Text = "Show Leafs Only";
+            chkShowLeafsOnly.UseVisualStyleBackColor = true;
             // 
             // cmbVariables
             // 
-            this.cmbVariables.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.cmbVariables.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbVariables.FormattingEnabled = true;
-            this.cmbVariables.Location = new System.Drawing.Point(59, 2);
-            this.cmbVariables.Name = "cmbVariables";
-            this.cmbVariables.Size = new System.Drawing.Size(141, 23);
-            this.cmbVariables.TabIndex = 1;
-            this.cmbVariables.SelectedIndexChanged += new System.EventHandler(this.cmbVariables_SelectedIndexChanged);
-            this.cmbVariables.Format += new System.Windows.Forms.ListControlConvertEventHandler(this.cmbVariables_Format);
+            cmbVariables.Dock = DockStyle.Fill;
+            cmbVariables.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbVariables.FormattingEnabled = true;
+            cmbVariables.Location = new Point(59, 2);
+            cmbVariables.Name = "cmbVariables";
+            cmbVariables.Size = new Size(236, 23);
+            cmbVariables.TabIndex = 1;
+            cmbVariables.SelectedIndexChanged += cmbVariables_SelectedIndexChanged;
+            cmbVariables.Format += cmbVariables_Format;
             // 
             // lblVariable
             // 
-            this.lblVariable.AutoSize = true;
-            this.lblVariable.Dock = System.Windows.Forms.DockStyle.Left;
-            this.lblVariable.Location = new System.Drawing.Point(5, 2);
-            this.lblVariable.Name = "lblVariable";
-            this.lblVariable.Padding = new System.Windows.Forms.Padding(0, 4, 0, 0);
-            this.lblVariable.Size = new System.Drawing.Size(54, 19);
-            this.lblVariable.TabIndex = 0;
-            this.lblVariable.Text = "Variable: ";
+            lblVariable.AutoSize = true;
+            lblVariable.Dock = DockStyle.Left;
+            lblVariable.Location = new Point(5, 2);
+            lblVariable.Name = "lblVariable";
+            lblVariable.Padding = new Padding(0, 4, 0, 0);
+            lblVariable.Size = new Size(54, 19);
+            lblVariable.TabIndex = 0;
+            lblVariable.Text = "Variable: ";
             // 
             // panelRowAddress
             // 
-            this.panelRowAddress.Controls.Add(this.cmbNotes);
-            this.panelRowAddress.Controls.Add(this.lblSelect);
-            this.panelRowAddress.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelRowAddress.Location = new System.Drawing.Point(0, 32);
-            this.panelRowAddress.Name = "panelRowAddress";
-            this.panelRowAddress.Padding = new System.Windows.Forms.Padding(5, 5, 5, 2);
-            this.panelRowAddress.Size = new System.Drawing.Size(300, 32);
-            this.panelRowAddress.TabIndex = 1;
+            panelRowAddress.Controls.Add(cmbNotes);
+            panelRowAddress.Controls.Add(lblSelect);
+            panelRowAddress.Dock = DockStyle.Top;
+            panelRowAddress.Location = new Point(0, 32);
+            panelRowAddress.Name = "panelRowAddress";
+            panelRowAddress.Padding = new Padding(5, 5, 5, 2);
+            panelRowAddress.Size = new Size(300, 32);
+            panelRowAddress.TabIndex = 1;
             // 
             // cmbNotes
             // 
-            this.cmbNotes.AutoCompleteMode = System.Windows.Forms.AutoCompleteMode.SuggestAppend;
-            this.cmbNotes.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems;
-            this.cmbNotes.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.cmbNotes.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbNotes.FormattingEnabled = true;
-            this.cmbNotes.Location = new System.Drawing.Point(60, 5);
-            this.cmbNotes.Name = "cmbNotes";
-            this.cmbNotes.Size = new System.Drawing.Size(235, 23);
-            this.cmbNotes.TabIndex = 1;
-            this.cmbNotes.SelectedIndexChanged += new System.EventHandler(this.cmbNotes_SelectedIndexChanged);
-            this.cmbNotes.Format += new System.Windows.Forms.ListControlConvertEventHandler(this.cmbNotes_Format);
+            cmbNotes.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+            cmbNotes.AutoCompleteSource = AutoCompleteSource.ListItems;
+            cmbNotes.Dock = DockStyle.Fill;
+            cmbNotes.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbNotes.FormattingEnabled = true;
+            cmbNotes.Location = new Point(60, 5);
+            cmbNotes.Name = "cmbNotes";
+            cmbNotes.Size = new Size(235, 23);
+            cmbNotes.TabIndex = 1;
+            cmbNotes.SelectedIndexChanged += cmbNotes_SelectedIndexChanged;
+            cmbNotes.Format += cmbNotes_Format;
             // 
             // lblSelect
             // 
-            this.lblSelect.AutoSize = true;
-            this.lblSelect.Dock = System.Windows.Forms.DockStyle.Left;
-            this.lblSelect.Location = new System.Drawing.Point(5, 5);
-            this.lblSelect.Name = "lblSelect";
-            this.lblSelect.Padding = new System.Windows.Forms.Padding(0, 4, 0, 0);
-            this.lblSelect.Size = new System.Drawing.Size(55, 19);
-            this.lblSelect.TabIndex = 0;
-            this.lblSelect.Text = "Address: ";
+            lblSelect.AutoSize = true;
+            lblSelect.Dock = DockStyle.Left;
+            lblSelect.Location = new Point(5, 5);
+            lblSelect.Name = "lblSelect";
+            lblSelect.Padding = new Padding(0, 4, 0, 0);
+            lblSelect.Size = new Size(55, 19);
+            lblSelect.TabIndex = 0;
+            lblSelect.Text = "Address: ";
             // 
             // panelRowSearch
             // 
-            this.panelRowSearch.Controls.Add(this.txtSearch);
-            this.panelRowSearch.Controls.Add(this.btnReload);
-            this.panelRowSearch.Controls.Add(this.lblSearch);
-            this.panelRowSearch.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelRowSearch.Location = new System.Drawing.Point(0, 0);
-            this.panelRowSearch.Name = "panelRowSearch";
-            this.panelRowSearch.Padding = new System.Windows.Forms.Padding(5, 5, 5, 2);
-            this.panelRowSearch.Size = new System.Drawing.Size(300, 32);
-            this.panelRowSearch.TabIndex = 0;
+            panelRowSearch.Controls.Add(txtSearch);
+            panelRowSearch.Controls.Add(btnReload);
+            panelRowSearch.Controls.Add(lblSearch);
+            panelRowSearch.Dock = DockStyle.Top;
+            panelRowSearch.Location = new Point(0, 0);
+            panelRowSearch.Name = "panelRowSearch";
+            panelRowSearch.Padding = new Padding(5, 5, 5, 2);
+            panelRowSearch.Size = new Size(300, 32);
+            panelRowSearch.TabIndex = 0;
             // 
             // txtSearch
             // 
-            this.txtSearch.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.txtSearch.Location = new System.Drawing.Point(53, 5);
-            this.txtSearch.Name = "txtSearch";
-            this.txtSearch.Size = new System.Drawing.Size(182, 23);
-            this.txtSearch.TabIndex = 1;
-            this.txtSearch.TextChanged += new System.EventHandler(this.txtSearch_TextChanged);
+            txtSearch.Dock = DockStyle.Fill;
+            txtSearch.Location = new Point(53, 5);
+            txtSearch.Name = "txtSearch";
+            txtSearch.Size = new Size(182, 23);
+            txtSearch.TabIndex = 1;
+            txtSearch.TextChanged += txtSearch_TextChanged;
             // 
             // btnReload
             // 
-            this.btnReload.Dock = System.Windows.Forms.DockStyle.Right;
-            this.btnReload.Location = new System.Drawing.Point(235, 5);
-            this.btnReload.Name = "btnReload";
-            this.btnReload.Size = new System.Drawing.Size(60, 25);
-            this.btnReload.TabIndex = 2;
-            this.btnReload.Text = "Reload";
-            this.btnReload.UseVisualStyleBackColor = true;
-            this.btnReload.Click += new System.EventHandler(this.btnReload_Click);
+            btnReload.Dock = DockStyle.Right;
+            btnReload.Location = new Point(235, 5);
+            btnReload.Name = "btnReload";
+            btnReload.Size = new Size(60, 25);
+            btnReload.TabIndex = 2;
+            btnReload.Text = "Reload";
+            btnReload.UseVisualStyleBackColor = true;
+            btnReload.Click += btnReload_Click;
             // 
             // lblSearch
             // 
-            this.lblSearch.AutoSize = true;
-            this.lblSearch.Dock = System.Windows.Forms.DockStyle.Left;
-            this.lblSearch.Location = new System.Drawing.Point(5, 5);
-            this.lblSearch.Name = "lblSearch";
-            this.lblSearch.Padding = new System.Windows.Forms.Padding(0, 4, 0, 0);
-            this.lblSearch.Size = new System.Drawing.Size(48, 19);
-            this.lblSearch.TabIndex = 0;
-            this.lblSearch.Text = "Search: ";
+            lblSearch.AutoSize = true;
+            lblSearch.Dock = DockStyle.Left;
+            lblSearch.Location = new Point(5, 5);
+            lblSearch.Name = "lblSearch";
+            lblSearch.Padding = new Padding(0, 4, 0, 0);
+            lblSearch.Size = new Size(48, 19);
+            lblSearch.TabIndex = 0;
+            lblSearch.Text = "Search: ";
             // 
             // txtNoteBody
             // 
-            this.txtNoteBody.AcceptsReturn = true;
-            this.txtNoteBody.AcceptsTab = true;
-            this.txtNoteBody.ContextMenuStrip = this.cmsNoteContext;
-            this.txtNoteBody.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.txtNoteBody.Font = new System.Drawing.Font("Consolas", 9.75F);
-            this.txtNoteBody.Location = new System.Drawing.Point(0, 96);
-            this.txtNoteBody.Multiline = true;
-            this.txtNoteBody.Name = "txtNoteBody";
-            this.txtNoteBody.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtNoteBody.Size = new System.Drawing.Size(300, 253);
-            this.txtNoteBody.TabIndex = 1;
-            this.txtNoteBody.TextChanged += new System.EventHandler(this.txtNoteBody_TextChanged);
+            txtNoteBody.AcceptsReturn = true;
+            txtNoteBody.AcceptsTab = true;
+            txtNoteBody.ContextMenuStrip = cmsNoteContext;
+            txtNoteBody.Dock = DockStyle.Fill;
+            txtNoteBody.Font = new Font("Consolas", 9.75F);
+            txtNoteBody.Location = new Point(0, 96);
+            txtNoteBody.Multiline = true;
+            txtNoteBody.Name = "txtNoteBody";
+            txtNoteBody.ScrollBars = ScrollBars.Vertical;
+            txtNoteBody.Size = new Size(300, 253);
+            txtNoteBody.TabIndex = 1;
+            txtNoteBody.TextChanged += txtNoteBody_TextChanged;
             // 
             // cmsNoteContext
             // 
-            this.cmsNoteContext.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.cutToolStripMenuItem,
-            this.copyToolStripMenuItem,
-            this.pasteToolStripMenuItem,
-            this.toolStripSeparator1,
-            this.checkSizeToolStripMenuItem});
-            this.cmsNoteContext.Name = "cmsNoteContext";
-            this.cmsNoteContext.Size = new System.Drawing.Size(209, 98);
+            cmsNoteContext.Items.AddRange(new ToolStripItem[] { cutToolStripMenuItem, copyToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator1, checkSizeToolStripMenuItem });
+            cmsNoteContext.Name = "cmsNoteContext";
+            cmsNoteContext.Size = new Size(209, 98);
             // 
             // cutToolStripMenuItem
             // 
-            this.cutToolStripMenuItem.Name = "cutToolStripMenuItem";
-            this.cutToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.X)));
-            this.cutToolStripMenuItem.Size = new System.Drawing.Size(208, 22);
-            this.cutToolStripMenuItem.Text = "Cut";
-            this.cutToolStripMenuItem.Click += new System.EventHandler(this.cutToolStripMenuItem_Click);
+            cutToolStripMenuItem.Name = "cutToolStripMenuItem";
+            cutToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.X;
+            cutToolStripMenuItem.Size = new Size(208, 22);
+            cutToolStripMenuItem.Text = "Cut";
+            cutToolStripMenuItem.Click += cutToolStripMenuItem_Click;
             // 
             // copyToolStripMenuItem
             // 
-            this.copyToolStripMenuItem.Name = "copyToolStripMenuItem";
-            this.copyToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.C)));
-            this.copyToolStripMenuItem.Size = new System.Drawing.Size(208, 22);
-            this.copyToolStripMenuItem.Text = "Copy";
-            this.copyToolStripMenuItem.Click += new System.EventHandler(this.copyToolStripMenuItem_Click);
+            copyToolStripMenuItem.Name = "copyToolStripMenuItem";
+            copyToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.C;
+            copyToolStripMenuItem.Size = new Size(208, 22);
+            copyToolStripMenuItem.Text = "Copy";
+            copyToolStripMenuItem.Click += copyToolStripMenuItem_Click;
             // 
             // pasteToolStripMenuItem
             // 
-            this.pasteToolStripMenuItem.Name = "pasteToolStripMenuItem";
-            this.pasteToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.V)));
-            this.pasteToolStripMenuItem.Size = new System.Drawing.Size(208, 22);
-            this.pasteToolStripMenuItem.Text = "Paste";
-            this.pasteToolStripMenuItem.Click += new System.EventHandler(this.pasteToolStripMenuItem_Click);
+            pasteToolStripMenuItem.Name = "pasteToolStripMenuItem";
+            pasteToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.V;
+            pasteToolStripMenuItem.Size = new Size(208, 22);
+            pasteToolStripMenuItem.Text = "Paste";
+            pasteToolStripMenuItem.Click += pasteToolStripMenuItem_Click;
             // 
             // toolStripSeparator1
             // 
-            this.toolStripSeparator1.Name = "toolStripSeparator1";
-            this.toolStripSeparator1.Size = new System.Drawing.Size(205, 6);
+            toolStripSeparator1.Name = "toolStripSeparator1";
+            toolStripSeparator1.Size = new Size(205, 6);
             // 
             // checkSizeToolStripMenuItem
             // 
-            this.checkSizeToolStripMenuItem.Name = "checkSizeToolStripMenuItem";
-            this.checkSizeToolStripMenuItem.Size = new System.Drawing.Size(208, 22);
-            this.checkSizeToolStripMenuItem.Text = "Check for Code Note Size";
-            this.checkSizeToolStripMenuItem.Click += new System.EventHandler(this.checkSizeToolStripMenuItem_Click);
+            checkSizeToolStripMenuItem.Name = "checkSizeToolStripMenuItem";
+            checkSizeToolStripMenuItem.Size = new Size(208, 22);
+            checkSizeToolStripMenuItem.Text = "Check for Code Note Size";
+            checkSizeToolStripMenuItem.Click += checkSizeToolStripMenuItem_Click;
             // 
             // statusStripBottom
             // 
-            this.statusStripBottom.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.lblOffsetChain});
-            this.statusStripBottom.Location = new System.Drawing.Point(0, 378);
-            this.statusStripBottom.Name = "statusStripBottom";
-            this.statusStripBottom.Size = new System.Drawing.Size(300, 22);
-            this.statusStripBottom.TabIndex = 2;
-            this.statusStripBottom.Text = "statusStrip1";
+            statusStripBottom.Items.AddRange(new ToolStripItem[] { lblOffsetChain });
+            statusStripBottom.Location = new Point(0, 378);
+            statusStripBottom.Name = "statusStripBottom";
+            statusStripBottom.Size = new Size(300, 22);
+            statusStripBottom.TabIndex = 2;
+            statusStripBottom.Text = "statusStrip1";
             // 
             // lblOffsetChain
             // 
-            this.lblOffsetChain.Name = "lblOffsetChain";
-            this.lblOffsetChain.Size = new System.Drawing.Size(39, 17);
-            this.lblOffsetChain.Text = "Ready";
+            lblOffsetChain.Name = "lblOffsetChain";
+            lblOffsetChain.Size = new Size(39, 17);
+            lblOffsetChain.Text = "Ready";
             // 
             // panelBottom
             // 
-            this.panelBottom.Controls.Add(this.btnCopyAll);
-            this.panelBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panelBottom.Location = new System.Drawing.Point(0, 349);
-            this.panelBottom.Name = "panelBottom";
-            this.panelBottom.Padding = new System.Windows.Forms.Padding(2);
-            this.panelBottom.Size = new System.Drawing.Size(300, 29);
-            this.panelBottom.TabIndex = 3;
+            panelBottom.Controls.Add(btnCopyAll);
+            panelBottom.Dock = DockStyle.Bottom;
+            panelBottom.Location = new Point(0, 349);
+            panelBottom.Name = "panelBottom";
+            panelBottom.Padding = new Padding(2);
+            panelBottom.Size = new Size(300, 29);
+            panelBottom.TabIndex = 3;
             // 
             // btnCopyAll
             // 
-            this.btnCopyAll.Dock = System.Windows.Forms.DockStyle.Right;
-            this.btnCopyAll.Location = new System.Drawing.Point(223, 2);
-            this.btnCopyAll.Name = "btnCopyAll";
-            this.btnCopyAll.Size = new System.Drawing.Size(75, 25);
-            this.btnCopyAll.TabIndex = 0;
-            this.btnCopyAll.Text = "Copy All";
-            this.btnCopyAll.UseVisualStyleBackColor = true;
-            this.btnCopyAll.Click += new System.EventHandler(this.btnCopyAll_Click);
+            btnCopyAll.Dock = DockStyle.Right;
+            btnCopyAll.Location = new Point(223, 2);
+            btnCopyAll.Name = "btnCopyAll";
+            btnCopyAll.Size = new Size(75, 25);
+            btnCopyAll.TabIndex = 0;
+            btnCopyAll.Text = "Copy All";
+            btnCopyAll.UseVisualStyleBackColor = true;
+            btnCopyAll.Click += btnCopyAll_Click;
             // 
             // CodeNoteEditorControl
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.Controls.Add(this.txtNoteBody);
-            this.Controls.Add(this.panelBottom);
-            this.Controls.Add(this.statusStripBottom);
-            this.Controls.Add(this.panelTop);
-            this.Name = "CodeNoteEditorControl";
-            this.Size = new System.Drawing.Size(300, 400);
-            this.panelTop.ResumeLayout(false);
-            this.panelRowVariable.ResumeLayout(false);
-            this.panelRowVariable.PerformLayout();
-            this.panelRowAddress.ResumeLayout(false);
-            this.panelRowAddress.PerformLayout();
-            this.panelRowSearch.ResumeLayout(false);
-            this.panelRowSearch.PerformLayout();
-            this.cmsNoteContext.ResumeLayout(false);
-            this.statusStripBottom.ResumeLayout(false);
-            this.statusStripBottom.PerformLayout();
-            this.panelBottom.ResumeLayout(false);
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            Controls.Add(txtNoteBody);
+            Controls.Add(panelBottom);
+            Controls.Add(statusStripBottom);
+            Controls.Add(panelTop);
+            Name = "CodeNoteEditorControl";
+            Size = new Size(300, 400);
+            panelTop.ResumeLayout(false);
+            panelRowVariable.ResumeLayout(false);
+            panelRowVariable.PerformLayout();
+            panelRowAddress.ResumeLayout(false);
+            panelRowAddress.PerformLayout();
+            panelRowSearch.ResumeLayout(false);
+            panelRowSearch.PerformLayout();
+            cmsNoteContext.ResumeLayout(false);
+            statusStripBottom.ResumeLayout(false);
+            statusStripBottom.PerformLayout();
+            panelBottom.ResumeLayout(false);
+            ResumeLayout(false);
+            PerformLayout();
 
         }
 
