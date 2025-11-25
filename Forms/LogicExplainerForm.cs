@@ -1,11 +1,12 @@
 ﻿using RALogicEditor.Models;
-using RALogicEditor.Services;
+using RALogicEditor.Services; // Ensures LogicExplainer is visible
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using System.Linq;
 
 namespace RALogicEditor.Forms
 {
