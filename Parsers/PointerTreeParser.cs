@@ -18,6 +18,7 @@ namespace RALogicEditor.Parsers
         public List<NoteNode> ParseNoteText(string noteText)
         {
             string[] lines = noteText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            // Check for pointer keyword in the entire text to enable tree parsing
             bool isPointerNote = noteText.Contains("Pointer", StringComparison.OrdinalIgnoreCase);
 
             var flatList = new List<NoteNode>();
@@ -44,8 +45,8 @@ namespace RALogicEditor.Parsers
                 NoteNode? lastAddedNode = null;
 
                 // Regex to parse specific pointer lines.
-                // Group 1: Indentation (e.g., "+", ".+", "..")
-                // Group 2: Sign (+ or -). Optional capture, but presence dictates if it's an offset.
+                // Group 1: Indentation (e.g., "+", ".+", "..", "++")
+                // Group 2: Sign (+ or -). Optional capture.
                 // Group 3: Hex value (0x...).
                 // Group 4: Description/Remainder.
                 var offsetRegex = new Regex(@"^([.\+\s]*)([-+]?)(0x[0-9A-Fa-f]+)\s*(?:[|=:]\s*)?(.*)$");
@@ -69,8 +70,8 @@ namespace RALogicEditor.Parsers
                         // Heuristic Logic to distinguish a "Pointer Offset" from a "Value Enumeration".
                         // 
                         // 1. If it has an explicit sign (+ or -), it is definitely an offset (e.g., +0x10).
-                        // 2. If it has indentation AND a separator (| or :), it is likely a struct offset (e.g., ..0x10 | Health).
-                        // 3. If it is indented but lacks a sign and separator (e.g., ....0x01 = Start), it is a value enum content.
+                        // 2. If it has indentation containing '+', it implies an offset chain (e.g., ++0x10).
+                        // 3. If it has indentation AND a separator (| or :), it is likely a struct offset (e.g., ..0x10 | Health).
 
                         bool hasSign = !string.IsNullOrEmpty(sign);
                         bool hasIndent = indentStr.Contains(".") || indentStr.Contains("+");
@@ -78,6 +79,12 @@ namespace RALogicEditor.Parsers
 
                         if (hasSign)
                         {
+                            isNode = true;
+                        }
+                        else if (indentStr.Contains("+"))
+                        {
+                            // FIX: Treat any indentation with '+' as a node, even if the sign was swallowed by the indent group.
+                            // Example: "+0x10" -> G1="+" G2="" G3="0x10".
                             isNode = true;
                         }
                         else if (hasIndent && hasSeparator)
@@ -90,13 +97,24 @@ namespace RALogicEditor.Parsers
 
                     if (isNode)
                     {
-                        // Determine indentation depth based on dots or pluses.
+                        // Determine indentation depth
                         string indentStr = match.Groups[1].Value;
                         int indent = 0;
                         if (indentStr.Contains("+"))
                         {
-                            // Standard format: count dots before the plus.
-                            indent = indentStr.Count(c => c == '.');
+                            // Standard/Mixed format
+                            if (indentStr.Contains("."))
+                            {
+                                // Dot-based (e.g., ".+") -> count dots
+                                indent = indentStr.Count(c => c == '.');
+                            }
+                            else
+                            {
+                                // Pure plus-based (e.g., "++") -> count pluses minus 1
+                                // + = 0, ++ = 1, etc.
+                                indent = indentStr.Count(c => c == '+') - 1;
+                                if (indent < 0) indent = 0;
+                            }
                         }
                         else
                         {
@@ -107,6 +125,14 @@ namespace RALogicEditor.Parsers
                         string sign = match.Groups[2].Value;
                         string hex = match.Groups[3].Value;
                         string desc = match.Groups[4].Value;
+
+                        // FIX: Strip leading separators (- : =) from the description
+                        // Loop to handle cases where multiple separators might exist or just whitespace
+                        while (desc.Length > 0 && (desc[0] == '-' || desc[0] == ':' || desc[0] == '=' || char.IsWhiteSpace(desc[0])))
+                        {
+                            desc = desc.Substring(1);
+                        }
+                        desc = desc.Trim();
 
                         // Normalization: Ensure offset string always has a sign for logic generation consistency.
                         string offset = sign + hex;
@@ -189,12 +215,36 @@ namespace RALogicEditor.Parsers
 
             // Parse the root note header to determine the pointer type (32-bit, 24-bit, BE, etc.)
             string noteHeader = baseNote.Note.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
-            char ptrPrefix = ' '; bool defaultMask = false;
 
-            if (noteHeader.Contains("32-bit BE Pointer", StringComparison.OrdinalIgnoreCase)) { ptrPrefix = 'G'; defaultMask = true; }
-            else if (noteHeader.Contains("32-bit Pointer", StringComparison.OrdinalIgnoreCase)) ptrPrefix = 'X';
+            char ptrPrefix = ' ';
+            bool defaultMask = false;
+
+            // FIX: Robust case-insensitive pointer detection
+            if (noteHeader.Contains("Pointer", StringComparison.OrdinalIgnoreCase))
+            {
+                // Default to 32-bit standard if just "Pointer" is found
+                ptrPrefix = 'X';
+
+                // Check for specific attributes
+                if (noteHeader.Contains("BE", StringComparison.OrdinalIgnoreCase))
+                {
+                    ptrPrefix = 'G'; // Big Endian
+                    defaultMask = true; // Default mask for BE pointers
+                }
+
+                if (noteHeader.Contains("24-bit", StringComparison.OrdinalIgnoreCase))
+                {
+                    ptrPrefix = 'W';
+                }
+                else if (noteHeader.Contains("16-bit", StringComparison.OrdinalIgnoreCase))
+                {
+                    // 16-bit pointer usually implies standard memory read (no prefix)
+                    ptrPrefix = ' ';
+                }
+            }
+            // Fallback for legacy/explicit exact matches just in case
+            else if (noteHeader.Contains("32-bit BE", StringComparison.OrdinalIgnoreCase)) { ptrPrefix = 'G'; defaultMask = true; }
             else if (noteHeader.Contains("24-bit", StringComparison.OrdinalIgnoreCase)) ptrPrefix = 'W';
-            else if (noteHeader.Contains("16-bit", StringComparison.OrdinalIgnoreCase)) ptrPrefix = ' ';
 
             // Check for explicit mask in note (e.g. &0xFFFFFF)
             long explicitMaskVal = -1;
