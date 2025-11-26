@@ -276,6 +276,7 @@ namespace RALogicEditor.Helpers
             if (hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) hex = hex.Substring(2);
             if (!long.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long targetVal)) return;
 
+            // 1. Exact Match
             var exactNote = AllNotes.FirstOrDefault(n => ParseAddress(n.Address) == targetVal);
             if (exactNote != null)
             {
@@ -283,6 +284,7 @@ namespace RALogicEditor.Helpers
                 return;
             }
 
+            // 2. Range Match
             var rangeMatch = _rangeCache.FirstOrDefault(r => targetVal >= r.Start && targetVal < r.End);
             if (rangeMatch.Note != null)
             {
@@ -305,7 +307,27 @@ namespace RALogicEditor.Helpers
                     "8-bit",
                     new List<long> { delta } // Treat as offset from base
                 );
+                return;
             }
+
+            // 3. No Note Found - Create New
+            string newAddress = "0x" + targetVal.ToString("x");
+            var newNote = new CodeNote
+            {
+                Address = newAddress,
+                Note = "[No code note for this address]", // Placeholder text
+                User = "Local"
+            };
+
+            // Add to collection and sort to maintain order
+            AllNotes.Add(newNote);
+            AllNotes.Sort((a, b) => ParseAddress(a.Address).CompareTo(ParseAddress(b.Address)));
+
+            // Notify UI to refresh dropdown list
+            NotesLoaded?.Invoke(this, EventArgs.Empty);
+
+            // Select the newly created note
+            SelectBaseNote(newNote);
         }
 
         public void HighlightVariable(List<long> offsets)
