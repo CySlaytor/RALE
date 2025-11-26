@@ -2,6 +2,7 @@
 using RALogicEditor.Models;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -10,7 +11,10 @@ namespace RALogicEditor.Services.Explainer.Processors
 {
     public class AccumulatorProcessor : ILogicProcessor
     {
-        public int Priority => 10; // Check Accumulators before single lines
+        // Priority MUST be higher (lower value) than PointerCleanupProcessor (5).
+        // Otherwise, the cleanup processor consumes the "Add Address" lines before we can detect 
+        // that they are actually part of an accumulator chain.
+        public int Priority => 3;
 
         public bool CanProcess(List<AchievementCondition> conditions, int currentIndex)
         {
@@ -21,7 +25,8 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (!isAccumulatorStart && cond.Flag == "Add Address")
             {
-                // Look ahead to see if this pointer chain feeds into an accumulator
+                // Look ahead to see if this pointer chain eventually feeds into an accumulator flag.
+                // If it does, we must claim it now to process the whole chain together.
                 int scan = currentIndex + 1;
                 while (scan < conditions.Count)
                 {
@@ -39,100 +44,120 @@ namespace RALogicEditor.Services.Explainer.Processors
         public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int index)
         {
             var result = new ProcessorResult { Category = ExplanationCategory.Complex };
+
+            // 1. Collect all consecutive accumulator chains that share the same structure.
+            // This allows us to group complex range logic (e.g., Delta > 0 AND Delta <= 14) 
+            // together with the Memory check (Mem = 15) into a single transition event.
+            var chains = new List<AccumulatorChainDef>();
             var usedIndices = new HashSet<int>();
+            int currentPtr = index;
 
-            // Extract the first accumulator chain
-            var chain1 = ExtractChain(conditions, index, out int ptr1);
-            foreach (var c in chain1) usedIndices.Add(conditions.IndexOf(c));
-
-            AchievementCondition? finalCond1 = null;
-            if (ptr1 < conditions.Count) finalCond1 = conditions[ptr1]; // The condition ending the chain (the comparison)
-
-            // Lookahead for a second chain to merge (detect Delta transition: Sum A < X -> Sum B = X)
-            List<AchievementCondition>? chain2 = null;
-            AchievementCondition? finalCond2 = null;
-            int ptr2 = ptr1 + 1;
-
-            if (ptr2 < conditions.Count && !usedIndices.Contains(ptr2))
+            while (currentPtr < conditions.Count)
             {
-                if (CanProcess(conditions, ptr2)) // Recursive check if next is accumulator
+                if (usedIndices.Contains(currentPtr)) break;
+
+                // Check if this line starts a valid accumulator chain
+                if (!CanProcess(conditions, currentPtr)) break;
+
+                var conditionsInChain = ExtractChain(conditions, currentPtr, out int endPtr);
+                if (conditionsInChain.Count == 0) break;
+
+                AchievementCondition? termCond = null;
+                if (endPtr < conditions.Count) termCond = conditions[endPtr];
+
+                var chainDef = new AccumulatorChainDef
                 {
-                    chain2 = ExtractChain(conditions, ptr2, out int end2);
-                    if (end2 < conditions.Count)
-                    {
-                        finalCond2 = conditions[end2];
-                        ptr2 = end2; // Update pointer
-                    }
+                    Conditions = conditionsInChain,
+                    Terminal = termCond,
+                    StartIndex = currentPtr,
+                    EndIndex = endPtr
+                };
+
+                // If this is not the first chain, verify it matches the logic structure of the first chain.
+                // e.g. Same addresses, same offsets.
+                if (chains.Count > 0)
+                {
+                    if (!AreChainsStructureEqual(chains[0].Conditions, chainDef.Conditions))
+                        break; // Different structure (e.g. different variable), stop collecting
                 }
+
+                chains.Add(chainDef);
+
+                // Mark indices as used (chain + terminal)
+                // Note: endPtr is the index of the terminal condition (if it exists) or index after chain.
+                int lastIdx = (termCond != null) ? endPtr : endPtr - 1;
+                for (int k = currentPtr; k <= lastIdx && k < conditions.Count; k++) usedIndices.Add(k);
+
+                currentPtr = endPtr + 1;
             }
 
-            // Attempt Merge into Transition Logic
-            bool merged = false;
-            if (chain1.Count > 0 && chain2 != null && chain2.Count > 0 && finalCond1 != null && finalCond2 != null)
+            // 2. Analyze Chains for Transition (Delta -> Mem)
+            // Split the collected chains into "From" (Delta) and "To" (Current Memory).
+            var deltaChains = chains.Where(c => IsChainDelta(c.Conditions)).ToList();
+            var memChains = chains.Where(c => !IsChainDelta(c.Conditions)).ToList();
+
+            // We merge into a single statement only if we have distinct Old and New states.
+            bool isTransition = deltaChains.Count > 0 && memChains.Count > 0;
+
+            if (isTransition)
             {
-                if (AreChainsDeltaPair(chain1, chain2))
-                {
-                    string op1 = finalCond1.Operator;
-                    string op2 = finalCond2.Operator;
-                    string val1 = ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1));
-                    string val2 = ctx.FormatValue(finalCond2.RightOperand, conditions.IndexOf(finalCond2));
+                // Merge Logic: "Changes from (A AND B) to (C)"
+                var fromConditions = deltaChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
+                var toConditions = memChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
 
-                    bool chain1IsDelta = IsChainDelta(chain1);
-                    string fromVal, toVal;
+                string fromText = string.Join(" AND ", fromConditions);
+                string toText = string.Join(" AND ", toConditions);
 
-                    if (chain1IsDelta)
-                    {
-                        fromVal = (op1 == "=") ? val1 : $"({op1} {val1})";
-                        toVal = (op2 == "=") ? val2 : $"({op2} {val2})";
-                    }
-                    else
-                    {
-                        fromVal = (op2 == "=") ? val2 : $"({op2} {val2})";
-                        toVal = (op1 == "=") ? val1 : $"({op1} {val1})";
-                    }
-
-                    var blocks = SegmentLogicBlocks(chain1);
-                    string id = Guid.NewGuid().ToString("N");
-                    result.DetailedDrillDowns[id] = GenerateChainDetails(blocks, ctx);
-                    string expandToken = $"[[EXPAND:{id}:{blocks.Count}]]";
-
-                    result.Text = $"Sum of {blocks.Count} items {expandToken} changes from {fromVal} to {toVal}";
-                    result.Category = ExplanationCategory.Transition;
-                    // Consumes both chains + their terminals
-                    result.ConditionsConsumed = (ptr2 - index) + 1;
-                    merged = true;
-                }
-            }
-
-            if (!merged)
-            {
-                // Fallback: Process chain 1 only
-                var blocks = SegmentLogicBlocks(chain1);
+                // Use the first chain to generate the drill-down details (assuming structure is identical)
+                var blocks = SegmentLogicBlocks(chains[0].Conditions);
                 string id = Guid.NewGuid().ToString("N");
                 result.DetailedDrillDowns[id] = GenerateChainDetails(blocks, ctx);
                 string expandToken = $"[[EXPAND:{id}:{blocks.Count}]]";
 
-                if (finalCond1 != null)
+                // Check for terminal flags on the final memory chain (e.g., Reset If) to interpret context
+                string suffix = "";
+                var finalMemChain = memChains.Last();
+                if (finalMemChain.Terminal != null)
                 {
+                    if (finalMemChain.Terminal.Flag == "Reset If") suffix = " (Reset If)";
+                    else if (finalMemChain.Terminal.Flag == "Pause If") suffix = " (Pause If)";
+                }
+
+                result.Text = $"Sum of {blocks.Count} items {expandToken} changes from ({fromText}) to ({toText}){suffix}";
+                result.Category = ExplanationCategory.Transition;
+
+                // Calculate total consumed lines based on the end of the last chain found.
+                int lastIndex = chains.Last().EndIndex;
+                result.ConditionsConsumed = (lastIndex - index) + 1;
+            }
+            else
+            {
+                // Standard Processing (Single Chain or non-matching sequence).
+                // We only process the FIRST chain here. The outer loop in LogicExplainer 
+                // will call Process again for the subsequent chains.
+                var chain1 = chains[0];
+                var blocks = SegmentLogicBlocks(chain1.Conditions);
+                string id = Guid.NewGuid().ToString("N");
+                result.DetailedDrillDowns[id] = GenerateChainDetails(blocks, ctx);
+                string expandToken = $"[[EXPAND:{id}:{blocks.Count}]]";
+
+                if (chain1.Terminal != null)
+                {
+                    var finalCond1 = chain1.Terminal;
                     if (finalCond1.Flag == "MeasuredIf")
                     {
-                        // Look for measured target in group
-                        string measuredTargetName = FindMeasuredTargetName(ctx.Group);
-                        string accSuffix = !string.IsNullOrEmpty(measuredTargetName)
-                            ? $". This condition controls when {measuredTargetName} is measured"
-                            : ". (MeasuredIf)";
+                        string valText = ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1));
+                        string opText = ctx.GetOperatorText(finalCond1.Operator);
 
-                        result.Text = $"Accumulator chain (sum of {blocks.Count} items {expandToken}){accSuffix}";
+                        string criteria = $"sum of {blocks.Count} items {expandToken} {opText} {valText}";
+
+                        result.Text = $"Accumulator: {criteria} (MeasuredIf)";
                         result.Category = ExplanationCategory.MeasuredIf;
                     }
                     else if (finalCond1.Flag.StartsWith("Measured"))
                     {
-                        // Handle Measured accumulator
-                        bool isHitChain = finalCond1.Flag.Contains("Hits");
-                        // Note: AddHits makes the accumulator count hits.
-                        if (chain1.Any(c => c.Flag.Contains("Hits"))) isHitChain = true;
+                        bool isHitChain = chain1.Conditions.Any(c => c.Flag.Contains("Hits")) || finalCond1.Flag.Contains("Hits");
                         string label = isHitChain ? "hits" : "value";
-
                         string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1));
                         result.Text = $"Start measuring {label} up to {valText}: {expandToken}";
                     }
@@ -140,13 +165,10 @@ namespace RALogicEditor.Services.Explainer.Processors
                     {
                         string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1));
                         string opText = ctx.GetOperatorText(finalCond1.Operator);
-
-                        // -- START: Updates for PauseLock/Reset Logic on Accumulators --
-
                         string actionPrefix = "Trigger";
+
                         if (finalCond1.Flag == "Pause If")
                         {
-                            // PauseLock logic: PauseIf with Hits on the terminal condition (which sums the chain)
                             actionPrefix = (finalCond1.RequiredHits > 0) ? "Lock the achievement (PauseLock)" : "Pause the achievement";
                             result.Category = ExplanationCategory.Pause;
                         }
@@ -156,20 +178,17 @@ namespace RALogicEditor.Services.Explainer.Processors
                             result.Category = ExplanationCategory.Reset;
                         }
 
-                        if (chain1.Any(c => c.Flag.Contains("Hits")))
+                        if (chain1.Conditions.Any(c => c.Flag.Contains("Hits")))
                         {
-                            // AddHits Chain
                             result.Text = $"{actionPrefix} when at least {valText} of the following occur: {expandToken}";
                         }
                         else
                         {
-                            // AddSource Chain (Sum)
                             if (finalCond1.Flag == "Pause If" || finalCond1.Flag == "Reset If")
                                 result.Text = $"{actionPrefix} when sum of {blocks.Count} items {expandToken} {opText} {valText}";
                             else
                                 result.Text = $"Sum of {blocks.Count} items {expandToken} {opText} {valText}";
                         }
-                        // -- END: Updates --
                     }
                 }
                 else
@@ -177,11 +196,30 @@ namespace RALogicEditor.Services.Explainer.Processors
                     result.Text = $"Logic sequence {expandToken}";
                 }
 
-                // Consumes Chain1 + Terminal
-                result.ConditionsConsumed = (ptr1 - index) + 1;
+                // Consumed: chain conditions + terminal (if exists)
+                int consumed = (chain1.Terminal != null) ? (chain1.EndIndex - index) + 1 : (chain1.EndIndex - index);
+                result.ConditionsConsumed = consumed;
             }
 
             return result;
+        }
+
+        private string FormatTerminalCondition(AchievementCondition? cond, ExplanationContext ctx, List<AchievementCondition> conditions)
+        {
+            if (cond == null) return "(No Check)";
+            string val = ctx.FormatValue(cond.RightOperand, conditions.IndexOf(cond));
+            string op = cond.Operator;
+
+            if (op == "=") return val;
+            return $"{op} {val}";
+        }
+
+        private class AccumulatorChainDef
+        {
+            public List<AchievementCondition> Conditions { get; set; } = new();
+            public AchievementCondition? Terminal { get; set; }
+            public int StartIndex { get; set; }
+            public int EndIndex { get; set; }
         }
 
         private List<AchievementCondition> ExtractChain(List<AchievementCondition> conditions, int start, out int endPtr)
@@ -202,42 +240,87 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 ptr++;
             }
-            endPtr = ptr;
+            endPtr = ptr; // ptr is now at the condition AFTER the chain (the Terminal)
             return chain;
         }
 
-        // --- Helpers ported from LogicExplainer.cs ---
-
-        private bool AreChainsDeltaPair(List<AchievementCondition> chain1, List<AchievementCondition> chain2)
+        // Checks if two chains have the same logic structure (addresses, offsets, flags).
+        // This allows us to merge a Delta chain with a Mem chain if they target the same address.
+        private bool AreChainsStructureEqual(List<AchievementCondition> chain1, List<AchievementCondition> chain2)
         {
             if (chain1.Count != chain2.Count) return false;
-            bool chain1HasDelta = false;
-            bool chain2HasDelta = false;
 
             for (int i = 0; i < chain1.Count; i++)
             {
                 var c1 = chain1[i];
                 var c2 = chain2[i];
+
                 if (c1.Flag != c2.Flag) return false;
+
+                // Left Operand Check (Value/Address and Size)
+                if (!AreValuesEqual(c1.LeftOperand.Value, c2.LeftOperand.Value)) return false;
+                if (c1.LeftOperand.Size != c2.LeftOperand.Size) return false;
+
+                // Special Handling for Add Address (Pointers)
                 if (c1.Flag == "Add Address")
                 {
-                    if (c1.LeftOperand.Value != c2.LeftOperand.Value) return false;
+                    // Pointers must match strictly on Type (Mem vs Mem)
+                    if (c1.LeftOperand.Type != c2.LeftOperand.Type) return false;
+                    // Right Operand / Operator are ignored for Add Address as they are unused
                     continue;
                 }
-                bool c1IsDelta = c1.LeftOperand.Type == "Delta" || c1.LeftOperand.Type == "Prior";
-                bool c1IsMem = c1.LeftOperand.Type == "Mem";
-                bool c2IsDelta = c2.LeftOperand.Type == "Delta" || c2.LeftOperand.Type == "Prior";
-                bool c2IsMem = c2.LeftOperand.Type == "Mem";
-                if (c1.LeftOperand.Value != c2.LeftOperand.Value) return false;
 
-                if (c1IsDelta) chain1HasDelta = true;
-                if (c2IsDelta) chain2HasDelta = true;
-                if (c1IsDelta && c2IsMem) continue;
-                if (c1IsMem && c2IsDelta) continue;
-                if (c1.LeftOperand.Type == "Value" && c2.LeftOperand.Type == "Value") continue;
-                return false;
+                // Operator must match (e.g. empty vs empty, or math op)
+                string op1 = c1.Operator ?? "";
+                string op2 = c2.Operator ?? "";
+                if (op1 != op2) return false;
+
+                // For Add Source/Hits: Allow Delta/Mem/Prior mixing for transition detection
+                // We only verify that both sides are "Memory-like" (not constant Values)
+                bool c1IsMemLike = IsMemLike(c1.LeftOperand.Type);
+                bool c2IsMemLike = IsMemLike(c2.LeftOperand.Type);
+                if (c1IsMemLike != c2IsMemLike) return false;
+
+                // Right Operand Check
+                // Allow loose Type match for Values (Value vs Empty/Default) if values numerically match
+                bool c1RightIsVal = c1.RightOperand.Type == "Value" || c1.RightOperand.Type == "Float" || string.IsNullOrEmpty(c1.RightOperand.Type);
+                bool c2RightIsVal = c2.RightOperand.Type == "Value" || c2.RightOperand.Type == "Float" || string.IsNullOrEmpty(c2.RightOperand.Type);
+
+                if (c1RightIsVal && c2RightIsVal)
+                {
+                    if (!AreValuesEqual(c1.RightOperand.Value, c2.RightOperand.Value)) return false;
+                }
+                else
+                {
+                    // If types differ (e.g. Mem vs Value), fail structure check
+                    if (c1.RightOperand.Type != c2.RightOperand.Type) return false;
+                    // Strict value check for Mem/Delta
+                    if (!AreValuesEqual(c1.RightOperand.Value, c2.RightOperand.Value)) return false;
+                }
             }
-            return (chain1HasDelta && !chain2HasDelta) || (!chain1HasDelta && chain2HasDelta);
+            return true;
+        }
+
+        private bool AreValuesEqual(string v1, string v2)
+        {
+            if (v1 == v2) return true;
+
+            // Robust hex parsing to handle "0x0" == "0" == ""
+            string clean1 = string.IsNullOrEmpty(v1) ? "0" : v1.Trim().Replace("0x", "");
+            string clean2 = string.IsNullOrEmpty(v2) ? "0" : v2.Trim().Replace("0x", "");
+
+            if (long.TryParse(clean1, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long l1) &&
+                long.TryParse(clean2, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long l2))
+            {
+                return l1 == l2;
+            }
+
+            return clean1.Equals(clean2, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool IsMemLike(string type)
+        {
+            return type == "Mem" || type == "Delta" || type == "Prior" || type == "BCD" || type == "Inverted";
         }
 
         private bool IsChainDelta(List<AchievementCondition> chain) =>
@@ -282,13 +365,10 @@ namespace RALogicEditor.Services.Explainer.Processors
             {
                 sb.Append(c.Flag).Append('|');
                 sb.Append(c.LeftOperand.Type).Append('|');
-                // Ignore address for mem to detect structural matches
-                if (c.LeftOperand.Type != "Mem" && c.LeftOperand.Type != "Delta" && c.LeftOperand.Type != "Prior")
-                    sb.Append(c.LeftOperand.Value);
+                if (!IsMemLike(c.LeftOperand.Type)) sb.Append(c.LeftOperand.Value);
                 sb.Append('|').Append(c.Operator).Append('|');
                 sb.Append(c.RightOperand.Type).Append('|');
-                if (c.RightOperand.Type != "Mem" && c.RightOperand.Type != "Delta" && c.RightOperand.Type != "Prior")
-                    sb.Append(c.RightOperand.Value);
+                if (!IsMemLike(c.RightOperand.Type)) sb.Append(c.RightOperand.Value);
                 sb.Append('|').Append(c.RequiredHits).Append(';');
             }
             return sb.ToString();
@@ -303,59 +383,14 @@ namespace RALogicEditor.Services.Explainer.Processors
                 int seqLen = DetectConditionSequence(blocks, bIdx);
                 if (seqLen > 2)
                 {
-                    // Array Pattern
                     var exampleBlock = blocks[bIdx];
-                    var firstBlockCond = exampleBlock.FirstOrDefault(c => c.Flag != "Add Address");
-                    var lastBlock = blocks[bIdx + seqLen - 1];
-                    var lastBlockCond = lastBlock.FirstOrDefault(c => c.Flag != "Add Address");
-
                     var exampleLines = ExplainBlock(exampleBlock, ctx);
-
                     sbChain.AppendLine($"- {seqLen} conditions matching pattern (Array):");
-
-                    if (firstBlockCond != null && lastBlockCond != null)
-                    {
-                        string nameBase = ctx.GetName(firstBlockCond.LeftOperand.Value, ctx.Group.Conditions.IndexOf(firstBlockCond), true);
-                        string offsetStart = "0x" + firstBlockCond.LeftOperand.Value.Replace("0x", "");
-                        string offsetEnd = "0x" + lastBlockCond.LeftOperand.Value.Replace("0x", "");
-
-                        string nameLast = ctx.GetName(lastBlockCond.LeftOperand.Value, ctx.Group.Conditions.IndexOf(lastBlockCond), true);
-                        string cleanBase = Regex.Replace(nameBase, @"\s\+0x[0-9A-Fa-f]+$", "");
-                        string cleanLast = Regex.Replace(nameLast, @"\s\+0x[0-9A-Fa-f]+$", "");
-
-                        if (cleanBase == cleanLast && nameBase.Contains("+0x"))
-                        {
-                            if (nameBase.Contains("+0x"))
-                            {
-                                int plusIdx = nameBase.LastIndexOf("+0x");
-                                if (plusIdx != -1) nameBase = nameBase.Substring(0, plusIdx).TrimEnd() + "]";
-                            }
-
-                            if (offsetStart != offsetEnd)
-                                sbChain.AppendLine($"  > {nameBase} +{offsetStart} ~ {offsetEnd}");
-                            else
-                                sbChain.AppendLine($"  > {string.Join(" AND ", exampleLines)}");
-                        }
-                        else
-                        {
-                            sbChain.AppendLine($"  > {string.Join(" AND ", exampleLines)}");
-                            // Iterate remainder
-                            for (int k = 1; k < seqLen; k++)
-                            {
-                                var nextBlockLines = ExplainBlock(blocks[bIdx + k], ctx);
-                                sbChain.AppendLine($"  > {string.Join(" AND ", nextBlockLines)}");
-                            }
-                        }
-                    }
-                    else
-                    {
-                        sbChain.AppendLine($"  > {string.Join(" AND ", exampleLines)}");
-                    }
+                    sbChain.AppendLine($"  > {string.Join(" AND ", exampleLines)}");
                     bIdx += seqLen;
                 }
                 else
                 {
-                    // Single items
                     var blockLines = ExplainBlock(blocks[bIdx], ctx);
                     sbChain.AppendLine($"- {string.Join(" AND ", blockLines)}");
                     bIdx++;
@@ -371,7 +406,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             {
                 if (c.Flag == "Add Address") continue;
                 int realIdx = ctx.Group.Conditions.IndexOf(c);
-                // Temporarily instantiate a standard processor to explain the single line
                 lines.Add(ExplainSingleCondition(c, ctx, realIdx, true, true));
             }
             return lines;

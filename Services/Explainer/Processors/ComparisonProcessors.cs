@@ -1,13 +1,12 @@
 ﻿using RALogicEditor.Definitions;
 using RALogicEditor.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace RALogicEditor.Services.Explainer.Processors
 {
     // Handles Pointer Chain Setup (Add Address)
-    // Consumes the line but returns empty text so it doesn't clutter the explanation.
-    // The subsequent condition (e.g., Measured or Check) will use the pointer context to resolve names.
     public class PointerCleanupProcessor : ILogicProcessor
     {
         public int Priority => 5; // Very high priority to catch AddAddress before Standard
@@ -16,15 +15,11 @@ namespace RALogicEditor.Services.Explainer.Processors
         public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int index)
         {
             // We consume this line but return no text.
-            // This effectively hides the "Add Address" setup lines from the output,
-            // relying on the final condition's alias resolution (e.g. [Kills]) to tell the story.
             return new ProcessorResult { Text = "", Category = ExplanationCategory.Context };
         }
     }
 
     // Handles AndNext / OrNext chains
-    // Generates: "[Next Condition Variable] will operate once [Current Condition]... (AndNext)"
-    // This helps explain logic where flagless checks gate the execution of subsequent checks.
     public class AndNextProcessor : ILogicProcessor
     {
         public int Priority => 15;
@@ -42,7 +37,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                 var cond = conditions[ptr];
                 if (cond.Flag != "AndNext" && cond.Flag != "OrNext") break;
 
-                // Use Standard logic to format the condition text (e.g. "Save is Level 4")
+                // Process the gate condition
                 var std = new StandardConditionProcessor().Process(ctx, conditions, ptr);
                 string text = std.Text;
                 if (cond.Flag == "OrNext") text = "(OR) " + text;
@@ -51,23 +46,49 @@ namespace RALogicEditor.Services.Explainer.Processors
                 ptr++;
             }
 
-            // Look at the target (the condition after the chain) to contextualize what "will operate"
-            string targetName = "The next condition";
+            // Combine with the Target Condition (The logic being gated)
+            string targetExplanation = "(No target condition)";
+            int consumed = ptr - index; // Default if we run out of conditions
+
             if (ptr < conditions.Count)
             {
-                var target = conditions[ptr];
-                // Use the Helper to get just the name of the variable (e.g. "[Pac-Man Status]")
-                targetName = ctx.GetOperandText(target.LeftOperand, ptr, false, "", true); // suppress pointers in name
+                var targetCond = conditions[ptr];
+
+                // If the target is complex (e.g. Accumulator or Reset), we might not want to merge text deeply, 
+                // but for Standard/Transition conditions, merging looks great.
+
+                // We'll use the Standard Processor for the target to get its basic text
+                // Note: If target has a Flag (e.g. ResetIf), merging gets confusing. 
+                // Only merge if target has NO flag or basic flags.
+                if (string.IsNullOrEmpty(targetCond.Flag) || targetCond.Flag == "Trigger" || targetCond.Flag == "Measured")
+                {
+                    var targetRes = new StandardConditionProcessor().Process(ctx, conditions, ptr);
+                    targetExplanation = targetRes.Text;
+
+                    // Add flag context if needed
+                    if (targetCond.Flag == "Trigger") targetExplanation += " (Trigger)";
+                    else if (targetCond.Flag == "Measured") targetExplanation += " (Measured)";
+
+                    consumed++; // Consume the target too
+                }
+                else
+                {
+                    // Fallback if target is complex (e.g. ResetIf): Just describe the variable
+                    string targetName = ctx.GetOperandText(targetCond.LeftOperand, ptr, false, "", true);
+                    targetExplanation = $"Check {targetName}... (See next line)";
+                    // Don't consume target if we can't merge cleanly
+                }
             }
 
-            // Append (AndNext) to the explanation as requested to make the flag usage explicit to Code Reviewers
-            string explanation = $"{targetName} will operate once {string.Join(" and ", chainParts)} (AndNext)";
+            // Final Output Format: "When [Gate A] and [Gate B], [Target Logic]"
+            string gates = string.Join(" AND ", chainParts);
+            string explanation = $"When {gates}, check if: {targetExplanation}";
 
             return new ProcessorResult
             {
                 Text = explanation,
                 Category = ExplanationCategory.Context,
-                ConditionsConsumed = ptr - index // Only consume the chain, leave the target for the next loop iteration
+                ConditionsConsumed = consumed
             };
         }
     }
@@ -204,27 +225,21 @@ namespace RALogicEditor.Services.Explainer.Processors
         public bool CanProcess(List<AchievementCondition> conditions, int index)
         {
             var f = conditions[index].Flag;
-            // Fix: Exclude MeasuredIf so it falls through to StandardProcessor
-            // This ensures MeasuredIf is treated as a gate condition (ExplanationCategory.MeasuredIf)
-            // rather than a display definition (ExplanationCategory.Complex)
+            // Exclude MeasuredIf so it falls through to StandardProcessor
             return (f.StartsWith("Measured") && f != "MeasuredIf") || f == "Trigger";
         }
 
         public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int index)
         {
-            // Note: Complex accumulator measured logic is handled by AccumulatorProcessor.
-            // This handles simple single-condition measured/trigger lines.
-
             var cond = conditions[index];
             if (cond.Flag == "Trigger")
             {
-                // Fix: Detect Dummy Triggers (Value vs Value) and hide them.
-                // These are used to enable the trigger icon logic without adding a real requirement.
+                // Detect Dummy Triggers
                 if (cond.LeftOperand.Type == "Value" && cond.RightOperand.Type == "Value")
                 {
                     return new ProcessorResult
                     {
-                        Text = "", // Empty text causes LogicExplainer to skip adding this line
+                        Text = "",
                         Category = ExplanationCategory.Complex
                     };
                 }
@@ -293,11 +308,11 @@ namespace RALogicEditor.Services.Explainer.Processors
         {
             var cond = conditions[index];
 
-            // Dummy check
+            // 1. Dummy check
             if (cond.LeftOperand.Type == "Value" && cond.RightOperand.Type == "Value" && cond.Operator == "=" && cond.LeftOperand.Value == cond.RightOperand.Value)
                 return new ProcessorResult { Text = "Always True (Dummy Condition)", Category = ExplanationCategory.Context };
 
-            // Simple Change check
+            // 2. Simple Change check (Delta)
             if (cond.LeftOperand.Type == "Mem" && cond.RightOperand.Type == "Delta" && cond.LeftOperand.Value == cond.RightOperand.Value)
             {
                 string name = ctx.GetName(cond.LeftOperand.Value, index);
@@ -305,17 +320,35 @@ namespace RALogicEditor.Services.Explainer.Processors
                 return new ProcessorResult { Text = $"{name} {chg}", Category = ExplanationCategory.Transition };
             }
 
+            // 3. Bitwise Logic Improvement (NEW)
+            if (cond.Operator == "&")
+            {
+                string bitExplanation = TryExplainBitwise(cond, ctx, index);
+                if (!string.IsNullOrEmpty(bitExplanation))
+                {
+                    return new ProcessorResult { Text = bitExplanation, Category = ExplanationCategory.Context };
+                }
+            }
+
+            // 4. Standard Processing
             string left = ctx.GetOperandText(cond.LeftOperand, index);
             string right = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value);
             string op = ctx.GetOperatorText(cond.Operator);
-            string hits = (cond.RequiredHits > 0) ? $" (occurs {cond.RequiredHits} times)" : "";
+
+            // Humanize Hits
+            string hits = "";
+            if (cond.RequiredHits > 0)
+            {
+                // "once X has happened N times" vs "occurs N times"
+                if (cond.RequiredHits == 1) hits = " (once)";
+                else hits = $" (once this happens {cond.RequiredHits} times)";
+            }
 
             if (left.Contains("{recall}")) left = "recalled value";
             string text = $"{left} {op} {right}{hits}";
 
             if (cond.Flag == "MeasuredIf")
             {
-                // Updated to match user requirements for explicit MeasuredIf explanation
                 return new ProcessorResult
                 {
                     Text = $"The Measured condition will work if {text} (MeasuredIf)",
@@ -323,12 +356,43 @@ namespace RALogicEditor.Services.Explainer.Processors
                 };
             }
 
-            // Detect if this is likely a transition based on Delta usage
             var cat = (cond.LeftOperand.Type == "Delta" || cond.RightOperand.Type == "Delta" || cond.LeftOperand.Type == "Prior")
                 ? ExplanationCategory.Transition
                 : ExplanationCategory.Context;
 
             return new ProcessorResult { Text = text, Category = cat };
+        }
+
+        private string TryExplainBitwise(AchievementCondition cond, ExplanationContext ctx, int index)
+        {
+            // Detect: Mem & Mask = Mask (Bit Set) OR Mem & Mask = 0 (Bit Reset)
+            // Note: If Operator is '&', it implies the condition is checking if the bitwise AND result is non-zero (truthy).
+            // However, usually bitwise checks involve checking specific bits from the Right Operand mask.
+
+            // Ensure Right side is value
+            if (cond.RightOperand.Type != "Value") return "";
+
+            long maskVal = ParseHex(cond.RightOperand.Value);
+            if (maskVal <= 0) return "";
+
+            // Check if power of two (single bit)
+            if ((maskVal & (maskVal - 1)) == 0)
+            {
+                int bitIndex = (int)Math.Log(maskVal, 2);
+                string name = ctx.GetName(cond.LeftOperand.Value, index);
+
+                // If this is just "Mem & Mask" (truthy check)
+                return $"{name} has Bit {bitIndex} set";
+            }
+            return "";
+        }
+
+        private long ParseHex(string hex)
+        {
+            if (string.IsNullOrEmpty(hex)) return 0;
+            hex = hex.Replace("0x", "").Trim();
+            if (long.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out long val)) return val;
+            return 0;
         }
     }
 }

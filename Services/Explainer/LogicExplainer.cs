@@ -168,28 +168,6 @@ namespace RALogicEditor.Services
             // Execution Loop
             while (i < conditions.Count)
             {
-                // Redundancy Check:
-                // If current condition is NoFlag and Next is AndNext, and they are identical logic (same variable/value),
-                // skip the current one. The AndNextProcessor will handle the chain and explain the context 
-                // in the next iteration, preventing duplicate lines like "Ammo is 10" followed by "Ammo will operate once...".
-                if (i + 1 < conditions.Count)
-                {
-                    var curr = conditions[i];
-                    var next = conditions[i + 1];
-                    if (string.IsNullOrEmpty(curr.Flag) && next.Flag == "AndNext")
-                    {
-                        if (curr.LeftOperand.Type == next.LeftOperand.Type &&
-                            curr.LeftOperand.Value == next.LeftOperand.Value &&
-                            curr.Operator == next.Operator &&
-                            curr.RightOperand.Type == next.RightOperand.Type &&
-                            curr.RightOperand.Value == next.RightOperand.Value)
-                        {
-                            i++; // Skip redundant line
-                            continue;
-                        }
-                    }
-                }
-
                 // Find the correct processor for the current condition
                 var proc = _processors.OrderBy(p => p.Priority).First(p => p.CanProcess(conditions, i));
                 var res = proc.Process(ctx, conditions, i);
@@ -362,7 +340,7 @@ namespace RALogicEditor.Services
             {
                 sb.Append(c.Flag).Append('|');
                 sb.Append(c.LeftOperand.Type).Append('|');
-                // Ignore specific value for Mem to detect structural matches
+                // Ignore address for mem to detect structural matches
                 if (c.LeftOperand.Type != "Mem" && c.LeftOperand.Type != "Delta" && c.LeftOperand.Type != "Prior")
                     sb.Append(c.LeftOperand.Value);
                 sb.Append('|').Append(c.Operator).Append('|');
