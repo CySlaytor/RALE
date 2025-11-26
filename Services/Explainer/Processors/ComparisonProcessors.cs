@@ -49,13 +49,14 @@ namespace RALogicEditor.Services.Explainer.Processors
             // Combine with the Target Condition (The logic being gated)
             string targetExplanation = "(No target condition)";
             int consumed = ptr - index; // Default if we run out of conditions
+            var category = ExplanationCategory.Context;
 
             if (ptr < conditions.Count)
             {
                 var targetCond = conditions[ptr];
 
-                // If the target is complex (e.g. Accumulator or Reset), we might not want to merge text deeply, 
-                // but for Standard/Transition conditions, merging looks great.
+                // Case 1: Standard Logic or Display Flags (Merge into Context)
+                // If the target is simple, we merge it: "When [Gate], check if [Target]"
                 if (string.IsNullOrEmpty(targetCond.Flag) || targetCond.Flag == "Trigger" || targetCond.Flag == "Measured")
                 {
                     var targetRes = new StandardConditionProcessor().Process(ctx, conditions, ptr);
@@ -65,25 +66,55 @@ namespace RALogicEditor.Services.Explainer.Processors
                     if (targetCond.Flag == "Trigger") targetExplanation += " (Trigger)";
                     else if (targetCond.Flag == "Measured") targetExplanation += " (Measured)";
 
+                    string gates = string.Join(" AND ", chainParts);
+                    targetExplanation = $"When {gates}, check if: {targetExplanation}";
+
                     consumed++; // Consume the target too
+                }
+                // Case 2: Conditional Pause / Reset (The Fix)
+                // If the target is a Pause/Reset, we merge it but change the phrasing and category
+                // to ensure it appears in the correct section (bottom) but maintains its context.
+                else if (targetCond.Flag == "Pause If" || targetCond.Flag == "Reset If")
+                {
+                    // Get the condition text (e.g. "Player Y > 2000")
+                    var targetRes = new StandardConditionProcessor().Process(ctx, conditions, ptr);
+
+                    // Determine action string
+                    string action = "";
+                    if (targetCond.Flag == "Reset If")
+                        action = "reset the achievement";
+                    else if (targetCond.Flag == "Pause If")
+                        action = (targetCond.RequiredHits > 0) ? "lock the achievement until a Reset occurs (PauseLock)" : "pause the achievement";
+
+                    // Format: "If [Gate A] AND [Gate B] AND [Target], [Action]."
+                    string gates = string.Join(" AND ", chainParts);
+                    targetExplanation = $"If {gates} AND {targetRes.Text}, {action}.";
+
+                    // Update Category so it sorts correctly to the bottom
+                    category = (targetCond.Flag == "Reset If") ? ExplanationCategory.Reset : ExplanationCategory.Pause;
+
+                    consumed++; // Consume the target
                 }
                 else
                 {
-                    // Fallback if target is complex (e.g. ResetIf): Just describe the variable
-                    // FIX: Use GetName(Operand) to support Bit Labels (e.g. [Started Career])
+                    // Fallback for other complex flags (e.g. AddSource): Just describe the variable
+                    // We do NOT consume the target here because we can't easily explain the complex interaction in one line.
                     string targetName = ctx.GetOperandText(targetCond.LeftOperand, ptr, false, "", "", true);
-                    targetExplanation = $"Check {targetName}... (See next line)";
+                    string gates = string.Join(" AND ", chainParts);
+                    targetExplanation = $"When {gates}, check if: Check {targetName}... (See next line)";
                 }
             }
-
-            // Final Output Format: "When [Gate A] and [Gate B], [Target Logic]"
-            string gates = string.Join(" AND ", chainParts);
-            string explanation = $"When {gates}, check if: {targetExplanation}";
+            else
+            {
+                // No target found (end of group)
+                string gates = string.Join(" AND ", chainParts);
+                targetExplanation = $"When {gates}... (Incomplete Chain)";
+            }
 
             return new ProcessorResult
             {
-                Text = explanation,
-                Category = ExplanationCategory.Context,
+                Text = targetExplanation,
+                Category = category,
                 ConditionsConsumed = consumed
             };
         }
