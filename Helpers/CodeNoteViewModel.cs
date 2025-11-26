@@ -41,6 +41,9 @@ namespace RALogicEditor.Helpers
             public string LogicType = "";
             public string LogicSize = "";
             public string DisplayText = ""; // The text to show in the body box
+
+            // New: Store the offsets required to recreate this virtual path
+            public List<long> ChainOffsets = new();
         }
         public VirtualStateData VirtualState { get; private set; } = new();
 
@@ -99,6 +102,37 @@ namespace RALogicEditor.Helpers
             CurrentParsedNodes = _parser.ParseNoteText(newText);
         }
 
+        // New: Handle updates to virtual (ghost) notes by injecting them into the real note
+        public void UpdateVirtualNote(string newText)
+        {
+            if (!VirtualState.IsActive || CurrentBaseNote == null) return;
+            if (VirtualState.ChainOffsets.Count == 0) return;
+
+            // 1. Detect Global Style
+            var style = CodeNoteModifier.DetectGlobalStyle(AllNotes);
+
+            // 2. Perform Injection
+            string updatedBaseNote = CodeNoteModifier.InjectNoteContent(
+                CurrentBaseNote.Note,
+                VirtualState.ChainOffsets,
+                newText,
+                style
+            );
+
+            // 3. Update Model
+            CurrentBaseNote.Note = updatedBaseNote;
+
+            // 4. Refresh Parser (Keep the virtual state active to prevent UI flickering, 
+            // but update the data underneath so if user clicks away, it's saved)
+            CurrentParsedNodes = _parser.ParseNoteText(updatedBaseNote);
+
+            // Note: We do NOT clear virtual state here. The user is still editing the "Virtual" node.
+            // However, technically, once saved, it's no longer virtual, it's real.
+            // But for UI continuity, we treat it as the same selection until they click something else.
+            // We update the VirtualState display text to match input.
+            VirtualState.DisplayText = newText;
+        }
+
         public (string Logic, string Type, string Size) GetSelectedLogic(NoteNode? uiSelectedNode)
         {
             if (VirtualState.IsActive)
@@ -150,7 +184,8 @@ namespace RALogicEditor.Helpers
                     virtualDesc,
                     $"0x{targetVal:x}",
                     "Mem",
-                    "8-bit"
+                    "8-bit",
+                    new List<long> { delta } // Treat as offset from base
                 );
             }
         }
@@ -266,7 +301,8 @@ namespace RALogicEditor.Helpers
                     desc += $" +0x{finalRemainder:X}";
                 }
 
-                SetVirtualState(true, desc, desc, sbLogic.ToString(), type, size);
+                // Pass the full chain of offsets to allow recreation
+                SetVirtualState(true, desc, desc, sbLogic.ToString(), type, size, offsets);
                 return;
             }
 
@@ -286,12 +322,12 @@ namespace RALogicEditor.Helpers
                 string desc = $"{CurrentBaseNote.Address} Chain";
                 foreach (var o in offsets) desc += $" +0x{o:X}";
 
-                SetVirtualState(true, desc, desc, sb.ToString(), "Mem", "32-bit");
+                SetVirtualState(true, desc, desc, sb.ToString(), "Mem", "32-bit", offsets);
                 return;
             }
         }
 
-        private void SetVirtualState(bool active, string description, string displayText, string logicCode, string type, string size)
+        private void SetVirtualState(bool active, string description, string displayText, string logicCode, string type, string size, List<long> offsets)
         {
             VirtualState.IsActive = active;
             VirtualState.Description = description;
@@ -299,6 +335,7 @@ namespace RALogicEditor.Helpers
             VirtualState.LogicCode = logicCode;
             VirtualState.LogicType = type;
             VirtualState.LogicSize = size;
+            VirtualState.ChainOffsets = offsets ?? new List<long>();
 
             VirtualStateChanged?.Invoke(this, EventArgs.Empty);
         }

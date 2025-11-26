@@ -198,8 +198,9 @@ namespace RALogicEditor.Controls
                 cmbVariables.Enabled = false;
                 cmbVariables.BackColor = SystemColors.Control;
 
+                // Allow edit of virtual note to support injection
                 txtNoteBody.Text = state.DisplayText;
-                txtNoteBody.ReadOnly = true;
+                txtNoteBody.ReadOnly = false; // changed from true to false
             }
             else
             {
@@ -281,10 +282,18 @@ namespace RALogicEditor.Controls
         private void txtNoteBody_TextChanged(object sender, EventArgs e)
         {
             if (_isInternalUpdate) return;
-            if (_viewModel.VirtualState.IsActive) return;
-            if (cmbVariables.SelectedIndex != -1 && cmbVariables.SelectedIndex != 0) return;
+            if (cmbVariables.SelectedIndex != -1 && cmbVariables.SelectedIndex != 0 && !_viewModel.VirtualState.IsActive) return;
 
-            // Pass update to VM
+            // Handle virtual note updates (injection)
+            if (_viewModel.VirtualState.IsActive)
+            {
+                // Defer update slightly? No, direct update.
+                // We perform the injection, which updates the base note, which re-parses the tree.
+                _viewModel.UpdateVirtualNote(txtNoteBody.Text);
+                return;
+            }
+
+            // Normal update
             _viewModel.UpdateNoteContent(txtNoteBody.Text);
 
             // Refresh UI list without resetting text
