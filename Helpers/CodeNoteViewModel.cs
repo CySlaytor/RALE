@@ -226,10 +226,27 @@ namespace RALogicEditor.Helpers
 
             string content = "";
             // Extract content logic
-            if (node.IndentLevel == -2) content = CurrentBaseNote?.Note ?? "";
-            else if (!string.IsNullOrWhiteSpace(node.Content)) content = node.Content;
-            else if (!string.IsNullOrWhiteSpace(node.Description)) content = node.Description;
-            else content = node.ToString();
+            if (node.IndentLevel == -2)
+            {
+                content = CurrentBaseNote?.Note ?? "";
+            }
+            else
+            {
+                // Combine Description + Content so user can edit the header description (Title/Size)
+                // and the body content together.
+                var sb = new StringBuilder();
+                if (!string.IsNullOrWhiteSpace(node.Description))
+                {
+                    sb.AppendLine(node.Description);
+                }
+
+                if (!string.IsNullOrWhiteSpace(node.Content))
+                {
+                    sb.Append(node.Content);
+                }
+
+                content = sb.ToString().Trim();
+            }
 
             string desc = node.Description;
             if (string.IsNullOrEmpty(desc)) desc = node.Offset;
