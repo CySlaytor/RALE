@@ -56,10 +56,6 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                 // If the target is complex (e.g. Accumulator or Reset), we might not want to merge text deeply, 
                 // but for Standard/Transition conditions, merging looks great.
-
-                // We'll use the Standard Processor for the target to get its basic text
-                // Note: If target has a Flag (e.g. ResetIf), merging gets confusing. 
-                // Only merge if target has NO flag or basic flags.
                 if (string.IsNullOrEmpty(targetCond.Flag) || targetCond.Flag == "Trigger" || targetCond.Flag == "Measured")
                 {
                     var targetRes = new StandardConditionProcessor().Process(ctx, conditions, ptr);
@@ -74,9 +70,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                 else
                 {
                     // Fallback if target is complex (e.g. ResetIf): Just describe the variable
-                    string targetName = ctx.GetOperandText(targetCond.LeftOperand, ptr, false, "", true);
+                    // FIX: Use GetName(Operand) to support Bit Labels (e.g. [Started Career])
+                    string targetName = ctx.GetOperandText(targetCond.LeftOperand, ptr, false, "", "", true);
                     targetExplanation = $"Check {targetName}... (See next line)";
-                    // Don't consume target if we can't merge cleanly
                 }
             }
 
@@ -153,14 +149,17 @@ namespace RALogicEditor.Services.Explainer.Processors
             if (pairIndex == -1) return new StandardConditionProcessor().Process(ctx, conditions, currentIndex);
 
             var condPair = conditions[pairIndex];
-            string name = ctx.GetName(condA.LeftOperand.Value, currentIndex);
+
+            // FIX: Use GetName(Operand) to support Bit Labels (e.g. [Started Career])
+            string name = ctx.GetName(condA.LeftOperand, currentIndex);
 
             var prevCond = aIsDelta ? condA : condPair;
             var currCond = !aIsDelta ? condA : condPair;
 
             // Context addresses
-            string prevVal = ctx.FormatValue(prevCond.RightOperand, conditions.IndexOf(prevCond), condA.LeftOperand.Value);
-            string currVal = ctx.FormatValue(currCond.RightOperand, conditions.IndexOf(currCond), condA.LeftOperand.Value);
+            // FIX: Pass condA.LeftOperand.Size as contextSize to FormatValue
+            string prevVal = ctx.FormatValue(prevCond.RightOperand, conditions.IndexOf(prevCond), condA.LeftOperand.Value, condA.LeftOperand.Size);
+            string currVal = ctx.FormatValue(currCond.RightOperand, conditions.IndexOf(currCond), condA.LeftOperand.Value, condA.LeftOperand.Size);
 
             string suffix = "";
             if (currCond.Flag.StartsWith("Measured"))
@@ -249,8 +248,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                 return res;
             }
 
+            // FIX: Pass cond.LeftOperand.Value and Size as context to GetOperandText for Right Operand
             string name = ctx.GetOperandText(cond.LeftOperand, index);
-            string limit = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value);
+            string limit = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value, cond.LeftOperand.Size);
             string text;
 
             if (cond.Flag == "Measured%") text = $"{name} as %";
@@ -285,12 +285,14 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (leftIsDelta && rightIsMem && sameAddr && cond.Operator == "-")
             {
-                string name = ctx.GetName(cond.LeftOperand.Value, index);
+                // FIX: Use GetName(Operand)
+                string name = ctx.GetName(cond.LeftOperand, index);
                 return new ProcessorResult { Text = $"Store the amount {name} decreased by", Category = ExplanationCategory.Context };
             }
             if (cond.LeftOperand.Type == "Mem" && cond.RightOperand.Type == "Delta" && sameAddr && cond.Operator == "-")
             {
-                string name = ctx.GetName(cond.LeftOperand.Value, index);
+                // FIX: Use GetName(Operand)
+                string name = ctx.GetName(cond.LeftOperand, index);
                 return new ProcessorResult { Text = $"Store the amount {name} increased by", Category = ExplanationCategory.Context };
             }
 
@@ -315,12 +317,13 @@ namespace RALogicEditor.Services.Explainer.Processors
             // 2. Simple Change check (Delta)
             if (cond.LeftOperand.Type == "Mem" && cond.RightOperand.Type == "Delta" && cond.LeftOperand.Value == cond.RightOperand.Value)
             {
-                string name = ctx.GetName(cond.LeftOperand.Value, index);
+                // FIX: Use GetName(Operand)
+                string name = ctx.GetName(cond.LeftOperand, index);
                 string chg = cond.Operator switch { ">" => "increases", "<" => "decreases", "!=" => "changes", "=" => "remains unchanged", _ => "compares" };
                 return new ProcessorResult { Text = $"{name} {chg}", Category = ExplanationCategory.Transition };
             }
 
-            // 3. Bitwise Logic Improvement (NEW)
+            // 3. Bitwise Logic Improvement
             if (cond.Operator == "&")
             {
                 string bitExplanation = TryExplainBitwise(cond, ctx, index);
@@ -331,15 +334,14 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
 
             // 4. Standard Processing
+            // FIX: Pass contextSize to GetOperandText for Right Operand
             string left = ctx.GetOperandText(cond.LeftOperand, index);
-            string right = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value);
+            string right = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value, cond.LeftOperand.Size);
             string op = ctx.GetOperatorText(cond.Operator);
 
-            // Humanize Hits
             string hits = "";
             if (cond.RequiredHits > 0)
             {
-                // "once X has happened N times" vs "occurs N times"
                 if (cond.RequiredHits == 1) hits = " (once)";
                 else hits = $" (once this happens {cond.RequiredHits} times)";
             }
@@ -365,23 +367,16 @@ namespace RALogicEditor.Services.Explainer.Processors
 
         private string TryExplainBitwise(AchievementCondition cond, ExplanationContext ctx, int index)
         {
-            // Detect: Mem & Mask = Mask (Bit Set) OR Mem & Mask = 0 (Bit Reset)
-            // Note: If Operator is '&', it implies the condition is checking if the bitwise AND result is non-zero (truthy).
-            // However, usually bitwise checks involve checking specific bits from the Right Operand mask.
-
-            // Ensure Right side is value
             if (cond.RightOperand.Type != "Value") return "";
 
             long maskVal = ParseHex(cond.RightOperand.Value);
             if (maskVal <= 0) return "";
 
-            // Check if power of two (single bit)
             if ((maskVal & (maskVal - 1)) == 0)
             {
                 int bitIndex = (int)Math.Log(maskVal, 2);
-                string name = ctx.GetName(cond.LeftOperand.Value, index);
-
-                // If this is just "Mem & Mask" (truthy check)
+                // FIX: Use GetName(Operand) to ensure we get Bit Labels if this is a bitwise op on a variable that has them
+                string name = ctx.GetName(cond.LeftOperand, index);
                 return $"{name} has Bit {bitIndex} set";
             }
             return "";

@@ -57,7 +57,21 @@ namespace RALogicEditor.Services.Explainer
             ShowDecimal = showDec;
         }
 
-        // Shared Helper: Get operand name (Memory 0x1234 or [Alias])
+        // Shared Helper: Get operand name using Operand (Detects Bit Labels)
+        public string GetName(Operand op, int index, bool suppressPointers = false)
+        {
+            // 1. Try to resolve Bit Label (e.g. [Started Career]) if size is BitX
+            string bitLabel = TryGetBitLabel(op.Value, op.Size, index);
+            if (!string.IsNullOrEmpty(bitLabel))
+            {
+                return $"[{bitLabel}]";
+            }
+
+            // 2. Fallback to standard address lookup
+            return GetName(op.Value, index, suppressPointers);
+        }
+
+        // Shared Helper: Get operand name using Address String (Generic)
         public string GetName(string addr, int index, bool suppressPointers = false)
         {
             if (string.IsNullOrEmpty(addr)) return "";
@@ -79,39 +93,60 @@ namespace RALogicEditor.Services.Explainer
         }
 
         // Shared Helper: Format values (0x10 vs 16)
-        public string FormatValue(Operand op, int index, string contextAddress = "")
+        // Added contextSize to support Bit Label lookup for values
+        public string FormatValue(Operand op, int index, string contextAddress = "", string contextSize = "")
         {
             if (op.Type == "Float") return op.Value;
 
             if (!string.IsNullOrEmpty(contextAddress))
             {
+                // 1. Check for Bit Label Value (0=false, 1="Label")
+                if (!string.IsNullOrEmpty(contextSize) && contextSize.StartsWith("Bit"))
+                {
+                    // Local ParseHex
+                    string clean = op.Value.Replace("0x", "").Trim();
+                    if (long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long bitVal))
+                    {
+                        if (bitVal == 0) return "false";
+                        if (bitVal == 1)
+                        {
+                            string bitLabel = TryGetBitLabel(contextAddress, contextSize, index);
+                            if (!string.IsNullOrEmpty(bitLabel)) return $"\"{bitLabel}\"";
+                            return "true";
+                        }
+                    }
+                }
+
+                // 2. Check for Enum Label
                 string enumLabel = TryGetEnumLabel(contextAddress, op.Value, index);
                 if (!string.IsNullOrEmpty(enumLabel)) return $"\"{enumLabel}\"";
             }
 
-            if (long.TryParse(op.Value.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val))
+            if (long.TryParse(op.Value.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long defaultVal))
             {
-                if (ShowDecimal) return val.ToString();
+                if (ShowDecimal) return defaultVal.ToString();
                 if (op.Value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) return op.Value;
-                return "0x" + val.ToString("X");
+                return "0x" + defaultVal.ToString("X");
             }
 
             return op.Value;
         }
 
         // Shared Helper: Get operand text with prefix (delta/prior)
-        public string GetOperandText(Operand op, int index, bool isRight = false, string contextAddress = "", bool suppressPointers = false)
+        // Added contextSize to pass down to FormatValue
+        public string GetOperandText(Operand op, int index, bool isRight = false, string contextAddress = "", string contextSize = "", bool suppressPointers = false)
         {
             if (op.Type == "Recall") return "{recall}";
 
             if (op.Type == "Value" || op.Type == "Float")
-                return FormatValue(op, index, contextAddress);
+                return FormatValue(op, index, contextAddress, contextSize);
 
             string prefix = "";
             if (op.Type == "Delta") prefix = "previous frame ";
             if (op.Type == "Prior") prefix = "prior frame ";
 
-            string name = GetName(op.Value, index, suppressPointers);
+            // Use the new GetName overload that supports Bit Labels
+            string name = GetName(op, index, suppressPointers);
             return $"{prefix}{name}";
         }
 
@@ -249,6 +284,142 @@ namespace RALogicEditor.Services.Explainer
                     {
                         return match.Groups[2].Value.Trim();
                     }
+                }
+            }
+            return "";
+        }
+
+        private string TryGetBitLabel(string addr, string size, int index)
+        {
+            // Validate if size is Bit0-Bit7
+            if (string.IsNullOrEmpty(size) || !size.StartsWith("Bit") || size.Length < 4 || !char.IsDigit(size[3]))
+                return "";
+
+            int bitIndex = size[3] - '0';
+            if (bitIndex < 0 || bitIndex > 7) return "";
+
+            long ParseHex(string s)
+            {
+                string clean = s.Replace("0x", "").Trim();
+                clean = Regex.Replace(clean, "[^0-9A-Fa-f]", "");
+                return long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+            }
+
+            // Note Node Resolution Logic
+            NoteNode? targetNode = null;
+
+            // 1. Pointer Chain Resolution
+            if (Group != null && index > 0)
+            {
+                var chainStack = new Stack<string>();
+                int scan = index - 1;
+                while (scan >= 0)
+                {
+                    var prevCond = Group.Conditions[scan];
+                    if (prevCond.Flag == "Add Address")
+                    {
+                        chainStack.Push(prevCond.LeftOperand.Value);
+                        scan--;
+                    }
+                    else break;
+                }
+
+                if (chainStack.Count > 0)
+                {
+                    string baseAddrStr = chainStack.Pop();
+                    string normalizedBase = LogicFormatter.NormalizeAddress(baseAddrStr);
+
+                    if (NotesLookup.TryGetValue(normalizedBase, out var nodes))
+                    {
+                        var currentLevelNodes = nodes.Where(n => n.IndentLevel != -2 && (n.Parent == null || n.Parent.IndentLevel == -1)).ToList();
+                        bool chainValid = true;
+
+                        while (chainStack.Count > 0)
+                        {
+                            string offsetStr = chainStack.Pop();
+                            long offset = ParseHex(offsetStr);
+                            if (offset == -1) { chainValid = false; break; }
+
+                            NoteNode? match = null;
+                            foreach (var node in currentLevelNodes)
+                            {
+                                long nodeOff = ParseHex(node.Offset);
+                                if (node.Offset.Contains("-")) nodeOff = -nodeOff;
+
+                                if (offset >= nodeOff && offset < nodeOff + node.Size)
+                                {
+                                    match = node;
+                                    break;
+                                }
+                            }
+
+                            if (match != null) currentLevelNodes = match.Children;
+                            else { chainValid = false; break; }
+                        }
+
+                        if (chainValid)
+                        {
+                            long targetOffset = ParseHex(addr);
+                            foreach (var node in currentLevelNodes)
+                            {
+                                long nodeOff = ParseHex(node.Offset);
+                                if (node.Offset.Contains("-")) nodeOff = -nodeOff;
+
+                                if (targetOffset >= nodeOff && targetOffset < nodeOff + node.Size)
+                                {
+                                    targetNode = node;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Direct Lookup (if pointer chain failed or didn't exist)
+            if (targetNode == null)
+            {
+                string normAddr = LogicFormatter.NormalizeAddress(addr);
+                if (NotesLookup.TryGetValue(normAddr, out var lookupNodes))
+                {
+                    targetNode = lookupNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? lookupNodes.FirstOrDefault();
+                }
+            }
+
+            // 3. Range Cache Lookup
+            if (targetNode == null && RangeCache != null)
+            {
+                long targetVal = ParseHex(addr);
+                if (targetVal != -1)
+                {
+                    var match = RangeCache.FirstOrDefault(r => targetVal >= r.Start && targetVal < r.End);
+                    if (match.Node != null) targetNode = match.Node;
+                }
+            }
+
+            if (targetNode != null)
+            {
+                return ParseBitLabelFromContent(targetNode.Content, bitIndex);
+            }
+
+            return "";
+        }
+
+        private string ParseBitLabelFromContent(string content, int bitIndex)
+        {
+            if (string.IsNullOrEmpty(content)) return "";
+            var lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // Regex: matches "BitX = Description" or "Bit X : Description"
+            // Handles optional whitespace
+            var regex = new Regex($@"^\s*Bit\s*{bitIndex}\s*[:=]\s*(.+)$", RegexOptions.IgnoreCase);
+
+            foreach (var line in lines)
+            {
+                var match = regex.Match(line);
+                if (match.Success)
+                {
+                    return match.Groups[1].Value.Trim();
                 }
             }
             return "";

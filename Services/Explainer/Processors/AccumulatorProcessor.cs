@@ -12,8 +12,6 @@ namespace RALogicEditor.Services.Explainer.Processors
     public class AccumulatorProcessor : ILogicProcessor
     {
         // Priority MUST be higher (lower value) than PointerCleanupProcessor (5).
-        // Otherwise, the cleanup processor consumes the "Add Address" lines before we can detect 
-        // that they are actually part of an accumulator chain.
         public int Priority => 3;
 
         public bool CanProcess(List<AchievementCondition> conditions, int currentIndex)
@@ -25,8 +23,7 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (!isAccumulatorStart && cond.Flag == "Add Address")
             {
-                // Look ahead to see if this pointer chain eventually feeds into an accumulator flag.
-                // If it does, we must claim it now to process the whole chain together.
+                // Look ahead to see if this pointer chain feeds into an accumulator
                 int scan = currentIndex + 1;
                 while (scan < conditions.Count)
                 {
@@ -45,9 +42,7 @@ namespace RALogicEditor.Services.Explainer.Processors
         {
             var result = new ProcessorResult { Category = ExplanationCategory.Complex };
 
-            // 1. Collect all consecutive accumulator chains that share the same structure.
-            // This allows us to group complex range logic (e.g., Delta > 0 AND Delta <= 14) 
-            // together with the Memory check (Mem = 15) into a single transition event.
+            // 1. Collect all consecutive accumulator chains that share the same structure
             var chains = new List<AccumulatorChainDef>();
             var usedIndices = new HashSet<int>();
             int currentPtr = index;
@@ -73,18 +68,16 @@ namespace RALogicEditor.Services.Explainer.Processors
                     EndIndex = endPtr
                 };
 
-                // If this is not the first chain, verify it matches the logic structure of the first chain.
-                // e.g. Same addresses, same offsets.
+                // If this is not the first chain, verify it matches the structure of the first chain
                 if (chains.Count > 0)
                 {
                     if (!AreChainsStructureEqual(chains[0].Conditions, chainDef.Conditions))
-                        break; // Different structure (e.g. different variable), stop collecting
+                        break; // Different structure, stop collecting
                 }
 
                 chains.Add(chainDef);
 
                 // Mark indices as used (chain + terminal)
-                // Note: endPtr is the index of the terminal condition (if it exists) or index after chain.
                 int lastIdx = (termCond != null) ? endPtr : endPtr - 1;
                 for (int k = currentPtr; k <= lastIdx && k < conditions.Count; k++) usedIndices.Add(k);
 
@@ -92,30 +85,29 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
 
             // 2. Analyze Chains for Transition (Delta -> Mem)
-            // Split the collected chains into "From" (Delta) and "To" (Current Memory).
             var deltaChains = chains.Where(c => IsChainDelta(c.Conditions)).ToList();
             var memChains = chains.Where(c => !IsChainDelta(c.Conditions)).ToList();
 
-            // We merge into a single statement only if we have distinct Old and New states.
+            // We merge if we have at least one Delta chain AND at least one Mem chain
             bool isTransition = deltaChains.Count > 0 && memChains.Count > 0;
 
             if (isTransition)
             {
-                // Merge Logic: "Changes from (A AND B) to (C)"
+                // Merge Logic: "Changes from (A and B) to (C)"
                 var fromConditions = deltaChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
                 var toConditions = memChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
 
                 string fromText = string.Join(" AND ", fromConditions);
                 string toText = string.Join(" AND ", toConditions);
 
-                // Use the first chain to generate the drill-down details (assuming structure is identical)
+                // Use the first chain to generate the drill-down details
                 var blocks = SegmentLogicBlocks(chains[0].Conditions);
                 string id = Guid.NewGuid().ToString("N");
                 result.DetailedDrillDowns[id] = GenerateChainDetails(blocks, ctx);
                 string expandToken = $"[[EXPAND:{id}:{blocks.Count}]]";
 
-                // Check for terminal flags on the final memory chain (e.g., Reset If) to interpret context
                 string suffix = "";
+                // Check if the final Mem chain triggers a Reset or Pause
                 var finalMemChain = memChains.Last();
                 if (finalMemChain.Terminal != null)
                 {
@@ -126,15 +118,13 @@ namespace RALogicEditor.Services.Explainer.Processors
                 result.Text = $"Sum of {blocks.Count} items {expandToken} changes from ({fromText}) to ({toText}){suffix}";
                 result.Category = ExplanationCategory.Transition;
 
-                // Calculate total consumed lines based on the end of the last chain found.
+                // Consume all collected chains
                 int lastIndex = chains.Last().EndIndex;
                 result.ConditionsConsumed = (lastIndex - index) + 1;
             }
             else
             {
-                // Standard Processing (Single Chain or non-matching sequence).
-                // We only process the FIRST chain here. The outer loop in LogicExplainer 
-                // will call Process again for the subsequent chains.
+                // Standard Processing (Single Chain or non-matching sequence)
                 var chain1 = chains[0];
                 var blocks = SegmentLogicBlocks(chain1.Conditions);
                 string id = Guid.NewGuid().ToString("N");
@@ -146,11 +136,10 @@ namespace RALogicEditor.Services.Explainer.Processors
                     var finalCond1 = chain1.Terminal;
                     if (finalCond1.Flag == "MeasuredIf")
                     {
-                        string valText = ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1));
+                        // FIX: Pass Context (Value + Size) to FormatValue for correct Bit Label resolution
+                        string valText = ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
                         string opText = ctx.GetOperatorText(finalCond1.Operator);
-
                         string criteria = $"sum of {blocks.Count} items {expandToken} {opText} {valText}";
-
                         result.Text = $"Accumulator: {criteria} (MeasuredIf)";
                         result.Category = ExplanationCategory.MeasuredIf;
                     }
@@ -158,12 +147,14 @@ namespace RALogicEditor.Services.Explainer.Processors
                     {
                         bool isHitChain = chain1.Conditions.Any(c => c.Flag.Contains("Hits")) || finalCond1.Flag.Contains("Hits");
                         string label = isHitChain ? "hits" : "value";
-                        string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1));
+                        // FIX: Pass Context (Value + Size)
+                        string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
                         result.Text = $"Start measuring {label} up to {valText}: {expandToken}";
                     }
                     else
                     {
-                        string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1));
+                        // FIX: Pass Context (Value + Size)
+                        string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
                         string opText = ctx.GetOperatorText(finalCond1.Operator);
                         string actionPrefix = "Trigger";
 
@@ -196,7 +187,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                     result.Text = $"Logic sequence {expandToken}";
                 }
 
-                // Consumed: chain conditions + terminal (if exists)
                 int consumed = (chain1.Terminal != null) ? (chain1.EndIndex - index) + 1 : (chain1.EndIndex - index);
                 result.ConditionsConsumed = consumed;
             }
@@ -207,7 +197,8 @@ namespace RALogicEditor.Services.Explainer.Processors
         private string FormatTerminalCondition(AchievementCondition? cond, ExplanationContext ctx, List<AchievementCondition> conditions)
         {
             if (cond == null) return "(No Check)";
-            string val = ctx.FormatValue(cond.RightOperand, conditions.IndexOf(cond));
+            // FIX: Pass Context (Value + Size) to FormatValue
+            string val = ctx.FormatValue(cond.RightOperand, conditions.IndexOf(cond), cond.LeftOperand.Value, cond.LeftOperand.Size);
             string op = cond.Operator;
 
             if (op == "=") return val;
@@ -240,12 +231,10 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 ptr++;
             }
-            endPtr = ptr; // ptr is now at the condition AFTER the chain (the Terminal)
+            endPtr = ptr;
             return chain;
         }
 
-        // Checks if two chains have the same logic structure (addresses, offsets, flags).
-        // This allows us to merge a Delta chain with a Mem chain if they target the same address.
         private bool AreChainsStructureEqual(List<AchievementCondition> chain1, List<AchievementCondition> chain2)
         {
             if (chain1.Count != chain2.Count) return false;
@@ -261,28 +250,24 @@ namespace RALogicEditor.Services.Explainer.Processors
                 if (!AreValuesEqual(c1.LeftOperand.Value, c2.LeftOperand.Value)) return false;
                 if (c1.LeftOperand.Size != c2.LeftOperand.Size) return false;
 
-                // Special Handling for Add Address (Pointers)
+                // Add Address: Strict Type check (Mem vs Mem)
                 if (c1.Flag == "Add Address")
                 {
-                    // Pointers must match strictly on Type (Mem vs Mem)
                     if (c1.LeftOperand.Type != c2.LeftOperand.Type) return false;
-                    // Right Operand / Operator are ignored for Add Address as they are unused
                     continue;
                 }
 
-                // Operator must match (e.g. empty vs empty, or math op)
+                // Operator must match
                 string op1 = c1.Operator ?? "";
                 string op2 = c2.Operator ?? "";
                 if (op1 != op2) return false;
 
-                // For Add Source/Hits: Allow Delta/Mem/Prior mixing for transition detection
-                // We only verify that both sides are "Memory-like" (not constant Values)
+                // Add Source/Hits: Allow Delta/Mem/Prior mixing
                 bool c1IsMemLike = IsMemLike(c1.LeftOperand.Type);
                 bool c2IsMemLike = IsMemLike(c2.LeftOperand.Type);
                 if (c1IsMemLike != c2IsMemLike) return false;
 
                 // Right Operand Check
-                // Allow loose Type match for Values (Value vs Empty/Default) if values numerically match
                 bool c1RightIsVal = c1.RightOperand.Type == "Value" || c1.RightOperand.Type == "Float" || string.IsNullOrEmpty(c1.RightOperand.Type);
                 bool c2RightIsVal = c2.RightOperand.Type == "Value" || c2.RightOperand.Type == "Float" || string.IsNullOrEmpty(c2.RightOperand.Type);
 
@@ -292,9 +277,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 else
                 {
-                    // If types differ (e.g. Mem vs Value), fail structure check
                     if (c1.RightOperand.Type != c2.RightOperand.Type) return false;
-                    // Strict value check for Mem/Delta
                     if (!AreValuesEqual(c1.RightOperand.Value, c2.RightOperand.Value)) return false;
                 }
             }
@@ -304,17 +287,13 @@ namespace RALogicEditor.Services.Explainer.Processors
         private bool AreValuesEqual(string v1, string v2)
         {
             if (v1 == v2) return true;
-
-            // Robust hex parsing to handle "0x0" == "0" == ""
             string clean1 = string.IsNullOrEmpty(v1) ? "0" : v1.Trim().Replace("0x", "");
             string clean2 = string.IsNullOrEmpty(v2) ? "0" : v2.Trim().Replace("0x", "");
-
             if (long.TryParse(clean1, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long l1) &&
                 long.TryParse(clean2, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long l2))
             {
                 return l1 == l2;
             }
-
             return clean1.Equals(clean2, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -345,56 +324,25 @@ namespace RALogicEditor.Services.Explainer.Processors
             return blocks;
         }
 
-        private int DetectConditionSequence(List<List<AchievementCondition>> blocks, int startIndex)
-        {
-            if (startIndex >= blocks.Count - 1) return 0;
-            string baseFp = GetBlockFingerprint(blocks[startIndex]);
-            int count = 1;
-            for (int i = startIndex + 1; i < blocks.Count; i++)
-            {
-                if (GetBlockFingerprint(blocks[i]) == baseFp) count++;
-                else break;
-            }
-            return count;
-        }
-
-        private string GetBlockFingerprint(List<AchievementCondition> block)
-        {
-            var sb = new StringBuilder();
-            foreach (var c in block)
-            {
-                sb.Append(c.Flag).Append('|');
-                sb.Append(c.LeftOperand.Type).Append('|');
-                if (!IsMemLike(c.LeftOperand.Type)) sb.Append(c.LeftOperand.Value);
-                sb.Append('|').Append(c.Operator).Append('|');
-                sb.Append(c.RightOperand.Type).Append('|');
-                if (!IsMemLike(c.RightOperand.Type)) sb.Append(c.RightOperand.Value);
-                sb.Append('|').Append(c.RequiredHits).Append(';');
-            }
-            return sb.ToString();
-        }
-
         private string GenerateChainDetails(List<List<AchievementCondition>> blocks, ExplanationContext ctx)
         {
             var sbChain = new StringBuilder();
             int bIdx = 0;
             while (bIdx < blocks.Count)
             {
-                int seqLen = DetectConditionSequence(blocks, bIdx);
-                if (seqLen > 2)
+                var exampleBlock = blocks[bIdx];
+                // FIX: Use GetName(Operand) to get Bit Labels if applicable for the chain description
+                var firstBlockCond = exampleBlock.FirstOrDefault(c => c.Flag != "Add Address");
+                string nameBase = "Unknown";
+                if (firstBlockCond != null)
                 {
-                    var exampleBlock = blocks[bIdx];
-                    var exampleLines = ExplainBlock(exampleBlock, ctx);
-                    sbChain.AppendLine($"- {seqLen} conditions matching pattern (Array):");
-                    sbChain.AppendLine($"  > {string.Join(" AND ", exampleLines)}");
-                    bIdx += seqLen;
+                    nameBase = ctx.GetName(firstBlockCond.LeftOperand, ctx.Group.Conditions.IndexOf(firstBlockCond), true);
                 }
-                else
-                {
-                    var blockLines = ExplainBlock(blocks[bIdx], ctx);
-                    sbChain.AppendLine($"- {string.Join(" AND ", blockLines)}");
-                    bIdx++;
-                }
+
+                // Just listing the conditions for now
+                var exampleLines = ExplainBlock(exampleBlock, ctx);
+                sbChain.AppendLine($"- {string.Join(" AND ", exampleLines)}");
+                bIdx++;
             }
             return sbChain.ToString().TrimEnd();
         }
@@ -413,8 +361,8 @@ namespace RALogicEditor.Services.Explainer.Processors
 
         private string ExplainSingleCondition(AchievementCondition cond, ExplanationContext ctx, int index, bool suppressHits, bool suppressPointers)
         {
-            string left = ctx.GetOperandText(cond.LeftOperand, index, false, "", suppressPointers);
-            string right = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value);
+            string left = ctx.GetOperandText(cond.LeftOperand, index, false, "", "", suppressPointers);
+            string right = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value, cond.LeftOperand.Size);
             string op = ctx.GetOperatorText(cond.Operator);
             string hits = (!suppressHits && cond.RequiredHits > 0) ? $" (occurs {cond.RequiredHits} times)" : "";
             if (left.Contains("{recall}")) left = "recalled value";
