@@ -38,26 +38,58 @@ namespace RALogicEditor.Services.Explainer.Processors
         {
             var startCond = conditions[index];
 
-            // Resolve the name of the variable to check for ASCII/Region tags.
-            // ctx.GetName handles pointer chain resolution automatically.
+            // 1. Resolve the Clean Name (for display)
             string varName = ctx.GetName(startCond.LeftOperand, index);
 
-            // 1. Validate Keywords in the resolved name
-            bool isAscii = varName.IndexOf("ASCII", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isRegion = varName.IndexOf("Region ID", StringComparison.OrdinalIgnoreCase) >= 0;
+            // 2. Get the Raw Description (for tag detection)
+            // We must look up the note directly because ctx.GetName() strips tags like [ASCII].
+            string rawDescription = GetRawNoteDescription(ctx, startCond.LeftOperand.Value, index);
 
-            // If not marked as string logic, delegate to standard processor
-            if (!isAscii && !isRegion)
+            // 3. Validate Keywords in the RAW description
+            bool isExplicitString = rawDescription.IndexOf("ASCII", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    rawDescription.IndexOf("Region", StringComparison.OrdinalIgnoreCase) >= 0 || // Matches "Region ID"
+                                    rawDescription.IndexOf("Serial", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    rawDescription.IndexOf("Text", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    rawDescription.IndexOf("String", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            // 4. Process Explicit String (Mem = Value chains)
+            // We now pass the 'isExplicitString' flag. If false, the processor will try to auto-detect
+            // if the values look like ASCII (Heuristic Mode).
+            return ProcessExplicitString(ctx, conditions, index, varName, isExplicitString);
+        }
+
+        private string GetRawNoteDescription(ExplanationContext ctx, string addressStr, int index)
+        {
+            // If this is part of a pointer chain, we can't easily resolve the raw note without 
+            // re-simulating the chain logic. However, for direct memory (most ASCII arrays), 
+            // we can use the RangeCache.
+
+            long targetVal = ParseHex(addressStr);
+            if (targetVal == -1) return "";
+
+            // 1. Check Range Cache (Handles Arrays/Structs like [ASCII: 20-bytes] even if we are at +0x8)
+            if (ctx.RangeCache != null)
             {
-                return new StandardConditionProcessor().Process(ctx, conditions, index);
+                var match = ctx.RangeCache.FirstOrDefault(r => targetVal >= r.Start && targetVal < r.End);
+                if (match.Node != null)
+                {
+                    return match.Node.Description;
+                }
             }
 
-            // 2. Process Explicit String (Mem = Value chains)
-            return ProcessExplicitString(ctx, conditions, index, varName);
+            // 2. Check Exact Match
+            string normAddr = LogicFormatter.NormalizeAddress(addressStr);
+            if (ctx.NotesLookup != null && ctx.NotesLookup.TryGetValue(normAddr, out var nodes))
+            {
+                var root = nodes.FirstOrDefault(n => n.IndentLevel == -2) ?? nodes.FirstOrDefault();
+                if (root != null) return root.Description;
+            }
+
+            return "";
         }
 
         // Logic for: Mem == "A" AND Mem+1 == "B" ...
-        private ProcessorResult ProcessExplicitString(ExplanationContext ctx, List<AchievementCondition> conditions, int index, string baseName)
+        private ProcessorResult ProcessExplicitString(ExplanationContext ctx, List<AchievementCondition> conditions, int index, string baseName, bool forceStringMode)
         {
             var startCond = conditions[index];
             var collectedBytes = new List<byte>();
@@ -117,6 +149,22 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (count > 1)
             {
+                // If not explicitly marked as string, perform Heuristic Validation
+                // to prevent grouping regular integer arrays (like HP, MP) as garbage text.
+                if (!forceStringMode)
+                {
+                    // 1. Length Check: Avoid small 2-byte coincidences
+                    if (collectedBytes.Count < 3)
+                        return new StandardConditionProcessor().Process(ctx, conditions, index);
+
+                    // 2. Printable Character Check: Requires > 70% valid ASCII (0x20-0x7E)
+                    int printableCount = collectedBytes.Count(b => b >= 0x20 && b <= 0x7E);
+                    double ratio = (double)printableCount / collectedBytes.Count;
+
+                    if (ratio < 0.7)
+                        return new StandardConditionProcessor().Process(ctx, conditions, index);
+                }
+
                 // Clean up name
                 string cleanName = CleanName(baseName);
 

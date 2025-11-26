@@ -240,12 +240,11 @@ namespace RALogicEditor.Helpers
                 long targetOffset = chainOffsets[i];
                 currentDepth++;
 
-                // FIX: Correctly locate child node depending on if we are at root or inside a node
+                // 1. Try to find exact child match first
                 NoteNode? child = null;
                 if (currentNode == null)
                 {
                     // Level 0 nodes (Children of the logical root).
-                    // rootNodes[0] is metadata root. Iterate all to find Level 0.
                     child = rootNodes.FirstOrDefault(n => n.IndentLevel == 0 && ParseOffset(n.Offset) == targetOffset);
                 }
                 else
@@ -254,12 +253,21 @@ namespace RALogicEditor.Helpers
                     child = currentNode.Children.FirstOrDefault(c => ParseOffset(c.Offset) == targetOffset);
                 }
 
-                // Determine Style for this insertion level.
-                // Priority: 
-                // 1. Siblings (last child of current node, or last root node) - strongest indicator of list format
-                // 2. Parent (current node) - if no siblings exist
-                // 3. Global/Fallback
+                // 2. Range Coverage Check (The fix for Arrays/Structs)
+                // If exact match failed, check if a sibling node "covers" this offset range
+                if (child == null)
+                {
+                    IEnumerable<NoteNode> candidates = (currentNode == null)
+                        ? rootNodes.Where(n => n.IndentLevel == 0)
+                        : currentNode.Children;
 
+                    child = candidates.FirstOrDefault(c => {
+                        long start = ParseOffset(c.Offset);
+                        return targetOffset >= start && targetOffset < start + c.Size;
+                    });
+                }
+
+                // Determine Style for this insertion level.
                 NoteStyle effectiveStyle = globalStyle;
                 bool styleDetected = false;
 
@@ -283,15 +291,43 @@ namespace RALogicEditor.Helpers
 
                 if (child != null)
                 {
-                    // Node exists, traverse
+                    // Node exists (or is covered), traverse
                     currentNode = child;
 
                     if (i == chainOffsets.Count - 1)
                     {
                         // Re-detect style from the child itself to ensure we match its current format during replacement
-                        var childStyle = DetectLocalStyle(lines[child.RawLineIndex], effectiveStyle);
-                        // Note: IndentLevel 0 in parser usually corresponds to depth 1 in string (+), IndentLevel 1 -> depth 2 (++).
-                        ReplaceNodeContent(lines, child, newContent, childStyle, child.IndentLevel + 1);
+                        // NOTE: If we matched via Range (child.Offset != targetOffset), we do NOT edit this node's content.
+                        // We only edit if it was an exact match. If it's a range match, we effectively "found" the 
+                        // struct base, but the user is asking to edit the *specific* offset.
+                        // However, logic flow suggests if we are at the end of the chain, we want to edit the LEAF.
+                        // If the leaf was "0x40" (in logic) but we matched "0x00" (in notes), we shouldn't overwrite 0x00's text
+                        // with 0x40's text. 
+                        // But practically, the logic shouldn't end on a struct base if it's meant to be a value.
+                        // If the user clicked "Add Note" on 0x40, and 0x40 is hidden in 0x00, they likely want to ADD 0x40 inside 0x00?
+                        // But `InjectNoteContent` is iterating the chain. If we are here, we are consuming `0x40`.
+                        // If we consume `0x40` by stepping into `0x00`, we haven't actually "found" the node for 0x40,
+                        // we found its container.
+                        // But the loop will end here. 
+                        // If we matched by range, we shouldn't replace the content of the container.
+                        // We should probably CREATE the specific node inside the container?
+                        // But the requirement is "offset in the code note is the one it should take the lead, which is 0x00".
+                        // So we just stop here and assume the user meant to edit the container?
+                        // Or we create a new child inside?
+
+                        // Per the requirement: "merge this offset... offset in the code note is the one it should take the lead"
+                        // This implies we simply navigate to the container and stop. 
+                        // If the user wants to edit the specific field, they will be editing the Container's text block.
+
+                        long childOffset = ParseOffset(child.Offset);
+                        if (childOffset == targetOffset)
+                        {
+                            var childStyle = DetectLocalStyle(lines[child.RawLineIndex], effectiveStyle);
+                            ReplaceNodeContent(lines, child, newContent, childStyle, child.IndentLevel + 1);
+                        }
+                        // If range match (childOffset != targetOffset), we do nothing to the file text for THIS step.
+                        // We just treat 'child' as the valid path node and finish. 
+                        // This effectively "merges" the logic offset into the existing note structure.
                     }
                 }
                 else
@@ -317,14 +353,7 @@ namespace RALogicEditor.Helpers
                         // Target Node: Insert Header + Body
                         string[] contentParts = newContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
-                        // If user provided empty content, just create the pointer entry
                         string title = contentParts.Length > 0 ? contentParts[0] : "New Node";
-                        if (contentParts.Length > 0 && (contentParts[0].StartsWith("0x") || contentParts[0].Contains("=")))
-                        {
-                            // Heuristic: User didn't provide a title, just values. Use placeholder? 
-                            // Actually, keeping the logic simple: first line is title.
-                        }
-
                         string sep = effectiveStyle.GetSeparatorString();
                         string header = $"{indent}{offsetHex}{sep}{title}";
 
@@ -355,7 +384,6 @@ namespace RALogicEditor.Helpers
                         }
                         else
                         {
-                            // Add to flat list if it's a new root
                             rootNodes.Add(newNode);
                         }
                         currentNode = newNode;

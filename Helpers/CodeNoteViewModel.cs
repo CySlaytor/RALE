@@ -354,12 +354,12 @@ namespace RALogicEditor.Helpers
                 bestMatchNode = current;
                 matchedDepth = 1;
 
+                // Continue matching even if we have a remainder (Array/Struct coverage logic)
                 while (matchedDepth < offsets.Count)
                 {
-                    if (finalRemainder != 0) break;
-
                     long nextOffset = offsets[matchedDepth];
                     var nextNode = current.Children.FirstOrDefault(n => ParseOffsetString(n.Offset) == nextOffset);
+                    long stepRemainder = 0;
 
                     if (nextNode == null)
                     {
@@ -369,7 +369,7 @@ namespace RALogicEditor.Helpers
                             if (nextOffset >= start && nextOffset < start + n.Size)
                             {
                                 nextNode = n;
-                                finalRemainder = nextOffset - start;
+                                stepRemainder = nextOffset - start;
                                 break;
                             }
                         }
@@ -380,6 +380,7 @@ namespace RALogicEditor.Helpers
                         current = nextNode;
                         bestMatchNode = current;
                         matchedDepth++;
+                        finalRemainder += stepRemainder; // Accumulate remainders if traversing multiple range matches
                     }
                     else
                     {
@@ -411,6 +412,7 @@ namespace RALogicEditor.Helpers
                 }
 
                 string desc = bestMatchNode.Description.Trim();
+                // Only append remainders for the parts we didn't traverse
                 for (int i = matchedDepth; i < offsets.Count; i++)
                 {
                     desc += $" +0x{offsets[i]:X}";
