@@ -183,8 +183,9 @@ namespace RALogicEditor.Parsers
         {
             if (string.IsNullOrEmpty(desc)) return 1;
 
-            // 1. Check for explicit byte count: [X bytes]
-            var bytesMatch = Regex.Match(desc, @"\[(\d+)\s*bytes?\]", RegexOptions.IgnoreCase);
+            // 1. Check for explicit byte count: [X bytes], [ASCII: 20-bytes], [20-byte]
+            // Allow characters before the digits (like ASCII: ) and allow dash in byte(s)
+            var bytesMatch = Regex.Match(desc, @"\[.*?(\d+)\s*[-]?\s*bytes?.*?\]", RegexOptions.IgnoreCase);
             if (bytesMatch.Success && long.TryParse(bytesMatch.Groups[1].Value, out long bSize))
                 return bSize;
 

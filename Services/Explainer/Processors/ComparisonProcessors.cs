@@ -342,8 +342,17 @@ namespace RALogicEditor.Services.Explainer.Processors
             var cond = conditions[index];
 
             // 1. Dummy check
-            if (cond.LeftOperand.Type == "Value" && cond.RightOperand.Type == "Value" && cond.Operator == "=" && cond.LeftOperand.Value == cond.RightOperand.Value)
-                return new ProcessorResult { Text = "Always True (Dummy Condition)", Category = ExplanationCategory.Context };
+            if (cond.LeftOperand.Type == "Value" && cond.RightOperand.Type == "Value")
+            {
+                long l = ParseHex(cond.LeftOperand.Value);
+                long r = ParseHex(cond.RightOperand.Value);
+
+                if (cond.Operator == "=")
+                {
+                    if (l == r) return new ProcessorResult { Text = "Always True (Dummy Condition)", Category = ExplanationCategory.Context };
+                    else return new ProcessorResult { Text = "Always False", Category = ExplanationCategory.Context };
+                }
+            }
 
             // 2. Simple Change check (Delta)
             if (cond.LeftOperand.Type == "Mem" && cond.RightOperand.Type == "Delta" && cond.LeftOperand.Value == cond.RightOperand.Value)

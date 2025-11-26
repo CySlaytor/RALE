@@ -20,6 +20,7 @@ namespace RALogicEditor.Services
         private static readonly List<ILogicProcessor> _processors = new List<ILogicProcessor>
         {
             new PointerCleanupProcessor(), // Consumes "Add Address" lines silently to clean up output
+            new AsciiStringProcessor(),    // NEW: Handles grouped ASCII/Region checks
             new AccumulatorProcessor(),    // Handles complex AddSource/AddHits chains
             new AndNextProcessor(),        // Handles AndNext chains explicitly (e.g. "will operate once")
             new TransitionProcessor(),     // Handles Delta transitions (A > Delta A)
@@ -259,6 +260,11 @@ namespace RALogicEditor.Services
 
                         // Filter empty lines (e.g. from PointerCleanupProcessor)
                         if (string.IsNullOrEmpty(res.Text)) continue;
+
+                        // Filter "Always False" / "Always True" lines in UX logic to avoid confusion,
+                        // as they are usually structural (preventing trigger).
+                        if (isUxHeader && (res.Text.StartsWith("Always False") || res.Text.StartsWith("Always True")))
+                            continue;
 
                         sb.AppendLine($"- {res.Text}");
                     }

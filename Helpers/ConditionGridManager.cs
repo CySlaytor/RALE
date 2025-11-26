@@ -175,6 +175,26 @@ namespace RALogicEditor.Helpers
                                 // Strip tags for tooltip as well
                                 e.ToolTipText = Regex.Replace(desc, @"\[.*?\]", "").Trim();
                             }
+                            else
+                            {
+                                // Fallback to Range Cache for large structs/arrays
+                                string cleanAddr = addr.Replace("0x", "").Trim();
+                                if (long.TryParse(cleanAddr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long targetVal))
+                                {
+                                    var match = RangeCache.FirstOrDefault(r => targetVal >= r.Start && targetVal < r.End);
+                                    if (match.Node != null)
+                                    {
+                                        string desc = match.Node.Description;
+                                        if (string.IsNullOrEmpty(desc)) desc = match.Node.Content.Split('\n')[0];
+                                        desc = Regex.Replace(desc, @"\[.*?\]", "").Trim();
+
+                                        long delta = targetVal - match.Start;
+                                        if (delta > 0) desc += $" +0x{delta:X}";
+
+                                        e.ToolTipText = desc;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
