@@ -64,8 +64,14 @@ namespace RALogicEditor.Helpers
             Dictionary<string, List<NoteNode>> notesLookup,
             List<(long Start, long End, NoteNode Node)>? rangeCache)
         {
-            long ParseHex(string s) =>
-                long.TryParse(s.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+            // Robust Hex Parser: Removes 0x and any non-hex size prefixes (W, H, X, etc.)
+            long ParseHex(string s)
+            {
+                string clean = s.Replace("0x", "").Trim();
+                // Regex to keep only valid hex characters 0-9, A-F
+                clean = Regex.Replace(clean, "[^0-9A-Fa-f]", "");
+                return long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+            }
 
             long targetVal = ParseHex(address);
 
@@ -104,7 +110,7 @@ namespace RALogicEditor.Helpers
                             NoteNode? match = null;
                             foreach (var node in currentLevelNodes)
                             {
-                                long nodeOff = ParseHex(node.Offset.Replace("+", "").Replace("-", "").Trim());
+                                long nodeOff = ParseHex(node.Offset);
                                 if (node.Offset.Contains("-")) nodeOff = -nodeOff;
 
                                 if (offset >= nodeOff && offset < nodeOff + node.Size)
@@ -122,7 +128,7 @@ namespace RALogicEditor.Helpers
                         {
                             foreach (var node in currentLevelNodes)
                             {
-                                long nodeOff = ParseHex(node.Offset.Replace("+", "").Replace("-", "").Trim());
+                                long nodeOff = ParseHex(node.Offset);
                                 if (node.Offset.Contains("-")) nodeOff = -nodeOff;
 
                                 if (targetVal >= nodeOff && targetVal < nodeOff + node.Size)

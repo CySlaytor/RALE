@@ -127,11 +127,11 @@ namespace RALogicEditor.Services.Explainer.Processors
                     }
                     else if (finalCond1.Flag.StartsWith("Measured"))
                     {
-                        bool isHitChain = finalCond1.Flag.Contains("Hits"); // Actually check Flag on the cond ending the accumulator isn't fully accurate for Hits, usually flag is on cond itself.
-                        // Accumulators usually end with a comparison. If that comparison has Measured, it's measuring the result.
-                        string label = "value";
+                        // Handle Measured accumulator
+                        bool isHitChain = finalCond1.Flag.Contains("Hits");
                         // Note: AddHits makes the accumulator count hits.
-                        if (chain1.Any(c => c.Flag.Contains("Hits"))) label = "hits";
+                        if (chain1.Any(c => c.Flag.Contains("Hits"))) isHitChain = true;
+                        string label = isHitChain ? "hits" : "value";
 
                         string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1));
                         result.Text = $"Start measuring {label} up to {valText}: {expandToken}";
@@ -140,10 +140,36 @@ namespace RALogicEditor.Services.Explainer.Processors
                     {
                         string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1));
                         string opText = ctx.GetOperatorText(finalCond1.Operator);
+
+                        // -- START: Updates for PauseLock/Reset Logic on Accumulators --
+
+                        string actionPrefix = "Trigger";
+                        if (finalCond1.Flag == "Pause If")
+                        {
+                            // PauseLock logic: PauseIf with Hits on the terminal condition (which sums the chain)
+                            actionPrefix = (finalCond1.RequiredHits > 0) ? "Lock the achievement (PauseLock)" : "Pause the achievement";
+                            result.Category = ExplanationCategory.Pause;
+                        }
+                        else if (finalCond1.Flag == "Reset If")
+                        {
+                            actionPrefix = "Reset the achievement";
+                            result.Category = ExplanationCategory.Reset;
+                        }
+
                         if (chain1.Any(c => c.Flag.Contains("Hits")))
-                            result.Text = $"Trigger when at least {valText} of the following occur: {expandToken}";
+                        {
+                            // AddHits Chain
+                            result.Text = $"{actionPrefix} when at least {valText} of the following occur: {expandToken}";
+                        }
                         else
-                            result.Text = $"Sum of {blocks.Count} items {expandToken} {opText} {valText}";
+                        {
+                            // AddSource Chain (Sum)
+                            if (finalCond1.Flag == "Pause If" || finalCond1.Flag == "Reset If")
+                                result.Text = $"{actionPrefix} when sum of {blocks.Count} items {expandToken} {opText} {valText}";
+                            else
+                                result.Text = $"Sum of {blocks.Count} items {expandToken} {opText} {valText}";
+                        }
+                        // -- END: Updates --
                     }
                 }
                 else
@@ -346,7 +372,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                 if (c.Flag == "Add Address") continue;
                 int realIdx = ctx.Group.Conditions.IndexOf(c);
                 // Temporarily instantiate a standard processor to explain the single line
-                // or replicate simple explanation logic here
                 lines.Add(ExplainSingleCondition(c, ctx, realIdx, true, true));
             }
             return lines;

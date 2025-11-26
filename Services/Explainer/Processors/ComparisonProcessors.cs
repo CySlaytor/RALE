@@ -1,9 +1,77 @@
 ﻿using RALogicEditor.Definitions;
 using RALogicEditor.Models;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace RALogicEditor.Services.Explainer.Processors
 {
+    // Handles Pointer Chain Setup (Add Address)
+    // Consumes the line but returns empty text so it doesn't clutter the explanation.
+    // The subsequent condition (e.g., Measured or Check) will use the pointer context to resolve names.
+    public class PointerCleanupProcessor : ILogicProcessor
+    {
+        public int Priority => 5; // Very high priority to catch AddAddress before Standard
+        public bool CanProcess(List<AchievementCondition> conditions, int index) => conditions[index].Flag == "Add Address";
+
+        public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int index)
+        {
+            // We consume this line but return no text.
+            // This effectively hides the "Add Address" setup lines from the output,
+            // relying on the final condition's alias resolution (e.g. [Kills]) to tell the story.
+            return new ProcessorResult { Text = "", Category = ExplanationCategory.Context };
+        }
+    }
+
+    // Handles AndNext / OrNext chains
+    // Generates: "[Next Condition Variable] will operate once [Current Condition]... (AndNext)"
+    // This helps explain logic where flagless checks gate the execution of subsequent checks.
+    public class AndNextProcessor : ILogicProcessor
+    {
+        public int Priority => 15;
+        public bool CanProcess(List<AchievementCondition> conditions, int index) =>
+            conditions[index].Flag == "AndNext" || conditions[index].Flag == "OrNext";
+
+        public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int index)
+        {
+            var chainParts = new List<string>();
+            int ptr = index;
+
+            // Consume the chain of AndNext/OrNext
+            while (ptr < conditions.Count)
+            {
+                var cond = conditions[ptr];
+                if (cond.Flag != "AndNext" && cond.Flag != "OrNext") break;
+
+                // Use Standard logic to format the condition text (e.g. "Save is Level 4")
+                var std = new StandardConditionProcessor().Process(ctx, conditions, ptr);
+                string text = std.Text;
+                if (cond.Flag == "OrNext") text = "(OR) " + text;
+
+                chainParts.Add(text);
+                ptr++;
+            }
+
+            // Look at the target (the condition after the chain) to contextualize what "will operate"
+            string targetName = "The next condition";
+            if (ptr < conditions.Count)
+            {
+                var target = conditions[ptr];
+                // Use the Helper to get just the name of the variable (e.g. "[Pac-Man Status]")
+                targetName = ctx.GetOperandText(target.LeftOperand, ptr, false, "", true); // suppress pointers in name
+            }
+
+            // Append (AndNext) to the explanation as requested to make the flag usage explicit to Code Reviewers
+            string explanation = $"{targetName} will operate once {string.Join(" and ", chainParts)} (AndNext)";
+
+            return new ProcessorResult
+            {
+                Text = explanation,
+                Category = ExplanationCategory.Context,
+                ConditionsConsumed = ptr - index // Only consume the chain, leave the target for the next loop iteration
+            };
+        }
+    }
+
     // Handles Delta Transitions (A > Delta A)
     public class TransitionProcessor : ILogicProcessor
     {
@@ -136,7 +204,10 @@ namespace RALogicEditor.Services.Explainer.Processors
         public bool CanProcess(List<AchievementCondition> conditions, int index)
         {
             var f = conditions[index].Flag;
-            return f.StartsWith("Measured") || f == "Trigger";
+            // Fix: Exclude MeasuredIf so it falls through to StandardProcessor
+            // This ensures MeasuredIf is treated as a gate condition (ExplanationCategory.MeasuredIf)
+            // rather than a display definition (ExplanationCategory.Complex)
+            return (f.StartsWith("Measured") && f != "MeasuredIf") || f == "Trigger";
         }
 
         public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int index)
@@ -147,7 +218,17 @@ namespace RALogicEditor.Services.Explainer.Processors
             var cond = conditions[index];
             if (cond.Flag == "Trigger")
             {
-                // Just explain it as a condition but mark category
+                // Fix: Detect Dummy Triggers (Value vs Value) and hide them.
+                // These are used to enable the trigger icon logic without adding a real requirement.
+                if (cond.LeftOperand.Type == "Value" && cond.RightOperand.Type == "Value")
+                {
+                    return new ProcessorResult
+                    {
+                        Text = "", // Empty text causes LogicExplainer to skip adding this line
+                        Category = ExplanationCategory.Complex
+                    };
+                }
+
                 var res = new StandardConditionProcessor().Process(ctx, conditions, index);
                 res.Category = ExplanationCategory.Complex;
                 return res;
@@ -234,8 +315,12 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (cond.Flag == "MeasuredIf")
             {
-                text += ". (MeasuredIf)";
-                return new ProcessorResult { Text = text, Category = ExplanationCategory.MeasuredIf };
+                // Updated to match user requirements for explicit MeasuredIf explanation
+                return new ProcessorResult
+                {
+                    Text = $"The Measured condition will work if {text} (MeasuredIf)",
+                    Category = ExplanationCategory.MeasuredIf
+                };
             }
 
             // Detect if this is likely a transition based on Delta usage

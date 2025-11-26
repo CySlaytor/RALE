@@ -11,17 +11,23 @@ using System.Text;
 
 namespace RALogicEditor.Services
 {
+    // Service responsible for converting raw logic (Conditions/Groups) into human-readable text explanations.
+    // Orchestrates the use of specific ILogicProcessors to handle different logic patterns.
     public static class LogicExplainer
     {
+        // Ordered list of processors. Priority matters: Specific logic (Accumulators, Pointers) 
+        // must be checked before generic fallback logic.
         private static readonly List<ILogicProcessor> _processors = new List<ILogicProcessor>
         {
-            new AccumulatorProcessor(),
-            new TransitionProcessor(),
-            new ResetProcessor(),
-            new PauseProcessor(),
-            new MeasuredTriggerProcessor(),
-            new RememberProcessor(),
-            new StandardConditionProcessor()
+            new PointerCleanupProcessor(), // Consumes "Add Address" lines silently to clean up output
+            new AccumulatorProcessor(),    // Handles complex AddSource/AddHits chains
+            new AndNextProcessor(),        // Handles AndNext chains explicitly (e.g. "will operate once")
+            new TransitionProcessor(),     // Handles Delta transitions (A > Delta A)
+            new ResetProcessor(),          // Handles Reset If
+            new PauseProcessor(),          // Handles Pause If / PauseLock
+            new MeasuredTriggerProcessor(),// Handles Measured / Trigger (excluding MeasuredIf)
+            new RememberProcessor(),       // Handles Remember logic
+            new StandardConditionProcessor() // Fallback for standard checks
         };
 
         public static ExplanationResult ExplainAsset(
@@ -44,7 +50,7 @@ namespace RALogicEditor.Services
                 return result;
             }
 
-            // 1. Explain Core
+            // 1. Explain Core Group
             var core = groups.FirstOrDefault(g => g.GroupName == "Core");
             if (core != null && core.Conditions.Count > 0)
             {
@@ -53,7 +59,7 @@ namespace RALogicEditor.Services
                 sb.AppendLine();
             }
 
-            // 2. Sort Alts
+            // 2. Process Alt Groups (Sorting into Categories)
             var allAlts = groups.Where(g => g.GroupName != "Core").ToList();
             var regularAlts = new List<AchievementConditionGroup>();
             var globalResets = new List<AchievementConditionGroup>();
@@ -63,20 +69,23 @@ namespace RALogicEditor.Services
             {
                 if (alt.Conditions.Count > 0)
                 {
+                    // Detect Global Resets (Alt groups containing only ResetIfs)
                     if (alt.Conditions.All(c => c.Flag == "Reset If")) globalResets.Add(alt);
+                    // Detect Display/UX Logic (Measured/Trigger logic that is effectively impossible to trigger)
                     else if (IsGroupDisplayOnly(alt)) displayLogic.Add(alt);
                     else regularAlts.Add(alt);
                 }
                 else regularAlts.Add(alt);
             }
 
-            // 3. Explain Regular Alts (Arrays)
+            // 3. Explain Regular Alts (Logic Arrays)
             if (regularAlts.Count > 0)
             {
                 sb.AppendLine("## Alternative Requirements (At least one set must be true):");
                 int i = 0;
                 while (i < regularAlts.Count)
                 {
+                    // Check if multiple Alts form a repeating pattern (Array)
                     int seqLength = DetectArraySequence(regularAlts, i);
                     if (seqLength > 2)
                     {
@@ -87,6 +96,7 @@ namespace RALogicEditor.Services
 
                         string explanation = ExplainGroupNatural(firstGroup, notesLookup, rangeCache, showDecimal, result.DetailedInfo);
 
+                        // Indent the explanation for the expandable details
                         var sbIndent = new StringBuilder();
                         foreach (var line in explanation.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
                             sbIndent.AppendLine("  " + line);
@@ -107,21 +117,21 @@ namespace RALogicEditor.Services
                 }
             }
 
-            // 4. Display/UX
+            // 4. Explain Display/UX Logic
             if (displayLogic.Count > 0)
             {
                 sb.AppendLine("## Overlay / UX Logic (Does not trigger achievement):");
                 foreach (var group in displayLogic)
                 {
                     sb.AppendLine($"### {group.GroupName}:");
-                    // Use ExplainGroupNatural but it handles sorting automatically via categories
+                    // Use ExplainGroupNatural but pass isUxHeader=true to handle formatting differently
                     string explanation = ExplainGroupNatural(group, notesLookup, rangeCache, showDecimal, result.DetailedInfo, isUxHeader: true);
                     sb.AppendLine(explanation);
                     sb.AppendLine();
                 }
             }
 
-            // 5. Global Resets
+            // 5. Explain Global Resets
             if (globalResets.Count > 0)
             {
                 sb.AppendLine("## Global Reset Conditions (Applies to all):");
@@ -141,6 +151,7 @@ namespace RALogicEditor.Services
             return result;
         }
 
+        // Core explanation loop that iterates through conditions and delegates to processors
         private static string ExplainGroupNatural(
             AchievementConditionGroup group,
             Dictionary<string, List<NoteNode>> notes,
@@ -157,18 +168,33 @@ namespace RALogicEditor.Services
             // Execution Loop
             while (i < conditions.Count)
             {
-                var cond = conditions[i];
-                if (cond.Flag == "Add Address" || cond.Flag == "AndNext" || cond.Flag == "OrNext")
+                // Redundancy Check:
+                // If current condition is NoFlag and Next is AndNext, and they are identical logic (same variable/value),
+                // skip the current one. The AndNextProcessor will handle the chain and explain the context 
+                // in the next iteration, preventing duplicate lines like "Ammo is 10" followed by "Ammo will operate once...".
+                if (i + 1 < conditions.Count)
                 {
-                    // These should have been consumed by AccumulatorProcessor or are floating.
-                    // If floating, skip or handle generic. Processor handles them if part of chain.
-                    // If we hit them here, it means they are orphans or handled by Standard.
+                    var curr = conditions[i];
+                    var next = conditions[i + 1];
+                    if (string.IsNullOrEmpty(curr.Flag) && next.Flag == "AndNext")
+                    {
+                        if (curr.LeftOperand.Type == next.LeftOperand.Type &&
+                            curr.LeftOperand.Value == next.LeftOperand.Value &&
+                            curr.Operator == next.Operator &&
+                            curr.RightOperand.Type == next.RightOperand.Type &&
+                            curr.RightOperand.Value == next.RightOperand.Value)
+                        {
+                            i++; // Skip redundant line
+                            continue;
+                        }
+                    }
                 }
 
+                // Find the correct processor for the current condition
                 var proc = _processors.OrderBy(p => p.Priority).First(p => p.CanProcess(conditions, i));
                 var res = proc.Process(ctx, conditions, i);
 
-                // Merge details
+                // Merge details from processor (e.g. array expansions)
                 foreach (var kvp in res.DetailedDrillDowns) details[kvp.Key] = kvp.Value;
 
                 results.Add(res);
@@ -178,7 +204,7 @@ namespace RALogicEditor.Services
             // Formatting Output
             var sb = new StringBuilder();
 
-            // Check for UX Headers
+            // Check for UX Headers (Measured/Trigger)
             bool hasMeasured = group.Conditions.Any(c => c.Flag.StartsWith("Measured"));
             bool hasTrigger = group.Conditions.Any(c => c.Flag == "Trigger");
 
@@ -186,18 +212,25 @@ namespace RALogicEditor.Services
             {
                 if (hasMeasured)
                 {
-                    // Find the measured result text
+                    // Try to find the specific measured result text generated by processors
                     var measuredRes = results.FirstOrDefault(r => r.Text.StartsWith("A Measured Indicator") || r.Text.StartsWith("Start measuring"));
                     if (measuredRes != null)
-                        sb.Append(measuredRes.Text); // Specialized processors already format this
+                        sb.Append(measuredRes.Text);
                     else
                         sb.Append("A Measured Indicator will be displayed");
 
+                    // Summarize MeasuredIf conditions in the header line
                     var mIfs = results.Where(r => r.Category == ExplanationCategory.MeasuredIf).ToList();
                     if (mIfs.Any())
                     {
                         sb.Append(" once ");
-                        sb.Append(string.Join(" AND ", mIfs.Select(r => r.Text.Replace(". (MeasuredIf)", ""))));
+                        // Clean the verbose "The Measured condition will work if..." prefix for the header summary
+                        var cleanedIfs = mIfs.Select(r =>
+                            r.Text.Replace("The Measured condition will work if ", "")
+                                  .Replace(" (MeasuredIf)", "")
+                                  .Replace(". (MeasuredIf)", "")
+                        );
+                        sb.Append(string.Join(" AND ", cleanedIfs));
                         sb.AppendLine(" and the following:");
                     }
                     else
@@ -214,9 +247,10 @@ namespace RALogicEditor.Services
             }
 
             // Sort/Group lines by category for readability
-            // Contexts -> Transitions -> Complex -> Pauses -> Resets
+            // MeasuredIf -> Contexts -> Transitions -> Complex -> Pauses -> Resets
 
             var cats = new[] {
+                ExplanationCategory.MeasuredIf,
                 ExplanationCategory.Context,
                 ExplanationCategory.Transition,
                 ExplanationCategory.Complex,
@@ -229,7 +263,10 @@ namespace RALogicEditor.Services
                 var catResults = results.Where(r => r.Category == cat).ToList();
                 if (cat == ExplanationCategory.Transition && catResults.Any())
                 {
-                    sb.AppendLine($"- Trigger when {string.Join(" AND ", catResults.Select(r => r.Text.TrimEnd('.')))}.");
+                    // Combine transitions into a single "Trigger when..." sentence if possible
+                    var validLines = catResults.Select(r => r.Text).Where(t => !string.IsNullOrEmpty(t)).Select(t => t.TrimEnd('.')).ToList();
+                    if (validLines.Count > 0)
+                        sb.AppendLine($"- Trigger when {string.Join(" AND ", validLines)}.");
                 }
                 else
                 {
@@ -237,6 +274,14 @@ namespace RALogicEditor.Services
                     {
                         // Don't double print the header Measured line if we handled it in UX Header
                         if (isUxHeader && hasMeasured && (res.Text.StartsWith("A Measured Indicator") || res.Text.StartsWith("Start measuring"))) continue;
+
+                        // If isUxHeader is true, MeasuredIf lines are summarized in the header ("once X and Y").
+                        // We don't need to list them again as bullet points.
+                        if (isUxHeader && cat == ExplanationCategory.MeasuredIf) continue;
+
+                        // Filter empty lines (e.g. from PointerCleanupProcessor)
+                        if (string.IsNullOrEmpty(res.Text)) continue;
+
                         sb.AppendLine($"- {res.Text}");
                     }
                 }
@@ -247,6 +292,7 @@ namespace RALogicEditor.Services
 
         // --- Shared Array/Display Detection Logic ---
 
+        // Heuristic to determine if a group is solely for displaying an overlay (e.g. impossible logic + measured)
         private static bool IsGroupDisplayOnly(AchievementConditionGroup group)
         {
             bool hasUXFlag = group.Conditions.Any(c => c.Flag.StartsWith("Measured") || c.Flag == "Trigger");
@@ -274,6 +320,7 @@ namespace RALogicEditor.Services
             return impossibleCount > validAccumulatorTerminators;
         }
 
+        // Detects conditions like 0=1 or 1=0
         private static bool IsConditionAlwaysFalse(AchievementCondition c)
         {
             if (c.LeftOperand.Type != "Value" || c.RightOperand.Type != "Value") return false;
@@ -292,6 +339,7 @@ namespace RALogicEditor.Services
             };
         }
 
+        // Detects repeating patterns across multiple Alt groups
         private static int DetectArraySequence(List<AchievementConditionGroup> alts, int startIndex)
         {
             if (startIndex >= alts.Count - 1) return 0;
@@ -306,6 +354,7 @@ namespace RALogicEditor.Services
             return count;
         }
 
+        // Generates a unique string hash for a group structure
         private static string GetGroupFingerprint(AchievementConditionGroup group)
         {
             var sb = new StringBuilder();
@@ -313,6 +362,7 @@ namespace RALogicEditor.Services
             {
                 sb.Append(c.Flag).Append('|');
                 sb.Append(c.LeftOperand.Type).Append('|');
+                // Ignore specific value for Mem to detect structural matches
                 if (c.LeftOperand.Type != "Mem" && c.LeftOperand.Type != "Delta" && c.LeftOperand.Type != "Prior")
                     sb.Append(c.LeftOperand.Value);
                 sb.Append('|').Append(c.Operator).Append('|');

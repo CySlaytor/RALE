@@ -132,8 +132,12 @@ namespace RALogicEditor.Services.Explainer
 
         private string TryGetEnumLabel(string addr, string value, int index)
         {
-            long ParseHex(string s) =>
-                long.TryParse(s.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+            long ParseHex(string s)
+            {
+                string clean = s.Replace("0x", "").Trim();
+                clean = Regex.Replace(clean, "[^0-9A-Fa-f]", "");
+                return long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+            }
 
             long targetVal = ParseHex(addr);
 
@@ -172,7 +176,7 @@ namespace RALogicEditor.Services.Explainer
                             NoteNode? match = null;
                             foreach (var node in currentLevelNodes)
                             {
-                                long nodeOff = ParseHex(node.Offset.Replace("+", "").Replace("-", "").Trim());
+                                long nodeOff = ParseHex(node.Offset);
                                 if (node.Offset.Contains("-")) nodeOff = -nodeOff;
 
                                 if (offset >= nodeOff && offset < nodeOff + node.Size)
@@ -190,7 +194,7 @@ namespace RALogicEditor.Services.Explainer
                         {
                             foreach (var node in currentLevelNodes)
                             {
-                                long nodeOff = ParseHex(node.Offset.Replace("+", "").Replace("-", "").Trim());
+                                long nodeOff = ParseHex(node.Offset);
                                 if (node.Offset.Contains("-")) nodeOff = -nodeOff;
 
                                 if (targetVal >= nodeOff && targetVal < nodeOff + node.Size)
