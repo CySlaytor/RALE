@@ -461,6 +461,9 @@ namespace RALogicEditor
         {
             if (_projectRepo.LocalData == null && _projectRepo.ServerData == null) return;
 
+            // NEW: Ensure any pending virtual note edits are committed before saving
+            codeNoteEditor.CommitChanges();
+
             string savePath = _currentUserFilePath;
             if (string.IsNullOrEmpty(savePath))
             {

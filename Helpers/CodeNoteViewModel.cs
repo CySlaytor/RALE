@@ -31,26 +31,31 @@ namespace RALogicEditor.Helpers
         // The full parsed tree of the current note
         public List<NoteNode> CurrentParsedNodes { get; private set; } = new();
 
-        // -- Virtual State --
-        // Handles "Ghost" notes that don't exist in the file but are calculated (e.g. +0x10 off a struct)
-        public class VirtualStateData
+        // -- Virtual/Edit State --
+        // Unified State for both Virtual (Ghost) and Real (Existing) edits.
+        // This acts as a buffer: changing DisplayText does not immediately affect the CodeNote.
+        public class EditorState
         {
-            public bool IsActive;
+            public bool IsVirtual; // True if creating new node, False if editing existing node
+            public bool IsDirty;   // Tracks if the user has modified the text
             public string Description = "";
             public string LogicCode = "";
             public string LogicType = "";
             public string LogicSize = "";
             public string DisplayText = ""; // The text to show in the body box
 
-            // New: Store the offsets required to recreate this virtual path
+            // Store the offsets required to recreate this virtual path
             public List<long> ChainOffsets = new();
+
+            // Store the target node if editing a real existing node
+            public NoteNode? TargetNode;
         }
-        public VirtualStateData VirtualState { get; private set; } = new();
+        public EditorState EditState { get; private set; } = new();
 
         // -- Events --
         public event EventHandler? NotesLoaded;
         public event EventHandler? NoteContentChanged;
-        public event EventHandler? VirtualStateChanged;
+        public event EventHandler? EditStateChanged; // Changed from VirtualStateChanged to reflect unified editing
         public event EventHandler<NoteNode>? SelectionRequested;
 
         // Constructor Injection
@@ -85,8 +90,11 @@ namespace RALogicEditor.Helpers
 
         public void SelectBaseNote(CodeNote note)
         {
+            // Auto-commit any pending edits before switching context
+            if (EditState.IsDirty) CommitEditState();
+
             CurrentBaseNote = note;
-            ClearVirtualState();
+            ClearEditState();
 
             string normalized = note.Note.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
             CurrentParsedNodes = _parser.ParseNoteText(normalized);
@@ -96,48 +104,155 @@ namespace RALogicEditor.Helpers
 
         public void UpdateNoteContent(string newText)
         {
-            if (CurrentBaseNote == null || VirtualState.IsActive) return;
+            if (CurrentBaseNote == null || EditState.IsVirtual) return;
 
             CurrentBaseNote.Note = newText;
             CurrentParsedNodes = _parser.ParseNoteText(newText);
         }
 
-        // New: Handle updates to virtual (ghost) notes by injecting them into the real note
-        public void UpdateVirtualNote(string newText)
+        // Called by text box on every keystroke
+        // This updates the buffer but NOT the underlying CodeNote.
+        public void UpdateBufferedText(string newText)
         {
-            if (!VirtualState.IsActive || CurrentBaseNote == null) return;
-            if (VirtualState.ChainOffsets.Count == 0) return;
+            if (CurrentBaseNote == null) return;
 
-            // 1. Detect Global Style
-            var style = CodeNoteModifier.DetectGlobalStyle(AllNotes);
+            // If we weren't in a specific edit state, we are now editing the Root note (default fallback)
+            if (EditState.TargetNode == null && !EditState.IsVirtual)
+            {
+                // Root editing context is usually handled by SelectBaseNote, 
+                // but if user just starts typing, we assume root.
+            }
 
-            // 2. Perform Injection
-            string updatedBaseNote = CodeNoteModifier.InjectNoteContent(
-                CurrentBaseNote.Note,
-                VirtualState.ChainOffsets,
-                newText,
-                style
-            );
+            EditState.DisplayText = newText;
+            EditState.IsDirty = true;
+        }
 
-            // 3. Update Model
+        // Commits the buffered text into the actual Code Note structure.
+        // Called by Save (Ctrl+S) or Navigation.
+        public void CommitEditState()
+        {
+            if (!EditState.IsDirty || CurrentBaseNote == null) return;
+
+            string updatedBaseNote = "";
+
+            // UPDATED: Use DetectStyle with Current Note context first, fallback to AllNotes
+            var style = CodeNoteModifier.DetectStyle(CurrentBaseNote.Note, AllNotes);
+
+            if (EditState.IsVirtual)
+            {
+                // Inject new pointer chain
+                if (EditState.ChainOffsets.Count == 0) return;
+
+                updatedBaseNote = CodeNoteModifier.InjectNoteContent(
+                    CurrentBaseNote.Note,
+                    EditState.ChainOffsets,
+                    EditState.DisplayText,
+                    style
+                );
+            }
+            else
+            {
+                // Update existing node
+                if (EditState.TargetNode != null)
+                {
+                    // If editing Root, simple replace
+                    if (EditState.TargetNode.IndentLevel == -2)
+                    {
+                        updatedBaseNote = EditState.DisplayText;
+                    }
+                    else
+                    {
+                        // Splicing for child node
+                        updatedBaseNote = CodeNoteModifier.UpdateRealNode(
+                            CurrentBaseNote.Note,
+                            EditState.TargetNode,
+                            EditState.DisplayText,
+                            style
+                        );
+                    }
+                }
+                else
+                {
+                    // Fallback -> editing root
+                    updatedBaseNote = EditState.DisplayText;
+                }
+            }
+
+            // Apply to Model
             CurrentBaseNote.Note = updatedBaseNote;
 
-            // 4. Refresh Parser (Keep the virtual state active to prevent UI flickering, 
-            // but update the data underneath so if user clicks away, it's saved)
+            // Re-parse
             CurrentParsedNodes = _parser.ParseNoteText(updatedBaseNote);
 
-            // Note: We do NOT clear virtual state here. The user is still editing the "Virtual" node.
-            // However, technically, once saved, it's no longer virtual, it's real.
-            // But for UI continuity, we treat it as the same selection until they click something else.
-            // We update the VirtualState display text to match input.
-            VirtualState.DisplayText = newText;
+            // Save context to restore selection after clear
+            var savedOffsets = EditState.IsVirtual ? new List<long>(EditState.ChainOffsets) : null;
+            var savedNodeOffset = (!EditState.IsVirtual && EditState.TargetNode != null) ? EditState.TargetNode.Offset : null;
+
+            ClearEditState();
+
+            // IMPORTANT: Notify UI that content changed so it refreshes the node list (CurrentParsedNodes).
+            NoteContentChanged?.Invoke(this, EventArgs.Empty);
+
+            // Restore Selection
+            if (savedOffsets != null)
+            {
+                HighlightVariable(savedOffsets);
+            }
+            else if (savedNodeOffset != null)
+            {
+                // Try to find the node we just edited by offset string match
+                var node = FindNodeByOffsetString(savedNodeOffset);
+                if (node != null) RequestNodeSelection(node);
+            }
+        }
+
+        private NoteNode? FindNodeByOffsetString(string offset)
+        {
+            Stack<NoteNode> stack = new Stack<NoteNode>(CurrentParsedNodes);
+            while (stack.Count > 0)
+            {
+                var n = stack.Pop();
+                if (n.Offset == offset) return n;
+                foreach (var c in n.Children) stack.Push(c);
+            }
+            return null;
+        }
+
+        // Set up state for editing a Real Node
+        public void RequestNodeSelection(NoteNode node)
+        {
+            // If we were editing something else and it's dirty, commit it first
+            if (EditState.IsDirty) CommitEditState();
+
+            string content = "";
+            // Extract content logic
+            if (node.IndentLevel == -2) content = CurrentBaseNote?.Note ?? "";
+            else if (!string.IsNullOrWhiteSpace(node.Content)) content = node.Content;
+            else if (!string.IsNullOrWhiteSpace(node.Description)) content = node.Description;
+            else content = node.ToString();
+
+            string desc = node.Description;
+            if (string.IsNullOrEmpty(desc)) desc = node.Offset;
+
+            // Set TargetNode BEFORE setting edit state to avoid race conditions in UI update
+            EditState.TargetNode = node;
+
+            SetEditState(
+                false, // IsVirtual
+                desc,
+                content, // Initial Text
+                "", "", "", // Logic strings not needed for real editing display
+                null
+            );
+
+            SelectionRequested?.Invoke(this, node);
         }
 
         public (string Logic, string Type, string Size) GetSelectedLogic(NoteNode? uiSelectedNode)
         {
-            if (VirtualState.IsActive)
+            if (EditState.IsVirtual)
             {
-                return (VirtualState.LogicCode, VirtualState.LogicType, VirtualState.LogicSize);
+                return (EditState.LogicCode, EditState.LogicType, EditState.LogicSize);
             }
 
             if (CurrentBaseNote == null) return ("", "", "");
@@ -146,14 +261,16 @@ namespace RALogicEditor.Helpers
             return _parser.GeneratePointerLogic(CurrentBaseNote, uiSelectedNode);
         }
 
-        public void ClearVirtualState()
+        public void ClearEditState()
         {
-            VirtualState = new VirtualStateData();
-            VirtualStateChanged?.Invoke(this, EventArgs.Empty);
+            EditState = new EditorState();
+            EditStateChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public void HighlightAddress(string address)
         {
+            if (EditState.IsDirty) CommitEditState();
+
             if (string.IsNullOrEmpty(address)) return;
             string hex = address.Trim();
             if (hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) hex = hex.Substring(2);
@@ -178,10 +295,11 @@ namespace RALogicEditor.Helpers
 
                 string virtualDesc = $"{desc} +0x{delta:X}";
 
-                SetVirtualState(
+                // Setup Virtual Mode
+                SetEditState(
                     true,
                     $"[Indirect from {rangeMatch.Note.Address}] {virtualDesc}",
-                    virtualDesc,
+                    virtualDesc, // Default Text
                     $"0x{targetVal:x}",
                     "Mem",
                     "8-bit",
@@ -192,6 +310,8 @@ namespace RALogicEditor.Helpers
 
         public void HighlightVariable(List<long> offsets)
         {
+            if (EditState.IsDirty) CommitEditState();
+
             if (offsets == null || offsets.Count == 0) return;
             if (CurrentBaseNote == null) return;
             if (CurrentParsedNodes.Count == 0) return;
@@ -270,15 +390,14 @@ namespace RALogicEditor.Helpers
 
             if (bestMatchNode != null && matchedDepth == offsets.Count && finalRemainder == 0)
             {
-                ClearVirtualState();
-                SelectionRequested?.Invoke(this, bestMatchNode);
+                // Exact match found -> Real Node Editing Mode
+                RequestNodeSelection(bestMatchNode);
                 return;
             }
 
+            // Partial Match or No Match -> Virtual Mode
             if (bestMatchNode != null)
             {
-                SelectionRequested?.Invoke(this, bestMatchNode);
-
                 var (baseLogic, type, size) = _parser.GeneratePointerLogic(CurrentBaseNote, bestMatchNode);
 
                 string baseAddrStr = CurrentBaseNote.Address.StartsWith("0x") ? CurrentBaseNote.Address.Substring(2) : CurrentBaseNote.Address;
@@ -302,7 +421,7 @@ namespace RALogicEditor.Helpers
                 }
 
                 // Pass the full chain of offsets to allow recreation
-                SetVirtualState(true, desc, desc, sbLogic.ToString(), type, size, offsets);
+                SetEditState(true, desc, desc, sbLogic.ToString(), type, size, offsets);
                 return;
             }
 
@@ -322,22 +441,23 @@ namespace RALogicEditor.Helpers
                 string desc = $"{CurrentBaseNote.Address} Chain";
                 foreach (var o in offsets) desc += $" +0x{o:X}";
 
-                SetVirtualState(true, desc, desc, sb.ToString(), "Mem", "32-bit", offsets);
+                SetEditState(true, desc, desc, sb.ToString(), "Mem", "32-bit", offsets);
                 return;
             }
         }
 
-        private void SetVirtualState(bool active, string description, string displayText, string logicCode, string type, string size, List<long> offsets)
+        private void SetEditState(bool isVirtual, string description, string displayText, string logicCode, string type, string size, List<long>? offsets)
         {
-            VirtualState.IsActive = active;
-            VirtualState.Description = description;
-            VirtualState.DisplayText = displayText;
-            VirtualState.LogicCode = logicCode;
-            VirtualState.LogicType = type;
-            VirtualState.LogicSize = size;
-            VirtualState.ChainOffsets = offsets ?? new List<long>();
+            EditState.IsVirtual = isVirtual;
+            EditState.Description = description;
+            EditState.DisplayText = displayText;
+            EditState.LogicCode = logicCode;
+            EditState.LogicType = type;
+            EditState.LogicSize = size;
+            EditState.ChainOffsets = offsets ?? new List<long>();
+            EditState.IsDirty = false; // Reset dirty flag when creating new virtual state
 
-            VirtualStateChanged?.Invoke(this, EventArgs.Empty);
+            EditStateChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private long ParseAddress(string addr)

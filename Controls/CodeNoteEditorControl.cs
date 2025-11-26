@@ -38,7 +38,7 @@ namespace RALogicEditor.Controls
             // Wire up ViewModel Events
             _viewModel.NotesLoaded += (s, e) => ApplyFilter(false);
             _viewModel.NoteContentChanged += ViewModel_NoteContentChanged;
-            _viewModel.VirtualStateChanged += ViewModel_VirtualStateChanged;
+            _viewModel.EditStateChanged += ViewModel_EditStateChanged;
             _viewModel.SelectionRequested += ViewModel_SelectionRequested;
 
             // Re-parse view when filter toggles
@@ -48,6 +48,12 @@ namespace RALogicEditor.Controls
         private void btnReload_Click(object sender, EventArgs e)
         {
             ReloadRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        // Exposed method for MainForm to call on Save
+        public void CommitChanges()
+        {
+            _viewModel.CommitEditState();
         }
 
         // Called by Main Form
@@ -66,7 +72,7 @@ namespace RALogicEditor.Controls
                 cmbNotes.DataSource = null;
                 cmbNotes.Items.Clear();
                 txtNoteBody.Text = "";
-                _viewModel.ClearVirtualState();
+                _viewModel.ClearEditState();
 
                 ApplyFilter(false);
 
@@ -139,8 +145,9 @@ namespace RALogicEditor.Controls
             _isInternalUpdate = true;
             try
             {
-                // 1. Update Text Box (if not virtual)
-                if (!_viewModel.VirtualState.IsActive)
+                // 1. Update Text Box (if not in special edit mode)
+                // Although RequestNodeSelection is usually preferred, this fallback handles direct root updates
+                if (!_viewModel.EditState.IsVirtual && _viewModel.EditState.TargetNode == null)
                 {
                     string normalized = _viewModel.CurrentBaseNote.Note.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
                     txtNoteBody.ReadOnly = false;
@@ -184,36 +191,63 @@ namespace RALogicEditor.Controls
 
             var finalList = query.ToList();
             cmbVariables.DataSource = finalList;
-            cmbVariables.Enabled = finalList.Count > 1 && !_viewModel.VirtualState.IsActive;
-            cmbVariables.BackColor = _viewModel.VirtualState.IsActive ? SystemColors.Control : SystemColors.Window;
+            cmbVariables.Enabled = finalList.Count > 1 && !_viewModel.EditState.IsVirtual;
+            cmbVariables.BackColor = _viewModel.EditState.IsVirtual ? SystemColors.Control : SystemColors.Window;
         }
 
-        private void ViewModel_VirtualStateChanged(object? sender, EventArgs e)
+        private void ViewModel_EditStateChanged(object? sender, EventArgs e)
         {
-            var state = _viewModel.VirtualState;
+            var state = _viewModel.EditState;
 
-            if (state.IsActive)
+            // Prevent the TextChanged event from firing and marking the state dirty immediately
+            bool wasUpdating = _isInternalUpdate;
+            _isInternalUpdate = true;
+
+            try
             {
-                lblOffsetChain.Text = state.Description;
-                cmbVariables.Enabled = false;
-                cmbVariables.BackColor = SystemColors.Control;
+                if (state.IsVirtual)
+                {
+                    // Virtual Mode (Creating new node)
+                    string status = state.IsDirty ? " (Modified - Save to Commit)" : "";
+                    lblOffsetChain.Text = state.Description + " (Unsaved Virtual Note)" + status;
 
-                // Allow edit of virtual note to support injection
-                txtNoteBody.Text = state.DisplayText;
-                txtNoteBody.ReadOnly = false; // changed from true to false
+                    cmbVariables.Enabled = false;
+                    cmbVariables.BackColor = SystemColors.Control;
+
+                    // Allow edit of virtual note to support injection
+                    txtNoteBody.Text = state.DisplayText;
+                    txtNoteBody.ReadOnly = false;
+                }
+                else if (state.TargetNode != null)
+                {
+                    // Real Node Editing Mode
+                    string status = state.IsDirty ? " (Modified)" : "";
+                    lblOffsetChain.Text = state.Description + status;
+
+                    cmbVariables.Enabled = true;
+                    cmbVariables.BackColor = SystemColors.Window;
+
+                    txtNoteBody.Text = state.DisplayText;
+                    txtNoteBody.ReadOnly = false;
+                }
+                else
+                {
+                    // Root / Default
+                    lblOffsetChain.Text = "Ready";
+                    cmbVariables.Enabled = true;
+                    cmbVariables.BackColor = SystemColors.Window;
+                    txtNoteBody.ReadOnly = false;
+                }
             }
-            else
+            finally
             {
-                cmbVariables.Enabled = true;
-                cmbVariables.BackColor = SystemColors.Window;
-                txtNoteBody.ReadOnly = false;
-                // Text reset handled by selection change usually
+                _isInternalUpdate = wasUpdating;
             }
         }
 
         private void ViewModel_SelectionRequested(object? sender, NoteNode node)
         {
-            // VM asks us to select a node. We try to find it in the visible list.
+            // VM asks us to select a node in the combobox. We try to find it in the visible list.
             bool wasUpdating = _isInternalUpdate;
             _isInternalUpdate = true;
             try
@@ -227,15 +261,7 @@ namespace RALogicEditor.Controls
                     // Node is filtered out of view, just clear selection
                     cmbVariables.SelectedIndex = -1;
                 }
-
-                // IMPORTANT: Since we suppressed events, we must manually update the text body
-                // IF we are not in virtual mode. If virtual mode is active, StateChanged handles text.
-                if (!_viewModel.VirtualState.IsActive)
-                {
-                    if (!string.IsNullOrWhiteSpace(node.Content)) txtNoteBody.Text = node.Content;
-                    else if (!string.IsNullOrWhiteSpace(node.Description)) txtNoteBody.Text = node.Description;
-                    else txtNoteBody.Text = node.ToString();
-                }
+                // Note: Text Body update is handled by EditStateChanged
             }
             finally
             {
@@ -259,48 +285,35 @@ namespace RALogicEditor.Controls
             if (cmbVariables.SelectedItem is NoteNode node)
             {
                 // UI Update Logic:
+                // Requesting selection via ViewModel ensures EditState is set up correctly for buffering
                 if (node.IndentLevel == -2)
                 {
                     // Root node
-                    if (_viewModel.CurrentBaseNote != null)
-                        txtNoteBody.Text = _viewModel.CurrentBaseNote.Note.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
-                    UpdateStatusStrip(null);
+                    _viewModel.ClearEditState();
+                    // Manually allow editing the root note content via buffer too
+                    _viewModel.RequestNodeSelection(node);
                 }
                 else
                 {
-                    if (!string.IsNullOrWhiteSpace(node.Content)) txtNoteBody.Text = node.Content;
-                    else if (!string.IsNullOrWhiteSpace(node.Description)) txtNoteBody.Text = node.Description;
-                    else txtNoteBody.Text = "No Code Note found for this address.";
-
-                    UpdateStatusStrip(node);
+                    _viewModel.RequestNodeSelection(node);
                 }
-                // Ensure virtual state is cleared if user manually picks a node
-                _viewModel.ClearVirtualState();
             }
         }
 
         private void txtNoteBody_TextChanged(object sender, EventArgs e)
         {
             if (_isInternalUpdate) return;
-            if (cmbVariables.SelectedIndex != -1 && cmbVariables.SelectedIndex != 0 && !_viewModel.VirtualState.IsActive) return;
 
-            // Handle virtual note updates (injection)
-            if (_viewModel.VirtualState.IsActive)
+            // All editing is now buffered via the ViewModel.
+            // This prevents live overwrites of the file and allows cancelling/undo if needed (future feature).
+            _viewModel.UpdateBufferedText(txtNoteBody.Text);
+
+            // Update status label to show dirty state without full refresh
+            if (_viewModel.EditState.IsDirty)
             {
-                // Defer update slightly? No, direct update.
-                // We perform the injection, which updates the base note, which re-parses the tree.
-                _viewModel.UpdateVirtualNote(txtNoteBody.Text);
-                return;
+                if (!lblOffsetChain.Text.Contains("(Modified"))
+                    lblOffsetChain.Text += " (Modified)";
             }
-
-            // Normal update
-            _viewModel.UpdateNoteContent(txtNoteBody.Text);
-
-            // Refresh UI list without resetting text
-            bool wasUpdating = _isInternalUpdate;
-            _isInternalUpdate = true;
-            RefreshVariableTreeDisplay();
-            _isInternalUpdate = wasUpdating;
         }
 
         // Public Bridge Methods calling VM
@@ -333,6 +346,16 @@ namespace RALogicEditor.Controls
         public void HighlightVariable(List<long> offsets)
         {
             _viewModel.HighlightVariable(offsets);
+            // Ensure UI combo matches ViewModel selection
+            if (_viewModel.CurrentBaseNote != null && cmbNotes.SelectedItem != _viewModel.CurrentBaseNote)
+            {
+                // Sync logic similar to HighlightAddress
+                bool wasUpdating = _isInternalUpdate;
+                _isInternalUpdate = true;
+                if (!_filteredNotes.Contains(_viewModel.CurrentBaseNote)) txtSearch.Text = "";
+                cmbNotes.SelectedItem = _viewModel.CurrentBaseNote;
+                _isInternalUpdate = wasUpdating;
+            }
         }
 
         public (string Logic, string Type, string Size) GetSelectedLogic()
@@ -343,11 +366,8 @@ namespace RALogicEditor.Controls
 
         private void UpdateStatusStrip(NoteNode? node)
         {
-            if (_viewModel.VirtualState.IsActive)
-            {
-                lblOffsetChain.Text = _viewModel.VirtualState.Description;
-                return;
-            }
+            // Fallback status update, mostly handled by EditStateChanged now
+            if (_viewModel.EditState.IsVirtual) return;
 
             if (node == null) { lblOffsetChain.Text = "Ready"; return; }
             var chain = new List<string>();

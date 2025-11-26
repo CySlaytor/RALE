@@ -30,6 +30,7 @@ namespace RALogicEditor.Helpers
                     return new string('.', depth);
 
                 // Mixed: Depth 1 is '+', Depth > 1 starts with dots and ends with +
+                // Example: +0x10 -> .+0x10 -> ..+0x10
                 if (Indentation == IndentStyle.Mixed)
                 {
                     if (depth == 1) return "+";
@@ -51,63 +52,178 @@ namespace RALogicEditor.Helpers
             }
         }
 
+        private class StyleStats
+        {
+            public int PlusCount = 0;
+            public int MixedCount = 0;
+            public int DotCount = 0;
+            public int PipeCount = 0;
+            public int EqCount = 0;
+            public int ColCount = 0;
+
+            public bool HasIndent => PlusCount > 0 || MixedCount > 0 || DotCount > 0;
+            public bool HasSeparator => PipeCount > 0 || EqCount > 0 || ColCount > 0;
+        }
+
+        // New: Detects style based on the current note first, falling back to global stats if needed.
+        public static NoteStyle DetectStyle(string currentNote, List<CodeNote> allNotes)
+        {
+            // 1. Prioritize the current note's style if it has explicit formatting
+            var localStats = ScanStats(new[] { currentNote });
+
+            // If we found relevant styling in the current note, use it.
+            if (localStats.HasIndent || localStats.HasSeparator)
+            {
+                // If local stats define indentation but not separator, or vice versa,
+                // we should arguably merge with global stats, but for now let's trust local detection logic
+                // which defaults intelligently.
+                var style = ResolveStyle(localStats);
+
+                // If local lacked separator info, try to fill from global
+                if (!localStats.HasSeparator)
+                {
+                    var globalSep = DetectGlobalStyle(allNotes).Separator;
+                    // Only apply if it's not Space (default)
+                    if (globalSep != SeparatorStyle.Space) style.Separator = globalSep;
+                }
+
+                return style;
+            }
+
+            // 2. Fallback to global average
+            var globalStats = ScanStats(allNotes.Select(n => n.Note));
+            return ResolveStyle(globalStats);
+        }
+
         public static NoteStyle DetectGlobalStyle(List<CodeNote> allNotes)
         {
-            var style = new NoteStyle();
-            int plusCount = 0;
-            int mixedCount = 0;
-            int dotCount = 0;
+            var stats = ScanStats(allNotes.Select(n => n.Note));
+            return ResolveStyle(stats);
+        }
 
-            int pipeCount = 0;
-            int eqCount = 0;
-            int colCount = 0;
-
+        private static StyleStats ScanStats(IEnumerable<string> notes)
+        {
+            var stats = new StyleStats();
             var indentRegex = new Regex(@"^([.+]+)0x", RegexOptions.Multiline);
             var sepRegex = new Regex(@"0x[0-9A-Fa-f]+\s*([|=:])\s*", RegexOptions.Multiline);
 
-            foreach (var note in allNotes)
+            foreach (var noteText in notes)
             {
-                var matches = indentRegex.Matches(note.Note);
+                if (string.IsNullOrEmpty(noteText)) continue;
+
+                var matches = indentRegex.Matches(noteText);
                 foreach (Match m in matches)
                 {
                     string indent = m.Groups[1].Value;
                     if (indent.Contains("."))
                     {
-                        if (indent.Contains("+")) mixedCount++;
-                        else dotCount++;
+                        if (indent.Contains("+")) stats.MixedCount++;
+                        else stats.DotCount++;
                     }
                     else if (indent.Contains("+"))
                     {
-                        plusCount++;
+                        stats.PlusCount++;
                     }
                 }
 
-                var sepMatches = sepRegex.Matches(note.Note);
+                var sepMatches = sepRegex.Matches(noteText);
                 foreach (Match m in sepMatches)
                 {
                     string s = m.Groups[1].Value;
-                    if (s == "|") pipeCount++;
-                    else if (s == "=") eqCount++;
-                    else if (s == ":") colCount++;
+                    if (s == "|") stats.PipeCount++;
+                    else if (s == "=") stats.EqCount++;
+                    else if (s == ":") stats.ColCount++;
                 }
             }
+            return stats;
+        }
 
-            if (mixedCount > dotCount && mixedCount > plusCount) style.Indentation = IndentStyle.Mixed;
-            else if (dotCount > plusCount && dotCount > mixedCount) style.Indentation = IndentStyle.Dot;
+        private static NoteStyle ResolveStyle(StyleStats stats)
+        {
+            var style = new NoteStyle();
+
+            if (stats.MixedCount > stats.DotCount && stats.MixedCount > stats.PlusCount) style.Indentation = IndentStyle.Mixed;
+            else if (stats.DotCount > stats.PlusCount && stats.DotCount > stats.MixedCount) style.Indentation = IndentStyle.Dot;
             else style.Indentation = IndentStyle.Plus;
 
-            if (pipeCount >= eqCount && pipeCount >= colCount && pipeCount > 0) style.Separator = SeparatorStyle.Pipe;
-            else if (eqCount >= pipeCount && eqCount >= colCount && eqCount > 0) style.Separator = SeparatorStyle.Equals;
-            else if (colCount >= pipeCount && colCount >= eqCount && colCount > 0) style.Separator = SeparatorStyle.Colon;
+            if (stats.PipeCount >= stats.EqCount && stats.PipeCount >= stats.ColCount && stats.PipeCount > 0) style.Separator = SeparatorStyle.Pipe;
+            else if (stats.EqCount >= stats.PipeCount && stats.EqCount >= stats.ColCount && stats.EqCount > 0) style.Separator = SeparatorStyle.Equals;
+            else if (stats.ColCount >= stats.PipeCount && stats.ColCount >= stats.EqCount && stats.ColCount > 0) style.Separator = SeparatorStyle.Colon;
             else style.Separator = SeparatorStyle.Space;
 
-            if (style.Separator == SeparatorStyle.Space && pipeCount == 0 && eqCount == 0 && colCount == 0)
-                style.Separator = SeparatorStyle.Pipe;
+            if (style.Separator == SeparatorStyle.Space && !stats.HasSeparator)
+                style.Separator = SeparatorStyle.Pipe; // Default preference
 
             return style;
         }
 
-        public static string InjectNoteContent(string baseNoteText, List<long> chainOffsets, string newContent, NoteStyle style)
+        // Helper to infer style from a specific parent node text, overriding defaults
+        // This ensures that if we are inserting into a note that uses dots, we use dots, regardless of other settings.
+        private static NoteStyle DetectLocalStyle(string parentLine, NoteStyle fallbackStyle)
+        {
+            var localStyle = new NoteStyle { Separator = fallbackStyle.Separator, Indentation = fallbackStyle.Indentation };
+
+            // Infer Separator from specific line
+            if (parentLine.Contains("|")) localStyle.Separator = SeparatorStyle.Pipe;
+            else if (parentLine.Contains("=")) localStyle.Separator = SeparatorStyle.Equals;
+            else if (parentLine.Contains(":")) localStyle.Separator = SeparatorStyle.Colon;
+
+            // Infer Indentation Pattern from specific line
+            // Regex matches start of line like "  +0x" or ".+0x"
+            var match = Regex.Match(parentLine.TrimStart(), @"^([.+]+)");
+            if (match.Success)
+            {
+                string indent = match.Groups[1].Value;
+                if (indent.Contains("."))
+                {
+                    // Explicit dots
+                    localStyle.Indentation = indent.Contains("+") ? IndentStyle.Mixed : IndentStyle.Dot;
+                }
+                else if (indent.Contains("+"))
+                {
+                    // If indentation is exactly "+", it is technically compatible with both Plus and Mixed (depth 1).
+                    // If fallback is Mixed, preserve Mixed to ensure children get "." (e.g. ".+")
+                    if (indent == "+" && fallbackStyle.Indentation == IndentStyle.Mixed)
+                    {
+                        localStyle.Indentation = IndentStyle.Mixed;
+                    }
+                    else if (indent.Length > 1 && !indent.Contains("."))
+                    {
+                        // "++", "+++" -> Definitely Plus
+                        localStyle.Indentation = IndentStyle.Plus;
+                    }
+                    else
+                    {
+                        // Default to Plus if ambiguous and fallback isn't Mixed
+                        localStyle.Indentation = IndentStyle.Plus;
+                    }
+                }
+            }
+
+            return localStyle;
+        }
+
+        // Updates a specific EXISTING node in the tree with new content
+        // Used when editing a real node to prevent data loss in the rest of the file
+        public static string UpdateRealNode(string baseNoteText, NoteNode node, string newContent, NoteStyle globalStyle)
+        {
+            var lines = baseNoteText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
+
+            if (node.RawLineIndex >= lines.Count) return baseNoteText; // Safety check
+
+            // Detect style from the line itself to preserve indentation format of the node being edited
+            var style = DetectLocalStyle(lines[node.RawLineIndex], globalStyle);
+
+            // Calculate depth based on indent level. 
+            // Level 0 = Depth 1 (e.g. +), Level 1 = Depth 2 (e.g. ++)
+            int depth = node.IndentLevel + 1;
+
+            ReplaceNodeContent(lines, node, newContent, style, depth);
+
+            return string.Join("\r\n", lines);
+        }
+
+        public static string InjectNoteContent(string baseNoteText, List<long> chainOffsets, string newContent, NoteStyle globalStyle)
         {
             var parser = new PointerTreeParser();
             var rootNodes = parser.ParseNoteText(baseNoteText);
@@ -138,6 +254,33 @@ namespace RALogicEditor.Helpers
                     child = currentNode.Children.FirstOrDefault(c => ParseOffset(c.Offset) == targetOffset);
                 }
 
+                // Determine Style for this insertion level.
+                // Priority: 
+                // 1. Siblings (last child of current node, or last root node) - strongest indicator of list format
+                // 2. Parent (current node) - if no siblings exist
+                // 3. Global/Fallback
+
+                NoteStyle effectiveStyle = globalStyle;
+                bool styleDetected = false;
+
+                // Check Siblings
+                IEnumerable<NoteNode> siblings = (currentNode == null)
+                    ? rootNodes.Where(n => n.IndentLevel == 0)
+                    : currentNode.Children;
+
+                var lastSibling = siblings.LastOrDefault();
+                if (lastSibling != null && lastSibling.RawLineIndex < lines.Count)
+                {
+                    effectiveStyle = DetectLocalStyle(lines[lastSibling.RawLineIndex], globalStyle);
+                    styleDetected = true;
+                }
+
+                // Check Parent
+                if (!styleDetected && currentNode != null && currentNode.RawLineIndex < lines.Count)
+                {
+                    effectiveStyle = DetectLocalStyle(lines[currentNode.RawLineIndex], globalStyle);
+                }
+
                 if (child != null)
                 {
                     // Node exists, traverse
@@ -145,7 +288,10 @@ namespace RALogicEditor.Helpers
 
                     if (i == chainOffsets.Count - 1)
                     {
-                        ReplaceNodeContent(lines, child, newContent, style, currentDepth);
+                        // Re-detect style from the child itself to ensure we match its current format during replacement
+                        var childStyle = DetectLocalStyle(lines[child.RawLineIndex], effectiveStyle);
+                        // Note: IndentLevel 0 in parser usually corresponds to depth 1 in string (+), IndentLevel 1 -> depth 2 (++).
+                        ReplaceNodeContent(lines, child, newContent, childStyle, child.IndentLevel + 1);
                     }
                 }
                 else
@@ -159,18 +305,32 @@ namespace RALogicEditor.Helpers
                     string offsetHex = "0x" + targetOffset.ToString("x");
                     if (targetOffset < 0) offsetHex = "-0x" + Math.Abs(targetOffset).ToString("x");
 
-                    string indent = style.GetIndentString(currentDepth);
+                    // Determine insertion depth.
+                    // If no parent (root insertion), depth is 1.
+                    // If parent exists, depth is parent.IndentLevel + 2 (e.g. Parent Level 0 -> Depth 1 -> Child Depth 2).
+                    int insertionDepth = (currentNode == null) ? 1 : currentNode.IndentLevel + 2;
+
+                    string indent = effectiveStyle.GetIndentString(insertionDepth);
 
                     if (i == chainOffsets.Count - 1)
                     {
-                        // Target Node
+                        // Target Node: Insert Header + Body
                         string[] contentParts = newContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                        string title = contentParts.Length > 0 ? contentParts[0] : "";
 
-                        string sep = style.GetSeparatorString();
+                        // If user provided empty content, just create the pointer entry
+                        string title = contentParts.Length > 0 ? contentParts[0] : "New Node";
+                        if (contentParts.Length > 0 && (contentParts[0].StartsWith("0x") || contentParts[0].Contains("=")))
+                        {
+                            // Heuristic: User didn't provide a title, just values. Use placeholder? 
+                            // Actually, keeping the logic simple: first line is title.
+                        }
+
+                        string sep = effectiveStyle.GetSeparatorString();
                         string header = $"{indent}{offsetHex}{sep}{title}";
 
                         lines.Insert(insertIndex, header);
+
+                        // Insert remaining lines as body
                         for (int k = 1; k < contentParts.Length; k++)
                         {
                             lines.Insert(insertIndex + k, contentParts[k]);
@@ -178,14 +338,14 @@ namespace RALogicEditor.Helpers
                     }
                     else
                     {
-                        // Intermediate Node
+                        // Intermediate Node: Just Header
                         lines.Insert(insertIndex, $"{indent}{offsetHex}");
 
                         // Fake node to continue traversal context
                         var newNode = new NoteNode
                         {
                             RawLineIndex = insertIndex,
-                            IndentLevel = CountIndent(indent),
+                            IndentLevel = insertionDepth - 1, // Parser uses 0-based
                             Children = new List<NoteNode>()
                         };
 
@@ -195,8 +355,7 @@ namespace RALogicEditor.Helpers
                         }
                         else
                         {
-                            // Add to flat list if it's a new root? Not strictly necessary for GetInsertionIndex logic 
-                            // as long as we update currentNode. But for correctness:
+                            // Add to flat list if it's a new root
                             rootNodes.Add(newNode);
                         }
                         currentNode = newNode;
@@ -213,14 +372,26 @@ namespace RALogicEditor.Helpers
             int removeCount = 1;
             int idx = node.RawLineIndex + 1;
 
-            var nodeRegex = new Regex(@"^[.+\s]*[-+]?0x[0-9A-Fa-f]+");
+            // Improved Regex: Must look for Structural Nodes, NOT value definitions.
+            // A Structural Node MUST start with . or + (for indentation) followed immediately by 0x
+            // This prevents stopping early on lines like "0x01 = True" inside a node body.
+            var nodeStructureRegex = new Regex(@"^\s*[.+]+0x", RegexOptions.IgnoreCase);
 
             while (idx < lines.Count)
             {
                 string line = lines[idx];
-                if (string.IsNullOrWhiteSpace(line)) { idx++; removeCount++; continue; }
 
-                if (nodeRegex.IsMatch(line)) break;
+                // If blank line, assume part of content
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    idx++; removeCount++; continue;
+                }
+
+                // If we hit a line that starts with . or + AND 0x, it's a new structural node -> Stop removing
+                if (nodeStructureRegex.IsMatch(line)) break;
+
+                // Safety: If we hit something that looks like a root pointer "+0x...", stop
+                if (line.TrimStart().StartsWith("+0x")) break;
 
                 idx++;
                 removeCount++;
@@ -228,7 +399,7 @@ namespace RALogicEditor.Helpers
 
             lines.RemoveRange(node.RawLineIndex, removeCount);
 
-            // Rebuild
+            // Rebuild Header
             string offsetHex = node.Offset.TrimStart('+', '.');
             if (!offsetHex.StartsWith("-") && !offsetHex.StartsWith("0x")) offsetHex = "0x" + offsetHex;
 
@@ -250,17 +421,11 @@ namespace RALogicEditor.Helpers
         private static int GetInsertionIndex(List<string> lines, NoteNode? parent, List<NoteNode> allNodes)
         {
             // If parent is null, we are inserting at Top Level (Level 0).
-            // We should find the last Level 0 node and insert after its descendants.
-            // If no Level 0 nodes, insert at end.
-
             if (parent == null)
             {
                 var lastLevel0 = allNodes.LastOrDefault(n => n.IndentLevel == 0);
                 if (lastLevel0 == null)
                 {
-                    // No existing nodes, append to end.
-                    // Note: allNodes usually contains Root(-2) at 0. We skip that.
-                    // If file is empty except header, lines.Count is correct.
                     return lines.Count;
                 }
                 var target = GetLastDescendant(lastLevel0);
@@ -281,15 +446,21 @@ namespace RALogicEditor.Helpers
 
         private static int GetEndOfNodeIndex(List<string> lines, NoteNode node)
         {
-            // Skip the header and any body lines
+            // Start searching *after* the node's header line
             int idx = node.RawLineIndex + 1;
-            var nodeRegex = new Regex(@"^[.+\s]*[-+]?0x[0-9A-Fa-f]+");
+
+            // Same improved regex here to properly skip body content
+            var nodeStructureRegex = new Regex(@"^\s*[.+]+0x", RegexOptions.IgnoreCase);
 
             while (idx < lines.Count)
             {
                 string line = lines[idx];
+                if (string.IsNullOrWhiteSpace(line)) { idx++; continue; }
+
                 // If we hit a line that looks like a node, we stop.
-                if (nodeRegex.IsMatch(line)) return idx;
+                if (nodeStructureRegex.IsMatch(line)) return idx;
+                if (line.TrimStart().StartsWith("+0x")) return idx;
+
                 idx++;
             }
             return idx;
@@ -310,13 +481,6 @@ namespace RALogicEditor.Helpers
                 return val;
             }
             return 0;
-        }
-
-        private static int CountIndent(string s)
-        {
-            int count = 0;
-            foreach (char c in s) { if (c == '+' || c == '.') count++; }
-            return count;
         }
     }
 }
