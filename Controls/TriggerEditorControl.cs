@@ -187,6 +187,11 @@ namespace RALogicEditor.Controls
                 }
             }
             _gridManager.NotesLookup = _notesLookup;
+
+            // Pass references to ViewModel so validation can use them
+            _viewModel.NotesLookup = _notesLookup;
+            _viewModel.RangeCache = _gridManager.RangeCache;
+
             RefreshCurrentGridDisplay();
         }
 
@@ -453,12 +458,6 @@ namespace RALogicEditor.Controls
 
                 int index = _viewModel.ActiveGroups.IndexOf(group);
                 bool isGenerated = false;
-
-                // Logic to visually lock generated rows
-                // In Array mode, generated rows are appended to the same group.
-                // We should technically lock them, but identifying exactly which rows are generated vs template is tricky here visually without adding metadata to the Condition object.
-                // For "Normal" generator mode (Alts), the entire group is generated, so that's easy.
-                // For now, we only lock "Normal" generated groups. Array mode groups remain editable, but edits will be overwritten on next update unless baked.
 
                 foreach (var kvp in _viewModel.GeneratorRules)
                 {
@@ -1018,27 +1017,96 @@ namespace RALogicEditor.Controls
         public void SelectCondition(AchievementCondition? target)
         {
             if (target == null) return;
-            // Find group
-            foreach (var g in _viewModel.ActiveGroups)
-            {
-                if (g.Conditions.Contains(target))
-                {
-                    // Switch UI
-                    conditionGrid.Tag = g;
-                    RefreshGroupsListUI();
 
-                    // Highlight logic
-                    foreach (DataGridViewRow row in conditionGrid.Rows)
+            // Find group index
+            int groupIndex = -1;
+            int conditionIndexInGroup = -1;
+
+            // We must search _viewModel.ActiveGroups because that's what populate groupsList
+            for (int i = 0; i < _viewModel.ActiveGroups.Count; i++)
+            {
+                var group = _viewModel.ActiveGroups[i];
+                // Safe search by reference might fail if objects were cloned.
+                // Search by ID? IDs might not be unique across groups if not managed carefully.
+                // Best effort: Find object reference if same context, otherwise rely on content?
+                // Actually, Validator runs on the current live objects from ViewModel if no navigation happened.
+                // If navigation happened, objects might be different.
+
+                // BUT: ValidationIssue.Target holds a reference to the object that was validated.
+                // If validation ran on the *current* state, it should be the exact object in _viewModel.ActiveGroups.
+
+                if (group.Conditions.Contains(target))
+                {
+                    groupIndex = i;
+                    conditionIndexInGroup = group.Conditions.IndexOf(target);
+                    break;
+                }
+            }
+
+            // If reference check fails (e.g. validation ran on a snapshot), fallback to properties match?
+            // This is risky but better than nothing.
+            if (groupIndex == -1)
+            {
+                // Fallback: match by ID + properties
+                for (int i = 0; i < _viewModel.ActiveGroups.Count; i++)
+                {
+                    var group = _viewModel.ActiveGroups[i];
+                    for (int j = 0; j < group.Conditions.Count; j++)
                     {
-                        if (row.Tag == target)
+                        var c = group.Conditions[j];
+                        if (c.ID == target.ID && c.Flag == target.Flag &&
+                            c.LeftOperand.Value == target.LeftOperand.Value)
                         {
-                            conditionGrid.ClearSelection();
-                            row.Selected = true;
-                            conditionGrid.FirstDisplayedScrollingRowIndex = row.Index;
+                            groupIndex = i;
+                            conditionIndexInGroup = j;
                             break;
                         }
                     }
-                    break;
+                    if (groupIndex != -1) break;
+                }
+            }
+
+            if (groupIndex != -1 && conditionIndexInGroup != -1)
+            {
+                // 1. Select group in list (triggers grid refresh via event)
+                if (groupIndex >= 0 && groupIndex < groupsList.Items.Count)
+                {
+                    bool wasChanging = _isProgrammaticallyChanging;
+                    _isProgrammaticallyChanging = true;
+
+                    // Manually trigger logic if selection doesn't change (to force refresh if needed)
+                    // or update selection if it does change.
+                    if (!groupsList.Items[groupIndex].Selected)
+                    {
+                        groupsList.Items[groupIndex].Selected = true;
+                        // Manually update grid tag and refresh
+                        conditionGrid.Tag = _viewModel.ActiveGroups[groupIndex];
+                        RefreshCurrentGridDisplay();
+                    }
+                    else
+                    {
+                        // Already selected, but maybe grid needs refresh if logic changed externally?
+                        // Just ensure grid tag is correct
+                        conditionGrid.Tag = _viewModel.ActiveGroups[groupIndex];
+                        RefreshCurrentGridDisplay();
+                    }
+
+                    groupsList.EnsureVisible(groupIndex);
+                    _isProgrammaticallyChanging = wasChanging;
+                }
+
+                // 2. Highlight specific row by INDEX, not Tag search
+                if (conditionIndexInGroup < conditionGrid.Rows.Count)
+                {
+                    var row = conditionGrid.Rows[conditionIndexInGroup];
+                    conditionGrid.ClearSelection();
+                    row.Selected = true;
+
+                    if (row.Index >= 0)
+                    {
+                        conditionGrid.FirstDisplayedScrollingRowIndex = row.Index;
+                        conditionGrid.CurrentCell = row.Cells[0];
+                    }
                 }
             }
         }

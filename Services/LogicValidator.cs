@@ -1,14 +1,22 @@
 ﻿#nullable enable
 using RALogicEditor.Definitions;
+using RALogicEditor.Helpers;
 using RALogicEditor.Models;
+using RALogicEditor.Utilities;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace RALogicEditor.Services
 {
     public class LogicValidator : ILogicValidator
     {
-        private List<ValidationIssue> ValidateGroup(AchievementConditionGroup group, bool otherGroupsHaveReset, IAssetItem? asset)
+        private List<ValidationIssue> ValidateGroup(
+            AchievementConditionGroup group,
+            bool otherGroupsHaveReset,
+            IAssetItem? asset,
+            Dictionary<string, List<NoteNode>>? notesLookup,
+            List<(long Start, long End, NoteNode Node)>? rangeCache)
         {
             var issues = new List<ValidationIssue>();
             if (group.Conditions.Count == 0) return issues;
@@ -25,11 +33,21 @@ namespace RALogicEditor.Services
             // 4. Size Mismatches
             CheckSizeMismatches(group, issues, asset);
 
+            // 5. Check for Missing Code Notes (Documentation)
+            if (notesLookup != null)
+            {
+                CheckMissingNotes(group, issues, asset, notesLookup, rangeCache);
+            }
+
             return issues;
         }
 
         // Validates the entire asset (all groups) for cross-group logic like Delta checks
-        public List<ValidationIssue> ValidateAsset(List<AchievementConditionGroup> groups, IAssetItem? asset = null)
+        public List<ValidationIssue> ValidateAsset(
+            List<AchievementConditionGroup> groups,
+            IAssetItem? asset,
+            Dictionary<string, List<NoteNode>>? notesLookup = null,
+            List<(long Start, long End, NoteNode Node)>? rangeCache = null)
         {
             var allIssues = new List<ValidationIssue>();
             if (groups == null) return allIssues;
@@ -44,7 +62,7 @@ namespace RALogicEditor.Services
                 // If at least one other group has a reset, we consider global reset active for this group
                 bool otherGroupsHaveReset = (resetCount - (groupHasReset ? 1 : 0)) > 0;
 
-                allIssues.AddRange(ValidateGroup(group, otherGroupsHaveReset, asset));
+                allIssues.AddRange(ValidateGroup(group, otherGroupsHaveReset, asset, notesLookup, rangeCache));
             }
 
             // Cross-group check: Missing Deltas
@@ -236,6 +254,55 @@ namespace RALogicEditor.Services
                     "https://docs.retroachievements.org/developer-docs/why-delta.html",
                     asset
                 ));
+            }
+        }
+
+        // New: Check for undocumented memory addresses (Missing Code Notes)
+        private void CheckMissingNotes(
+            AchievementConditionGroup group,
+            List<ValidationIssue> issues,
+            IAssetItem? asset,
+            Dictionary<string, List<NoteNode>> notesLookup,
+            List<(long Start, long End, NoteNode Node)>? rangeCache)
+        {
+            for (int i = 0; i < group.Conditions.Count; i++)
+            {
+                var cond = group.Conditions[i];
+
+                // IMPORTANT: "check the leaf only, the last offset of an AddAddress chain"
+                // If this is an AddAddress line, we skip validation. It is an intermediate step.
+                // We only validate lines that CONSUME the pointer (Mem, AddSource, SubSource, etc.)
+                if (cond.Flag == "Add Address") continue;
+
+                // Helper to check a single operand
+                void CheckOperand(Operand op, bool isLeft)
+                {
+                    if (!RaLogicSyntax.MemoryTypes.Contains(op.Type)) return;
+
+                    // Resolve the alias for this address/pointer-chain
+                    string address = LogicFormatter.NormalizeAddress(op.Value);
+
+                    // ResolveAlias handles the pointer chain math (looking backwards at AddAddress lines)
+                    // and returns the note name for the final resolved address (Leaf).
+                    string alias = ConditionFormatter.ResolveAlias(address, group, i, notesLookup, rangeCache);
+
+                    if (string.IsNullOrWhiteSpace(alias))
+                    {
+                        // LogicFormatter.NormalizeAddress ensures we have a clean hex string or value
+                        // We use the original op.Value for display
+                        issues.Add(new ValidationIssue(
+                            FeedbackSeverity.Warning,
+                            "Undocumented Memory",
+                            $"Address {op.Value} (or its pointer chain target) has no Code Note.",
+                            cond,
+                            "",
+                            asset
+                        ));
+                    }
+                }
+
+                CheckOperand(cond.LeftOperand, true);
+                CheckOperand(cond.RightOperand, false);
             }
         }
     }

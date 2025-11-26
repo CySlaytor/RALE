@@ -86,7 +86,12 @@ namespace RALogicEditor
 
             cmbAssetType.SelectedIndex = 0; // Default to Achievements
             cmbSource.SelectedIndex = 0;    // Default to JSON view
-            cmbAssetType.SelectedIndexChanged += (s, e) => ReloadDataView();
+            cmbAssetType.SelectedIndexChanged += (s, e) =>
+            {
+                ReloadDataView();
+                // Re-run validation when asset type changes to filter the review list
+                RunGlobalValidation();
+            };
             cmbSource.SelectedIndexChanged += (s, e) => ReloadDataView();
 
             // Search Box Wiring
@@ -196,30 +201,59 @@ namespace RALogicEditor
             }
         }
 
-        // Runs validation on ALL assets in the project to populate the review list initially
+        // Runs validation on assets in the project to populate the review list
         private void RunGlobalValidation()
         {
             _globalIssues.Clear();
 
-            var achs = _projectRepo.GetMergedList<RaAchievement>(false);
-            var lbs = _projectRepo.GetMergedList<RaLeaderboard>(true);
+            // Only validating the currently active asset type to reduce noise and issues
+            bool validateLeaderboards = cmbAssetType.SelectedIndex == 1;
 
             var allAssets = new List<IAssetItem>();
-            allAssets.AddRange(achs);
-            allAssets.AddRange(lbs);
+
+            if (validateLeaderboards)
+            {
+                var lbs = _projectRepo.GetMergedList<RaLeaderboard>(true);
+                allAssets.AddRange(lbs);
+            }
+            else
+            {
+                var achs = _projectRepo.GetMergedList<RaAchievement>(false);
+                allAssets.AddRange(achs);
+            }
+
+            var notesLookup = new Dictionary<string, List<NoteNode>>();
+            var rangeCache = new List<(long Start, long End, NoteNode Node)>();
+            var parser = new PointerTreeParser();
+
+            if (_projectRepo.LocalData != null && _projectRepo.LocalData.Notes != null)
+            {
+                foreach (var n in _projectRepo.LocalData.Notes)
+                {
+                    string key = LogicFormatter.NormalizeAddress(n.Address);
+                    var nodes = parser.ParseNoteText(n.Note);
+                    if (!notesLookup.ContainsKey(key)) notesLookup[key] = nodes;
+
+                    if (nodes.Count > 0)
+                    {
+                        var root = nodes[0];
+                        if (root.Size > 1)
+                        {
+                            if (long.TryParse(key.Replace("0x", ""), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out long startAddr))
+                            {
+                                rangeCache.Add((startAddr, startAddr + root.Size, root));
+                            }
+                        }
+                    }
+                }
+            }
 
             foreach (var asset in allAssets)
             {
-                // Parse logic string into object model using the new Strategy pattern
                 IAssetStrategy strategy = asset.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
                 var segments = strategy.ParseLogic(asset.Logic);
-
-                // Flatten segments (Core/Alt or Start/Cancel/etc) into a single list for the validator
                 var allGroups = segments.Values.SelectMany(g => g).ToList();
-
-                // Run validation using the instance service
-                var issues = _validator.ValidateAsset(allGroups, asset);
-
+                var issues = _validator.ValidateAsset(allGroups, asset, notesLookup, rangeCache);
                 _globalIssues.AddRange(issues);
             }
 
@@ -231,14 +265,18 @@ namespace RALogicEditor
         {
             if (_selectedAsset == null) return;
 
-            // Remove existing issues for this specific asset ID
+            // Remove existing issues for this specific asset ID from the backing list
             _globalIssues.RemoveAll(i => i.Asset != null && i.Asset.ID == _selectedAsset.ID);
 
             // Add updated issues
             _globalIssues.AddRange(issues);
 
-            // Refresh List
-            codeReviewControl.SetIssues(_globalIssues);
+            // Only update UI if not in loading state (prevents flicker/reset on navigation)
+            // The user will see the issues when they stop navigating or edit the logic.
+            if (!_isLoading)
+            {
+                codeReviewControl.SetIssues(_globalIssues);
+            }
         }
 
         private void achievementGrid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
@@ -415,7 +453,7 @@ namespace RALogicEditor
             // Pass notes to Trigger Editor for Tooltips and Alias Mode
             triggerEditor.SetNotes(notes);
 
-            // Run global validation scan
+            // Run global validation scan - This will now respect the active asset type
             RunGlobalValidation();
         }
 

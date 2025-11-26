@@ -44,6 +44,10 @@ namespace RALogicEditor.Helpers
         // Generator Rules (Key: GroupIndex, Value: Rules)
         public Dictionary<int, GeneratorDefinition> GeneratorRules { get; private set; } = new();
 
+        // References for Validation (Set by View)
+        public Dictionary<string, List<NoteNode>>? NotesLookup { get; set; }
+        public List<(long Start, long End, NoteNode Node)>? RangeCache { get; set; }
+
         // Events - Nullable
         public event EventHandler? LogicChanged;
         public event EventHandler? SegmentsChanged; // Fired when loading new asset
@@ -94,9 +98,6 @@ namespace RALogicEditor.Helpers
             if (BoundAsset == null) return;
 
             // 0. Cleanup Array Generation State
-            // If a group is set to Array Mode, we must revert it to its template state 
-            // (delete all generated copies) before re-running the generator.
-            // This ensures that edits to the template are propagated correctly.
             foreach (var kvp in GeneratorRules)
             {
                 int groupIndex = kvp.Key;
@@ -105,13 +106,9 @@ namespace RALogicEditor.Helpers
                 if (def.IsArray && groupIndex < ActiveGroups.Count)
                 {
                     var group = ActiveGroups[groupIndex];
-
-                    // If the group has more conditions than the template, strip the excess.
-                    // This effectively "Resets" the group to just the template logic.
                     if (group.Conditions.Count > def.TemplateConditionCount)
                     {
                         int itemsToRemove = group.Conditions.Count - def.TemplateConditionCount;
-                        // Determine starting index for removal
                         int startIndex = def.TemplateConditionCount;
                         if (startIndex < group.Conditions.Count)
                         {
@@ -122,7 +119,6 @@ namespace RALogicEditor.Helpers
             }
 
             // 1. Apply Generators before building string (Using injected service)
-            // This will re-generate the array copies based on the now-clean template.
             _generator.ApplyGeneratorRules(ActiveGroups, GeneratorRules);
 
             // 2. Build String
@@ -264,7 +260,8 @@ namespace RALogicEditor.Helpers
         // Expose validation via the injected service
         public List<ValidationIssue> ValidateCurrentLogic()
         {
-            return _validator.ValidateAsset(ActiveGroups, BoundAsset);
+            // Pass the notes references to the validator
+            return _validator.ValidateAsset(ActiveGroups, BoundAsset, NotesLookup, RangeCache);
         }
     }
 }
