@@ -36,7 +36,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                 return res;
             }
 
-            // FIX: Pass cond.LeftOperand.Value and Size as context to GetOperandText for Right Operand
+            // Pass cond.LeftOperand.Value and Size as context to GetOperandText for Right Operand
             string name = ctx.GetOperandText(cond.LeftOperand, index);
             string limit = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value, cond.LeftOperand.Size);
             string text;

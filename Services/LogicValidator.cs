@@ -259,7 +259,7 @@ namespace RALogicEditor.Services
             }
         }
 
-        // New: Check for undocumented memory addresses (Missing Code Notes)
+        // Check for undocumented memory addresses (Missing Code Notes)
         private void CheckMissingNotes(
             AchievementConditionGroup group,
             List<ValidationIssue> issues,

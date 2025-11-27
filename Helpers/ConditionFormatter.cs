@@ -98,7 +98,7 @@ namespace RALogicEditor.Helpers
 
                     if (notesLookup.TryGetValue(normalizedBase, out var nodes))
                     {
-                        // FIX: Redirect Resolution Logic added here
+                        // Redirect Resolution Logic added here
                         // Check if the Base Note is a Redirect (refer to $0x...)
                         List<NoteNode> workingNodes = nodes;
                         int redirects = 0;
@@ -181,7 +181,7 @@ namespace RALogicEditor.Helpers
             // 2. Direct Lookup
             if (notesLookup.TryGetValue(address, out var directNodes))
             {
-                // FIX: Redirect Resolution Logic added here too
+                // Redirect Resolution Logic added here too
                 List<NoteNode> workingNodes = directNodes;
                 int redirects = 0;
                 while (redirects < 5 && workingNodes.Count > 0)

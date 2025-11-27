@@ -66,14 +66,14 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             var condPair = conditions[pairIndex];
 
-            // FIX: Use GetName(Operand) to support Bit Labels (e.g. [Started Career])
+            // Use GetName(Operand) to support Bit Labels (e.g. [Started Career])
             string name = ctx.GetName(condA.LeftOperand, currentIndex);
 
             var prevCond = aIsDelta ? condA : condPair;
             var currCond = !aIsDelta ? condA : condPair;
 
             // Context addresses
-            // FIX: Pass condA.LeftOperand.Size as contextSize to FormatValue
+            // Pass condA.LeftOperand.Size as contextSize to FormatValue
             string prevVal = ctx.FormatValue(prevCond.RightOperand, conditions.IndexOf(prevCond), condA.LeftOperand.Value, condA.LeftOperand.Size);
             string currVal = ctx.FormatValue(currCond.RightOperand, conditions.IndexOf(currCond), condA.LeftOperand.Value, condA.LeftOperand.Size);
 

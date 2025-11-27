@@ -33,7 +33,6 @@ namespace RALogicEditor.Helpers
         public event EventHandler<string>? AddressSelected;
         public event EventHandler<PointerChainArgs>? PointerChainSelected;
 
-        // New Event for Smart Paste
         public event EventHandler<string>? PasteRequested;
 
         // Property to track display preference (Hex vs Decimal)

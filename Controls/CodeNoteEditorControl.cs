@@ -149,7 +149,7 @@ namespace RALogicEditor.Controls
                 // Although RequestNodeSelection is usually preferred, this fallback handles direct root updates
                 if (!_viewModel.EditState.IsVirtual && _viewModel.EditState.TargetNode == null)
                 {
-                    // New: If redirected, the VM provides the Linked Content, otherwise we use the Note's content
+                    // If redirected, the VM provides the Linked Content, otherwise we use the Note's content
                     string raw = _viewModel.IsRedirected ? _viewModel.RedirectedContent : _viewModel.CurrentBaseNote.Note;
                     string normalized = raw.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
 

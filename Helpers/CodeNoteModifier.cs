@@ -65,7 +65,7 @@ namespace RALogicEditor.Helpers
             public bool HasSeparator => PipeCount > 0 || EqCount > 0 || ColCount > 0;
         }
 
-        // New: Detects style based on the current note first, falling back to global stats if needed.
+        // Detects style based on the current note first, falling back to global stats if needed.
         public static NoteStyle DetectStyle(string currentNote, List<CodeNote> allNotes)
         {
             // 1. Prioritize the current note's style if it has explicit formatting

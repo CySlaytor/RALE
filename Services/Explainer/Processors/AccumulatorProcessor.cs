@@ -136,7 +136,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     var finalCond1 = chain1.Terminal;
                     if (finalCond1.Flag == "MeasuredIf")
                     {
-                        // FIX: Pass Context (Value + Size) to FormatValue for correct Bit Label resolution
+                        // Pass Context (Value + Size) to FormatValue for correct Bit Label resolution
                         string valText = ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
                         string opText = ctx.GetOperatorText(finalCond1.Operator);
                         string criteria = $"sum of {blocks.Count} items {expandToken} {opText} {valText}";
@@ -147,13 +147,13 @@ namespace RALogicEditor.Services.Explainer.Processors
                     {
                         bool isHitChain = chain1.Conditions.Any(c => c.Flag.Contains("Hits")) || finalCond1.Flag.Contains("Hits");
                         string label = isHitChain ? "hits" : "value";
-                        // FIX: Pass Context (Value + Size)
+                        // Pass Context (Value + Size)
                         string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
                         result.Text = $"Start measuring {label} up to {valText}: {expandToken}";
                     }
                     else
                     {
-                        // FIX: Pass Context (Value + Size)
+                        // Pass Context (Value + Size)
                         string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
                         string opText = ctx.GetOperatorText(finalCond1.Operator);
                         string actionPrefix = "Trigger";
@@ -197,7 +197,7 @@ namespace RALogicEditor.Services.Explainer.Processors
         private string FormatTerminalCondition(AchievementCondition? cond, ExplanationContext ctx, List<AchievementCondition> conditions)
         {
             if (cond == null) return "(No Check)";
-            // FIX: Pass Context (Value + Size) to FormatValue
+            // Pass Context (Value + Size) to FormatValue
             string val = ctx.FormatValue(cond.RightOperand, conditions.IndexOf(cond), cond.LeftOperand.Value, cond.LeftOperand.Size);
             string op = cond.Operator;
 
@@ -331,7 +331,7 @@ namespace RALogicEditor.Services.Explainer.Processors
             while (bIdx < blocks.Count)
             {
                 var exampleBlock = blocks[bIdx];
-                // FIX: Use GetName(Operand) to get Bit Labels if applicable for the chain description
+                // Use GetName(Operand) to get Bit Labels if applicable for the chain description
                 var firstBlockCond = exampleBlock.FirstOrDefault(c => c.Flag != "Add Address");
                 string nameBase = "Unknown";
                 if (firstBlockCond != null)

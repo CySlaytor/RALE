@@ -89,9 +89,9 @@ namespace RALogicEditor
             cmbSource.Items.Clear();
             cmbSource.Items.AddRange(new object[] { "JSON", "Local", "New" });
 
-            // Initialize Category Filter (Core/Unofficial/Local)
+            // Initialize Category Filter (Core/Unofficial) - REMOVED "Local" per instruction
             cmbCategory.Items.Clear();
-            cmbCategory.Items.AddRange(new object[] { "Core", "Unofficial", "Local" });
+            cmbCategory.Items.AddRange(new object[] { "Core", "Unofficial" });
             cmbCategory.SelectedIndex = 0; // Default to Core
 
             cmbAssetType.SelectedIndex = 0; // Default to Achievements
@@ -150,11 +150,20 @@ namespace RALogicEditor
             AppSettings.Save();
         }
 
-        // NEW: Multi-Region Batch Logic Implementation
+        // Multi-Region Batch Logic Implementation
         private void TriggerEditor_MultiRegionLogicRequested(object? sender, MultiRegionForm form)
         {
             // 1. Validate State
             if (_currentDisplayList.Count == 0) return;
+
+            // Get configurations from the form
+            var configs = form.GetConfiguredRegions();
+            if (configs.Count == 0) return;
+
+            // Find the base configuration (the one without an address map, treated as Source)
+            // Or explicitly flagged as base.
+            var baseConfig = configs.FirstOrDefault(c => c.IsBase);
+            var targetConfigs = configs.Where(c => !c.IsBase).ToList();
 
             // Ensure local repo exists
             _projectRepo.EnsureLocalDataExists();
@@ -181,11 +190,11 @@ namespace RALogicEditor
                 }
             }
 
-            // Clone to ensure we don't modify the original lists if reused
-            var regionACondsBase = form.RegionAConditions;
-            var regionBCondsBase = form.RegionBConditions;
-            InvertLockLogic(regionACondsBase);
-            InvertLockLogic(regionBCondsBase);
+            // Invert locks for all configs
+            foreach (var cfg in configs)
+            {
+                InvertLockLogic(cfg.LockConditions);
+            }
 
             // 3. Iterate currently filtered list
             int count = 0;
@@ -217,7 +226,7 @@ namespace RALogicEditor
                     var groups = segments[segmentKey];
                     if (groups.Count == 0) continue;
 
-                    // Identify existing groups (Region A)
+                    // Identify existing groups (Base Groups)
                     var existingGroups = new List<AchievementConditionGroup>();
                     // Deep copy existing groups to avoid reference issues
                     foreach (var g in groups)
@@ -227,48 +236,23 @@ namespace RALogicEditor
                         existingGroups.Add(newG);
                     }
 
-                    // Clone for Region B
-                    var newRegionBGroups = new List<AchievementConditionGroup>();
-                    foreach (var grp in existingGroups)
-                    {
-                        var clone = new AchievementConditionGroup { GroupName = grp.GroupName + " (Region B)" };
-                        foreach (var c in grp.Conditions)
-                        {
-                            clone.Conditions.Add(c.Clone());
-                        }
-                        newRegionBGroups.Add(clone);
-                    }
-
-                    // Transform Region B Addresses
-                    foreach (var grp in newRegionBGroups)
-                    {
-                        foreach (var c in grp.Conditions)
-                        {
-                            ApplyAddressSwap(c.LeftOperand, form.AddressMap);
-                            ApplyAddressSwap(c.RightOperand, form.AddressMap);
-                        }
-                    }
-
-                    // Inject Locks
-                    // Insert Region A Lock to Existing Groups
-                    foreach (var grp in existingGroups)
-                    {
-                        grp.Conditions.InsertRange(0, regionACondsBase.Select(c => c.Clone()));
-                    }
-                    // Insert Region B Lock to New Groups
-                    foreach (var grp in newRegionBGroups)
-                    {
-                        grp.Conditions.InsertRange(0, regionBCondsBase.Select(c => c.Clone()));
-                    }
-
-                    // Reassemble
                     var finalGroups = new List<AchievementConditionGroup>();
 
-                    // Standard Achievement Pattern: Empty Core + Alts
-                    if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core" && existingGroups[0].Conditions.Count > 0)
+                    // Handle Base Groups
+                    if (baseConfig != null && baseConfig.LockConditions.Count > 0)
                     {
-                        existingGroups[0].GroupName = "Alt 1 (Region A)";
-                        for (int i = 1; i < existingGroups.Count; i++) existingGroups[i].GroupName = $"Alt {i + 1} (Region A)";
+                        foreach (var grp in existingGroups)
+                        {
+                            grp.Conditions.InsertRange(0, baseConfig.LockConditions.Select(c => c.Clone()));
+                        }
+                    }
+
+                    // Rename Base Groups if needed
+                    if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core")
+                    {
+                        string baseName = baseConfig?.RegionName ?? "Region A";
+                        existingGroups[0].GroupName = $"Alt 1 ({baseName})";
+                        for (int i = 1; i < existingGroups.Count; i++) existingGroups[i].GroupName = $"Alt {i + 1} ({baseName})";
                         finalGroups.Add(new AchievementConditionGroup { GroupName = "Core" }); // Empty Core
                     }
                     else if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core")
@@ -279,13 +263,43 @@ namespace RALogicEditor
 
                     finalGroups.AddRange(existingGroups);
 
-                    // Add Region B groups
-                    int startIdx = finalGroups.Count;
-                    for (int i = 0; i < newRegionBGroups.Count; i++)
+                    // Create Target Region Groups
+                    foreach (var targetCfg in targetConfigs)
                     {
-                        if (!localItem.IsLeaderboard) newRegionBGroups[i].GroupName = $"Alt {startIdx + i} (Region B)";
+                        // Clone from original logic structure (before we modified existingGroups with locks)
+                        var newRegionGroups = new List<AchievementConditionGroup>();
+                        foreach (var g in groups) // 'groups' contains the parsed objects from 'localItem.Logic'
+                        {
+                            var clone = new AchievementConditionGroup { GroupName = g.GroupName + $" ({targetCfg.RegionName})" };
+                            foreach (var c in g.Conditions) clone.Conditions.Add(c.Clone());
+                            newRegionGroups.Add(clone);
+                        }
+
+                        // Apply Address Swap
+                        foreach (var grp in newRegionGroups)
+                        {
+                            foreach (var c in grp.Conditions)
+                            {
+                                ApplyAddressSwap(c.LeftOperand, targetCfg.AddressMap);
+                                ApplyAddressSwap(c.RightOperand, targetCfg.AddressMap);
+                            }
+                        }
+
+                        // Apply Lock
+                        foreach (var grp in newRegionGroups)
+                        {
+                            grp.Conditions.InsertRange(0, targetCfg.LockConditions.Select(c => c.Clone()));
+                        }
+
+                        // Reassemble Alts naming
+                        int startIdx = finalGroups.Count;
+                        for (int i = 0; i < newRegionGroups.Count; i++)
+                        {
+                            if (!localItem.IsLeaderboard) newRegionGroups[i].GroupName = $"Alt {startIdx + i} ({targetCfg.RegionName})";
+                        }
+
+                        finalGroups.AddRange(newRegionGroups);
                     }
-                    finalGroups.AddRange(newRegionBGroups);
 
                     segments[segmentKey] = finalGroups;
                 }
@@ -296,7 +310,7 @@ namespace RALogicEditor
                 count++;
             }
 
-            MessageBox.Show($"Multi-Region logic applied to {count} assets.", "Batch Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Multi-Region logic applied to {count} assets across {configs.Count} regions.", "Batch Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
             // Refresh UI
             ReloadDataView();
@@ -342,17 +356,6 @@ namespace RALogicEditor
 
             // 2. Highlight the specific condition in the editor
             triggerEditor.SelectCondition(issue.Target);
-
-            // 3. Show Debug Dialog if available (DISABLED Internally)
-            /*
-            if (!string.IsNullOrEmpty(issue.DebugLog))
-            {
-                using (var dbg = new DebugChainForm(issue.DebugLog))
-                {
-                    dbg.ShowDialog();
-                }
-            }
-            */
         }
 
         private void SelectAssetInGrid(IAssetItem asset)
@@ -368,7 +371,7 @@ namespace RALogicEditor
 
             // 2. Ensure correct Category (Core vs Unofficial)
             // asset.Category is usually "core", "unofficial", "Local" (lowercase from JSON or titlecase)
-            // We need to match with ComboBox items "Core", "Unofficial", "Local"
+            // We need to match with ComboBox items "Core", "Unofficial"
             string targetCat = string.IsNullOrEmpty(asset.Category) ? "Local" : asset.Category;
             foreach (var item in cmbCategory.Items)
             {
@@ -682,7 +685,7 @@ namespace RALogicEditor
         {
             if (_projectRepo.LocalData == null && _projectRepo.ServerData == null) return;
 
-            // NEW: Ensure any pending virtual note edits are committed before saving
+            // Ensure any pending virtual note edits are committed before saving
             codeNoteEditor.CommitChanges();
 
             string savePath = _currentUserFilePath;
@@ -856,14 +859,15 @@ namespace RALogicEditor
                     if (item.State == AssetState.Synced) continue;
                 }
 
-                // 2. Filter by Category (Core vs Unofficial vs Local)
-                // "Local" items might have empty or "Local" category string
+                // 2. Filter by Category (Core vs Unofficial)
+                // "Local" category was removed from filter, but items might still have "Local" string
                 string itemCat = string.IsNullOrEmpty(item.Category) ? "Local" : item.Category;
 
+                // If filtering by Core or Unofficial, we match exactly.
+                // If item has "Local" category, it won't match Core or Unofficial, so it is hidden here.
+                // Users find "Local" items via Source View (New/Local), regardless of category filter usually.
                 if (!itemCat.Equals(categoryFilter, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Special case: If user selects "Local" category, we also include items with null/empty/Local category
-                    // which we handled above by defaulting itemCat to "Local".
                     continue;
                 }
 
@@ -1127,8 +1131,8 @@ namespace RALogicEditor
             if (cmbSource.SelectedItem?.ToString() != "New")
                 cmbSource.SelectedItem = "New";
 
-            if (cmbCategory.SelectedItem?.ToString() != "Local")
-                cmbCategory.SelectedItem = "Local";
+            // Local Category was removed from UI filter, so this part is implicit now.
+            // Items are found via "New" source view.
 
             ReloadDataView();
 
@@ -1175,9 +1179,8 @@ namespace RALogicEditor
                 }
             }
 
-            // Switch to "New" view / "Local" category so we can see the duplicated items
+            // Switch to "New" view so we can see the duplicated items
             cmbSource.SelectedItem = "New";
-            cmbCategory.SelectedItem = "Local";
             ReloadDataView();
 
             // --- Restore Selection & Focus Logic ---

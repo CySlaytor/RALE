@@ -80,7 +80,6 @@ namespace RALogicEditor.Services
             return clone;
         }
 
-        // Fixed nullability for override: object? instead of object
         public override bool Equals(object? obj)
         {
             if (obj is not TriggerEditorState other) return false;

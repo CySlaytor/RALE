@@ -51,7 +51,7 @@ namespace RALogicEditor.Controls
         public event EventHandler<PointerChainArgs>? PointerChainSelected;
         public event EventHandler<List<ValidationIssue>>? ValidationCompleted;
 
-        // NEW: Event to request Multi-Region Batch Processing in MainForm
+        // Event to request Multi-Region Batch Processing in MainForm
         public event EventHandler<MultiRegionForm>? MultiRegionLogicRequested;
 
         // Public property for the Logic String (Two-way binding via ViewModel)
@@ -1165,7 +1165,7 @@ namespace RALogicEditor.Controls
             }
         }
 
-        // NEW: Event Handler for the "Explain Logic" tool menu item
+        // Event Handler for the "Explain Logic" tool menu item
         private void explainLogicToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (_viewModel.BoundAsset == null) return;
@@ -1193,7 +1193,7 @@ namespace RALogicEditor.Controls
             form.Show();
         }
 
-        // NEW: Multi-Region Support Menu Handler (Passes logic to MainForm)
+        // Multi-Region Support Menu Handler (Passes logic to MainForm)
         private void multiRegionToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             using (var form = new MultiRegionForm(_rawNotes))

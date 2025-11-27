@@ -33,7 +33,7 @@ namespace RALogicEditor.Services.Explainer.Processors
             // 2. Simple Change check (Delta)
             if (cond.LeftOperand.Type == "Mem" && cond.RightOperand.Type == "Delta" && cond.LeftOperand.Value == cond.RightOperand.Value)
             {
-                // FIX: Use GetName(Operand)
+                // Use GetName(Operand)
                 string name = ctx.GetName(cond.LeftOperand, index);
                 string chg = cond.Operator switch { ">" => "increases", "<" => "decreases", "!=" => "changes", "=" => "remains unchanged", _ => "compares" };
                 return new ProcessorResult { Text = $"{name} {chg}", Category = ExplanationCategory.Transition };
@@ -50,7 +50,7 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
 
             // 4. Standard Processing
-            // FIX: Pass contextSize to GetOperandText for Right Operand
+            // Pass contextSize to GetOperandText for Right Operand
             string left = ctx.GetOperandText(cond.LeftOperand, index);
             string right = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value, cond.LeftOperand.Size);
             string op = ctx.GetOperatorText(cond.Operator);
@@ -91,7 +91,7 @@ namespace RALogicEditor.Services.Explainer.Processors
             if ((maskVal & (maskVal - 1)) == 0)
             {
                 int bitIndex = (int)Math.Log(maskVal, 2);
-                // FIX: Use GetName(Operand) to ensure we get Bit Labels if this is a bitwise op on a variable that has them
+                // Use GetName(Operand) to ensure we get Bit Labels if this is a bitwise op on a variable that has them
                 string name = ctx.GetName(cond.LeftOperand, index);
                 return $"{name} has Bit {bitIndex} set";
             }

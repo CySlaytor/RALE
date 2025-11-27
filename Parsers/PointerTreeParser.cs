@@ -83,7 +83,7 @@ namespace RALogicEditor.Parsers
                         }
                         else if (indentStr.Contains("+"))
                         {
-                            // FIX: Treat any indentation with '+' as a node, even if the sign was swallowed by the indent group.
+                            // Treat any indentation with '+' as a node, even if the sign was swallowed by the indent group.
                             // Example: "+0x10" -> G1="+" G2="" G3="0x10".
                             isNode = true;
                         }
@@ -126,7 +126,7 @@ namespace RALogicEditor.Parsers
                         string hex = match.Groups[3].Value;
                         string desc = match.Groups[4].Value;
 
-                        // FIX: Strip leading separators (- : =) from the description
+                        // Strip leading separators (- : =) from the description
                         // Loop to handle cases where multiple separators might exist or just whitespace
                         while (desc.Length > 0 && (desc[0] == '-' || desc[0] == ':' || desc[0] == '=' || char.IsWhiteSpace(desc[0])))
                         {
@@ -220,7 +220,7 @@ namespace RALogicEditor.Parsers
             char ptrPrefix = ' ';
             bool defaultMask = false;
 
-            // FIX: Robust case-insensitive pointer detection
+            // Robust case-insensitive pointer detection
             if (noteHeader.Contains("Pointer", StringComparison.OrdinalIgnoreCase))
             {
                 // Default to 32-bit standard if just "Pointer" is found

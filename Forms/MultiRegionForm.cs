@@ -1,6 +1,7 @@
 ﻿#nullable enable
+using RALogicEditor.Definitions;
 using RALogicEditor.Models;
-using RALogicEditor.Parsers; // Required for Parsing Clipboard Logic
+using RALogicEditor.Parsers;
 using RALogicEditor.Utilities;
 using System;
 using System.Collections.Generic;
@@ -13,14 +14,21 @@ using System.Windows.Forms;
 
 namespace RALogicEditor.Forms
 {
+    // Configuration for a specific region within the Multi-Region tool.
+    public class RegionConfig
+    {
+        public string RegionName { get; set; } = "";
+        public bool IsBase { get; set; }
+        public Dictionary<string, string> AddressMap { get; set; } = new();
+        public List<AchievementCondition> LockConditions { get; set; } = new();
+    }
+
     public partial class MultiRegionForm : Form
     {
         private List<CodeNote> _allNotes;
-        public Dictionary<string, string> AddressMap { get; private set; } = new();
 
-        // Storing Result Logic Lists directly instead of strings
-        public List<AchievementCondition> RegionAConditions { get; private set; } = new();
-        public List<AchievementCondition> RegionBConditions { get; private set; } = new();
+        // Dictionary to track grids per region tab
+        private Dictionary<string, DataGridView> _regionGrids = new();
 
         public MultiRegionForm(List<CodeNote> notes)
         {
@@ -29,21 +37,220 @@ namespace RALogicEditor.Forms
 
             // Enable Double Buffering for smoother grid rendering
             EnableDoubleBuffering(dgvMapping);
-            EnableDoubleBuffering(dgvRegionA);
-            EnableDoubleBuffering(dgvRegionB);
 
-            // Wire up event handlers for grids
-            InitializeGridHandlers(dgvRegionA);
-            InitializeGridHandlers(dgvRegionB);
-
-            // Wire up menu items
             pasteLogicToolStripMenuItem.Click += (s, e) => PasteToActiveGrid();
-            deleteRowToolStripMenuItem.Click += (s, e) => DeleteFromActiveGrid();
             copyLogicToolStripMenuItem.Click += (s, e) => CopyFromActiveGrid();
+            deleteRowToolStripMenuItem.Click += (s, e) => DeleteFromActiveGrid();
 
             ApplyTheme();
-            ScanForMappings();
+            InitializeDynamicRegions();
         }
+
+        private void InitializeDynamicRegions()
+        {
+            // 1. Identify Regions from Notes
+            var detectedRegions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool hasUnknownNotes = false;
+
+            foreach (var note in _allNotes)
+            {
+                string region = RegionDefinitions.DetectRegion(note.Note);
+                if (region != "Unknown")
+                    detectedRegions.Add(region);
+                else
+                    hasUnknownNotes = true;
+            }
+
+            if (hasUnknownNotes && !detectedRegions.Contains("USA"))
+            {
+                detectedRegions.Add("USA");
+            }
+
+            if (detectedRegions.Count == 0)
+            {
+                detectedRegions.Add("USA");
+            }
+
+            string baseRegion = detectedRegions.Contains("USA") ? "USA" : detectedRegions.First();
+
+            tabControlRegions.TabPages.Clear();
+            _regionGrids.Clear();
+
+            var sortedRegions = detectedRegions.OrderBy(r => r == baseRegion ? 0 : 1).ThenBy(r => r).ToList();
+
+            foreach (var region in sortedRegions)
+            {
+                bool isBase = region == baseRegion;
+                CreateRegionTab(region, isBase);
+            }
+
+            ScanForMappings(baseRegion);
+        }
+
+        private void CreateRegionTab(string regionName, bool isBase)
+        {
+            string title = isBase ? $"{regionName} (Base)" : regionName;
+            TabPage page = new TabPage(title);
+            page.Tag = regionName;
+
+            GroupBox grp = new GroupBox();
+            grp.Dock = DockStyle.Fill;
+            grp.Text = $"{regionName} Lock Logic (Paste logic here)";
+            grp.ForeColor = Color.White;
+
+            DataGridView grid = new DataGridView();
+            grid.Dock = DockStyle.Fill;
+            grid.AllowUserToResizeColumns = false;
+            grid.AllowUserToResizeRows = false;
+            grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            grid.RowHeadersWidth = 25;
+            grid.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
+
+            // Set ReadOnly to true to prevent direct cell editing, but allow Paste/Delete
+            grid.ReadOnly = true;
+
+            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Type", Width = 50 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Size", Width = 60 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Memory", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Cmp", Width = 40 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Type", Width = 50 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Size", Width = 60 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Val/Mem", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+
+            StyleGrid(grid);
+            InitializeGridHandlers(grid);
+            grid.ContextMenuStrip = ctxGridActions;
+
+            grp.Controls.Add(grid);
+            page.Controls.Add(grp);
+            tabControlRegions.TabPages.Add(page);
+
+            _regionGrids[regionName] = grid;
+        }
+
+        private void ScanForMappings(string baseRegion)
+        {
+            dgvMapping.Rows.Clear();
+            var regex = new Regex(@"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
+
+            foreach (var note in _allNotes)
+            {
+                var match = regex.Match(note.Note);
+                if (match.Success)
+                {
+                    string targetAddrHex = match.Groups[1].Value;
+                    string sourceAddrHex = note.Address.Replace("0x", "");
+
+                    string sourceRegion = RegionDefinitions.DetectRegion(note.Note);
+                    var targetNote = _allNotes.FirstOrDefault(n => n.Address.EndsWith(targetAddrHex, StringComparison.OrdinalIgnoreCase));
+                    string targetRegion = targetNote != null ? RegionDefinitions.DetectRegion(targetNote.Note) : "Unknown";
+
+                    bool sourceIsBaseCandidate = sourceRegion == "Unknown" || sourceRegion == baseRegion;
+                    bool targetIsBaseCandidate = targetRegion == "Unknown" || targetRegion == baseRegion;
+
+                    string baseAddr = "";
+                    string mappedAddr = "";
+                    string mappedRegion = "";
+
+                    if (!sourceIsBaseCandidate && targetIsBaseCandidate)
+                    {
+                        baseAddr = targetAddrHex;
+                        mappedAddr = sourceAddrHex;
+                        mappedRegion = sourceRegion;
+                    }
+                    else if (sourceIsBaseCandidate && !targetIsBaseCandidate)
+                    {
+                        baseAddr = sourceAddrHex;
+                        mappedAddr = targetAddrHex;
+                        mappedRegion = targetRegion;
+                    }
+
+                    if (!string.IsNullOrEmpty(baseAddr))
+                    {
+                        dgvMapping.Rows.Add(baseAddr, mappedAddr, mappedRegion, note.Note.Split('\n')[0]);
+                    }
+                }
+            }
+        }
+
+        public List<RegionConfig> GetConfiguredRegions()
+        {
+            var results = new List<RegionConfig>();
+            var mappings = new Dictionary<string, Dictionary<string, string>>();
+
+            foreach (DataGridViewRow row in dgvMapping.Rows)
+            {
+                if (row.IsNewRow) continue;
+                string baseAddr = row.Cells[0].Value?.ToString()?.Trim() ?? "";
+                string targetAddr = row.Cells[1].Value?.ToString()?.Trim() ?? "";
+                string region = row.Cells[2].Value?.ToString()?.Trim() ?? "";
+
+                if (!string.IsNullOrEmpty(region) && !string.IsNullOrEmpty(baseAddr) && !string.IsNullOrEmpty(targetAddr))
+                {
+                    if (!mappings.ContainsKey(region)) mappings[region] = new Dictionary<string, string>();
+
+                    if (long.TryParse(baseAddr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long bVal) &&
+                        long.TryParse(targetAddr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long tVal))
+                    {
+                        mappings[region][bVal.ToString("x")] = tVal.ToString("x");
+                    }
+                }
+            }
+
+            foreach (var kvp in _regionGrids)
+            {
+                string regionName = kvp.Key;
+                DataGridView grid = kvp.Value;
+                bool isBase = !mappings.ContainsKey(regionName);
+
+                foreach (TabPage page in tabControlRegions.TabPages)
+                {
+                    if ((string)page.Tag == regionName && page.Text.Contains("(Base)"))
+                    {
+                        isBase = true;
+                        break;
+                    }
+                }
+
+                var config = new RegionConfig
+                {
+                    RegionName = regionName,
+                    IsBase = isBase,
+                    LockConditions = ExtractLogicFromGrid(grid)
+                };
+
+                if (!isBase && mappings.ContainsKey(regionName))
+                {
+                    config.AddressMap = mappings[regionName];
+                }
+
+                results.Add(config);
+            }
+
+            return results;
+        }
+
+        private List<AchievementCondition> ExtractLogicFromGrid(DataGridView grid)
+        {
+            var list = new List<AchievementCondition>();
+            foreach (DataGridViewRow row in grid.Rows)
+            {
+                if (row.IsNewRow) continue;
+
+                var cond = new AchievementCondition();
+                cond.LeftOperand.Type = row.Cells[0].Value?.ToString() ?? "Mem";
+                cond.LeftOperand.Size = row.Cells[1].Value?.ToString() ?? "32-bit";
+                cond.LeftOperand.Value = row.Cells[2].Value?.ToString() ?? "0";
+                cond.Operator = row.Cells[3].Value?.ToString() ?? "=";
+                cond.RightOperand.Type = row.Cells[4].Value?.ToString() ?? "Value";
+                cond.RightOperand.Size = row.Cells[5].Value?.ToString() ?? "";
+                cond.RightOperand.Value = row.Cells[6].Value?.ToString() ?? "0";
+                list.Add(cond);
+            }
+            return list;
+        }
+
+        // --- Boilerplate UI Logic ---
 
         private void EnableDoubleBuffering(Control control)
         {
@@ -55,24 +262,16 @@ namespace RALogicEditor.Forms
         private void InitializeGridHandlers(DataGridView grid)
         {
             grid.KeyDown += Grid_KeyDown;
-            // Set the clicked grid as 'active' for context menu reference
             grid.MouseDown += (s, e) => {
                 if (s is DataGridView g && e.Button == MouseButtons.Right)
                 {
-                    // Select row on right click if valid
                     var h = g.HitTest(e.X, e.Y);
-                    if (h.RowIndex >= 0)
-                    {
-                        if (!g.Rows[h.RowIndex].Selected)
-                        {
-                            g.ClearSelection();
-                            g.Rows[h.RowIndex].Selected = true;
-                        }
-                    }
-                    ctxGridActions.Tag = g; // Store ref to grid in context menu
+                    if (h.RowIndex >= 0) { if (!g.Rows[h.RowIndex].Selected) { g.ClearSelection(); g.Rows[h.RowIndex].Selected = true; } }
+                    // Update the active grid tag for Context Menu actions
+                    ctxGridActions.Tag = g;
                 }
             };
-            grid.GotFocus += (s, e) => ctxGridActions.Tag = s; // Ensure focus tracks active grid
+            grid.GotFocus += (s, e) => ctxGridActions.Tag = s;
         }
 
         private void ApplyTheme()
@@ -81,13 +280,7 @@ namespace RALogicEditor.Forms
             {
                 this.BackColor = Color.FromArgb(45, 45, 48);
                 this.ForeColor = Color.White;
-
                 StyleGrid(dgvMapping);
-                StyleGrid(dgvRegionA);
-                StyleGrid(dgvRegionB);
-
-                grpRegionA.ForeColor = Color.White;
-                grpRegionB.ForeColor = Color.White;
             }
         }
 
@@ -102,211 +295,180 @@ namespace RALogicEditor.Forms
             dgv.EnableHeadersVisualStyles = false;
         }
 
-        private void ScanForMappings()
-        {
-            dgvMapping.Rows.Clear();
-            var regex = new Regex(@"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
-
-            foreach (var note in _allNotes)
-            {
-                var match = regex.Match(note.Note);
-                if (match.Success)
-                {
-                    // Clean Address Strings (remove 0x)
-                    string targetAddrHex = match.Groups[1].Value;
-                    string sourceAddrHex = note.Address.Replace("0x", "");
-
-                    // Parse to numeric to handle leading zero mismatch (00541004 vs 541004)
-                    bool validTarget = long.TryParse(targetAddrHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long targetVal);
-                    bool validSource = long.TryParse(sourceAddrHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long sourceVal);
-
-                    if (validTarget && validSource)
-                    {
-                        // Verify target exists by numeric comparison
-                        bool targetExists = _allNotes.Any(n =>
-                        {
-                            string nHex = n.Address.Replace("0x", "");
-                            return long.TryParse(nHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long nVal) && nVal == targetVal;
-                        });
-
-                        int rowIdx = dgvMapping.Rows.Add(targetAddrHex, sourceAddrHex, note.Note.Split('\n')[0]);
-
-                        if (!targetExists)
-                        {
-                            dgvMapping.Rows[rowIdx].DefaultCellStyle.BackColor = Color.Maroon; // Darker red for dark mode friendly
-                            dgvMapping.Rows[rowIdx].DefaultCellStyle.ForeColor = Color.White;
-                            dgvMapping.Rows[rowIdx].Cells[2].Value += " (Target not found!)";
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- GRID INTERACTION LOGIC (Paste/Delete) ---
-
         private void Grid_KeyDown(object? sender, KeyEventArgs e)
         {
             if (sender is not DataGridView grid) return;
-
-            if (e.Control && e.KeyCode == Keys.V)
-            {
-                PasteToGrid(grid);
-                e.Handled = true;
-            }
-            else if (e.Control && e.KeyCode == Keys.C)
-            {
-                CopyFromGrid(grid); // Native copy works, but let's be explicit
-                e.Handled = true;
-            }
-            else if (e.KeyCode == Keys.Delete || e.KeyCode == Keys.Back)
-            {
-                DeleteFromGrid(grid);
-                e.Handled = true;
-            }
+            if (e.Control && e.KeyCode == Keys.V) { PasteToGrid(grid); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.C) { CopyFromGrid(grid); e.Handled = true; }
+            else if (e.KeyCode == Keys.Delete || e.KeyCode == Keys.Back) { DeleteFromGrid(grid); e.Handled = true; }
         }
 
+        // Active Grid Helpers
         private void PasteToActiveGrid()
         {
-            if (ctxGridActions.Tag is DataGridView grid)
-                PasteToGrid(grid);
-        }
-
-        private void DeleteFromActiveGrid()
-        {
-            if (ctxGridActions.Tag is DataGridView grid)
-                DeleteFromGrid(grid);
+            if (ctxGridActions.Tag is DataGridView grid) PasteToGrid(grid);
         }
 
         private void CopyFromActiveGrid()
         {
-            if (ctxGridActions.Tag is DataGridView grid)
-                CopyFromGrid(grid);
+            if (ctxGridActions.Tag is DataGridView grid) CopyFromGrid(grid);
         }
 
-        private void CopyFromGrid(DataGridView grid)
+        private void DeleteFromActiveGrid()
         {
-            if (grid.GetCellCount(DataGridViewElementStates.Selected) > 0)
-            {
-                try { Clipboard.SetDataObject(grid.GetClipboardContent()); }
-                catch { /* Ignore clipboard locks */ }
-            }
-        }
-
-        private void DeleteFromGrid(DataGridView grid)
-        {
-            if (grid.SelectedRows.Count > 0 && !grid.ReadOnly)
-            {
-                foreach (DataGridViewRow row in grid.SelectedRows)
-                {
-                    if (!row.IsNewRow) grid.Rows.Remove(row);
-                }
-            }
+            if (ctxGridActions.Tag is DataGridView grid) DeleteFromGrid(grid);
         }
 
         private void PasteToGrid(DataGridView grid)
         {
             if (!Clipboard.ContainsText()) return;
-            string text = Clipboard.GetText().Trim();
+            string text = Clipboard.GetText().Trim().Replace("\"", "");
             if (string.IsNullOrEmpty(text)) return;
 
-            // 1. Try Parse as RA Logic String (e.g. 0x1234=1)
-            // Note: AchievementParser assumes full achievement string usually, but handles fragments too.
-            // We pass 'S' separator, but for simple lines it works.
-            List<AchievementCondition>? conds = null;
+            List<AchievementCondition> conds = new List<AchievementCondition>();
+
+            // 1. Try Standard Parser (Handles Logic Chains like S:0x..._R:0x...)
             try
             {
                 var groups = AchievementParser.ParseAchievementTrigger(text, 'S', false);
-                if (groups.Count > 0) conds = groups[0].Conditions;
+                if (groups.Count > 0 && groups[0].Conditions.Count > 0)
+                    conds.AddRange(groups[0].Conditions);
             }
             catch { }
 
-            if (conds != null && conds.Count > 0)
+            // 2. Fallback: Manual Parsing for Raw/Split Logic Strings
+            // Handles simple cases (0x...=1) or multi-line copies without underscores
+            if (conds.Count == 0 && (text.Contains("=") || text.Contains(">") || text.Contains("<")))
             {
-                // Populate from Logic Objects
+                // Split by Underscore OR Newline to handle both RA format and Line-by-Line copy
+                string[] parts = text.Split(new[] { '_', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string part in parts)
+                {
+                    // Clean spaces
+                    string cleanPart = part.Trim();
+                    if (string.IsNullOrEmpty(cleanPart)) continue;
+
+                    var c = ManualParseCondition(cleanPart);
+                    if (c != null) conds.Add(c);
+                }
+            }
+
+            if (conds.Count > 0)
+            {
                 foreach (var c in conds)
                 {
                     grid.Rows.Add(
-                        c.LeftOperand.Type, c.LeftOperand.Size, c.LeftOperand.Value,
+                        c.LeftOperand.Type,
+                        c.LeftOperand.Size,
+                        c.LeftOperand.Value,
                         c.Operator,
-                        c.RightOperand.Type, c.RightOperand.Size, c.RightOperand.Value
+                        c.RightOperand.Type,
+                        c.RightOperand.Size,
+                        c.RightOperand.Value
                     );
                 }
             }
             else
             {
-                // 2. Fallback: Parse as TSV (Tab Separated Values) for spreadsheet pasting
+                // 3. Fallback: TSV (Spreadsheet copy)
                 string[] lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                bool added = false;
                 foreach (var line in lines)
                 {
                     var cells = line.Split('\t');
-                    if (cells.Length >= 3) // Minimum viable cols
+                    if (cells.Length >= 3)
                     {
-                        // Mapping raw text to columns. If fewer cols than grid, fill what we have.
                         int idx = grid.Rows.Add();
                         var row = grid.Rows[idx];
                         for (int i = 0; i < cells.Length && i < grid.Columns.Count; i++)
-                        {
                             row.Cells[i].Value = cells[i].Trim();
-                        }
+                        added = true;
                     }
+                }
+
+                if (!added)
+                {
+                    MessageBox.Show("Could not parse clipboard content. Supported formats:\n1. RA Logic (0xH1234=1)\n2. Raw Logic Lines\n3. TSV (Spreadsheet)", "Paste Failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
         }
 
-        // --- END GRID INTERACTION ---
-
-        private List<AchievementCondition> ExtractLogicFromGrid(DataGridView grid)
+        private AchievementCondition? ManualParseCondition(string raw)
         {
-            var list = new List<AchievementCondition>();
-            foreach (DataGridViewRow row in grid.Rows)
+            // Simple Regex to capture Left Op Right
+            // Group 1: Left Side (e.g. 0xX00541004)
+            // Group 2: Operator
+            // Group 3: Right Side
+            var regex = new Regex(@"^([^=<>!]+)([=<>!]+)([^=<>!]+)$");
+            var match = regex.Match(raw);
+            if (!match.Success) return null;
+
+            var cond = new AchievementCondition();
+            cond.Operator = match.Groups[2].Value;
+
+            ParseOperand(match.Groups[1].Value, cond.LeftOperand);
+            ParseOperand(match.Groups[3].Value, cond.RightOperand);
+
+            return cond;
+        }
+
+        private void ParseOperand(string raw, Operand op)
+        {
+            raw = raw.Trim();
+
+            // Check if it looks like memory (0x...)
+            if (raw.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
             {
-                if (row.IsNewRow) continue;
-
-                var cond = new AchievementCondition();
-
-                // Flag is implicitly "Pause If" for the caller to handle, but grid has no Flag col
-                cond.LeftOperand.Type = row.Cells[0].Value?.ToString() ?? "Mem";
-                cond.LeftOperand.Size = row.Cells[1].Value?.ToString() ?? "32-bit";
-                cond.LeftOperand.Value = row.Cells[2].Value?.ToString() ?? "0";
-
-                cond.Operator = row.Cells[3].Value?.ToString() ?? "=";
-
-                cond.RightOperand.Type = row.Cells[4].Value?.ToString() ?? "Value";
-                cond.RightOperand.Size = row.Cells[5].Value?.ToString() ?? "";
-                cond.RightOperand.Value = row.Cells[6].Value?.ToString() ?? "0";
-
-                list.Add(cond);
+                string body = raw.Substring(2);
+                if (body.Length > 0)
+                {
+                    char typeChar = body[0];
+                    // Handle standard sizes H, X, W or implicit hex
+                    if ("HXW ".Contains(char.ToUpper(typeChar)) || char.IsDigit(typeChar))
+                    {
+                        op.Type = "Mem";
+                        switch (char.ToUpper(typeChar))
+                        {
+                            case 'H': op.Size = "8-bit"; body = body.Substring(1); break;
+                            case ' ': op.Size = "16-bit"; body = body.Substring(1); break;
+                            case 'W': op.Size = "24-bit"; body = body.Substring(1); break;
+                            case 'X': op.Size = "32-bit"; body = body.Substring(1); break;
+                            default:
+                                // Assume 16-bit if purely hex digits follow 0x (e.g. 0x1234)
+                                // RA Standard implies 16-bit if no prefix char is present
+                                op.Size = "16-bit";
+                                break;
+                        }
+                        op.Value = "0x" + body;
+                        return;
+                    }
+                }
             }
-            return list;
+
+            // Fallback to Value
+            op.Type = "Value";
+            op.Size = "";
+            op.Value = raw;
+        }
+
+        private void CopyFromGrid(DataGridView grid)
+        {
+            if (grid.GetCellCount(DataGridViewElementStates.Selected) > 0)
+                try { Clipboard.SetDataObject(grid.GetClipboardContent()); } catch { }
+        }
+
+        private void DeleteFromGrid(DataGridView grid)
+        {
+            // Allow deletion even if grid is ReadOnly
+            if (grid.SelectedRows.Count > 0)
+            {
+                foreach (DataGridViewRow row in grid.SelectedRows)
+                    if (!row.IsNewRow) grid.Rows.Remove(row);
+            }
         }
 
         private void btnOK_Click(object sender, EventArgs e)
         {
-            // Build Map: Target (USA) -> Source (PAL)
-            AddressMap.Clear();
-            foreach (DataGridViewRow row in dgvMapping.Rows)
-            {
-                if (row.IsNewRow) continue;
-                string usaStr = row.Cells[0].Value?.ToString()?.Trim() ?? "";
-                string palStr = row.Cells[1].Value?.ToString()?.Trim() ?? "";
-
-                if (long.TryParse(usaStr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long usaVal) &&
-                    long.TryParse(palStr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long palVal))
-                {
-                    // Map by Normalized Hex String (Lowercase, no 0x, no leading zeros)
-                    AddressMap[usaVal.ToString("x")] = palVal.ToString("x");
-                }
-            }
-
-            RegionAConditions = ExtractLogicFromGrid(dgvRegionA);
-            RegionBConditions = ExtractLogicFromGrid(dgvRegionB);
-
-            if (RegionAConditions.Count == 0 || RegionBConditions.Count == 0)
-            {
-                MessageBox.Show("Please define Region Lock logic for both regions using the grids at the bottom.", "Missing Logic", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
             DialogResult = DialogResult.OK;
             Close();
         }

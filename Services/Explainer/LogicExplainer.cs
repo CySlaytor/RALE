@@ -20,7 +20,7 @@ namespace RALogicEditor.Services
         private static readonly List<ILogicProcessor> _processors = new List<ILogicProcessor>
         {
             new PointerCleanupProcessor(), // Consumes "Add Address" lines silently to clean up output
-            new AsciiStringProcessor(),    // NEW: Handles grouped ASCII/Region checks
+            new AsciiStringProcessor(),    // Handles grouped ASCII/Region checks
             new AccumulatorProcessor(),    // Handles complex AddSource/AddHits chains
             new AndNextProcessor(),        // Handles AndNext chains explicitly (e.g. "will operate once")
             new TransitionProcessor(),     // Handles Delta transitions (A > Delta A)

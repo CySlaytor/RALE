@@ -20,13 +20,13 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (leftIsDelta && rightIsMem && sameAddr && cond.Operator == "-")
             {
-                // FIX: Use GetName(Operand)
+                // Use GetName(Operand)
                 string name = ctx.GetName(cond.LeftOperand, index);
                 return new ProcessorResult { Text = $"Store the amount {name} decreased by", Category = ExplanationCategory.Context };
             }
             if (cond.LeftOperand.Type == "Mem" && cond.RightOperand.Type == "Delta" && sameAddr && cond.Operator == "-")
             {
-                // FIX: Use GetName(Operand)
+                // Use GetName(Operand)
                 string name = ctx.GetName(cond.LeftOperand, index);
                 return new ProcessorResult { Text = $"Store the amount {name} increased by", Category = ExplanationCategory.Context };
             }
