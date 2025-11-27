@@ -79,7 +79,8 @@ namespace RALogicEditor.Forms
             sb.Append(".pause { color: #ff5050; }");
             sb.Append(".link { color: CornflowerBlue; cursor: pointer; text-decoration: none; }");
             sb.Append(".link:hover { text-decoration: underline; }");
-            sb.Append(".hidden-box { display: none; margin-left: 20px; margin-top: 5px; padding: 5px; border-left: 2px solid #444; background-color: #252526; color: #a0a0a0; }");
+            // Updated CSS: white-space: pre-wrap preserves indentation for recursive details
+            sb.Append(".hidden-box { display: none; margin-left: 20px; margin-top: 5px; padding: 5px; border-left: 2px solid #444; background-color: #252526; color: #a0a0a0; white-space: pre-wrap; }");
             sb.Append(".code-line { font-family: Consolas, monospace; font-size: 9pt; }");
             sb.Append("</style>");
             sb.Append("<script>");
@@ -96,8 +97,17 @@ namespace RALogicEditor.Forms
             sb.Append("</script>");
             sb.Append("</head><body>");
 
-            // Split text into lines to process markdown-like syntax
-            var lines = result.MainText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            // Process the main text using recursive parser
+            sb.Append(ParseContentRecursive(result.MainText, result));
+
+            sb.Append("</body></html>");
+            return sb.ToString();
+        }
+
+        private string ParseContentRecursive(string text, ExplanationResult result)
+        {
+            var sb = new StringBuilder();
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
             foreach (var line in lines)
             {
@@ -113,7 +123,6 @@ namespace RALogicEditor.Forms
                 else
                 {
                     // 2. Expansion Tokens [[EXPAND:ID:Count/Label]]
-                    // Regex to find token
                     var match = Regex.Match(htmlLine, @"\[\[EXPAND:([a-f0-9]+):(.*?)\]\]");
                     if (match.Success)
                     {
@@ -129,18 +138,18 @@ namespace RALogicEditor.Forms
                         string content = "";
                         if (result.DetailedInfo.ContainsKey(id))
                         {
-                            // Convert newlines in detail content to <br>
-                            content = HtmlEncode(result.DetailedInfo[id]).Replace("\n", "<br/>");
+                            // RECURSIVE CALL: Process the inner content for nested tokens
+                            content = ParseContentRecursive(result.DetailedInfo[id], result);
                         }
 
                         string interactiveHtml = $"<span class='link' onclick='toggle(\"{id}\", this)' data-show-text='{linkText}'>{linkText}</span>";
                         interactiveHtml += $"<div id='{id}' class='hidden-box code-line'>{content}</div>";
 
                         // Replace the token in the line with the HTML widget
-                        // First encode the rest of the line to safe HTML, then insert the widget
                         string pre = HtmlEncode(htmlLine.Substring(0, match.Index));
                         string post = HtmlEncode(htmlLine.Substring(match.Index + fullToken.Length));
 
+                        // Note: divs are block elements, so putting them inside a .line div is technically valid logic flow
                         htmlLine = $"<div class='line'>{pre} {interactiveHtml} {post}</div>";
                     }
                     else
@@ -160,8 +169,6 @@ namespace RALogicEditor.Forms
 
                 sb.Append(htmlLine);
             }
-
-            sb.Append("</body></html>");
             return sb.ToString();
         }
 
