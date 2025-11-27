@@ -29,7 +29,6 @@ namespace RALogicEditor.Controls
             txtTitle = new TextBox();
             pbBadge = new PictureBox();
             toolsContextMenu = new ContextMenuStrip(components);
-            pointerCalculatorToolStripMenuItem = new ToolStripMenuItem();
             createGeneratorToolStripMenuItem = new ToolStripMenuItem();
             commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator5 = new ToolStripSeparator();
@@ -235,16 +234,9 @@ namespace RALogicEditor.Controls
             // 
             // toolsContextMenu
             // 
-            toolsContextMenu.Items.AddRange(new ToolStripItem[] { pointerCalculatorToolStripMenuItem, createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, toolStripSeparator5, explainLogicToolStripMenuItem });
+            toolsContextMenu.Items.AddRange(new ToolStripItem[] { createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, toolStripSeparator5, explainLogicToolStripMenuItem });
             toolsContextMenu.Name = "toolsContextMenu";
-            toolsContextMenu.Size = new Size(209, 120);
-            // 
-            // pointerCalculatorToolStripMenuItem
-            // 
-            pointerCalculatorToolStripMenuItem.Name = "pointerCalculatorToolStripMenuItem";
-            pointerCalculatorToolStripMenuItem.Size = new Size(208, 22);
-            pointerCalculatorToolStripMenuItem.Text = "Pointer Calculator";
-            pointerCalculatorToolStripMenuItem.Click += pointerCalculatorToolStripMenuItem_Click;
+            toolsContextMenu.Size = new Size(209, 98);
             // 
             // createGeneratorToolStripMenuItem
             // 
@@ -608,7 +600,7 @@ namespace RALogicEditor.Controls
         private System.Windows.Forms.CheckBox chkAliasMode = null!;
         private System.Windows.Forms.Button btnTools = null!;
         private System.Windows.Forms.ContextMenuStrip toolsContextMenu = null!;
-        private System.Windows.Forms.ToolStripMenuItem pointerCalculatorToolStripMenuItem = null!;
+        // private System.Windows.Forms.ToolStripMenuItem pointerCalculatorToolStripMenuItem = null!; // REMOVED
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator5 = null!;
         private System.Windows.Forms.ToolStripMenuItem saveAsSnippetToolStripMenuItem = null!;
         private System.Windows.Forms.ToolStripMenuItem insertSnippetToolStripMenuItem = null!;

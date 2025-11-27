@@ -856,7 +856,6 @@ namespace RALogicEditor.Controls
         }
 
         private void btnTools_Click(object? sender, EventArgs e) => toolsContextMenu.Show(btnTools, 0, btnTools.Height);
-        private void pointerCalculatorToolStripMenuItem_Click(object? sender, EventArgs e) { using (var form = new PointerCalculatorForm()) form.ShowDialog(); }
 
         private void saveAsSnippetToolStripMenuItem_Click(object? sender, EventArgs e)
         {
