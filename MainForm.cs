@@ -10,6 +10,7 @@ using RALogicEditor.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -58,6 +59,10 @@ namespace RALogicEditor
             // Trigger Editor notifies when validation runs on the CURRENT asset. 
             // We merge this result into the global list.
             triggerEditor.ValidationCompleted += TriggerEditor_ValidationCompleted;
+
+            // -- NEW: Multi-Region Batch Processing Request --
+            // Handles the bulk update logic from the context menu
+            triggerEditor.MultiRegionLogicRequested += TriggerEditor_MultiRegionLogicRequested;
 
             // Code Reviewer clicks: select the asset and the specific condition
             codeReviewControl.IssueSelected += CodeReviewControl_IssueSelected;
@@ -143,6 +148,185 @@ namespace RALogicEditor
             // Save setting immediately
             AppSettings.Current.ShowLogicReviewer = newState;
             AppSettings.Save();
+        }
+
+        // NEW: Multi-Region Batch Logic Implementation
+        private void TriggerEditor_MultiRegionLogicRequested(object? sender, MultiRegionForm form)
+        {
+            // 1. Validate State
+            if (_currentDisplayList.Count == 0) return;
+
+            // Ensure local repo exists
+            _projectRepo.EnsureLocalDataExists();
+            PushMainUndo(); // Global Undo State
+
+            // 2. Prepare Lock Logic (Invert for Pause If)
+            // Helper to invert lock logic: User provides check "Is Region A". We want "Pause If NOT Region A".
+            void InvertLockLogic(List<AchievementCondition> conditions)
+            {
+                foreach (var c in conditions)
+                {
+                    c.Flag = "Pause If";
+                    // Invert operator
+                    c.Operator = c.Operator switch
+                    {
+                        "=" => "!=",
+                        "!=" => "=",
+                        "<" => ">=",
+                        "<=" => ">",
+                        ">" => "<=",
+                        ">=" => "<",
+                        _ => c.Operator
+                    };
+                }
+            }
+
+            // Clone to ensure we don't modify the original lists if reused
+            var regionACondsBase = form.RegionAConditions;
+            var regionBCondsBase = form.RegionBConditions;
+            InvertLockLogic(regionACondsBase);
+            InvertLockLogic(regionBCondsBase);
+
+            // 3. Iterate currently filtered list
+            int count = 0;
+
+            // Need to iterate a copy or by index because we might modify the underlying data structures structure or view
+            var assetsToProcess = new List<IAssetItem>(_currentDisplayList);
+
+            foreach (var item in assetsToProcess)
+            {
+                // Ensure item is local so we can modify it.
+                // This creates a CLONE in LocalData if it was previously Synced.
+                EnsureAssetIsLocal(item);
+
+                // Get the Local version (The Clone)
+                IAssetItem? localItem = null;
+                if (item.IsLeaderboard) localItem = _projectRepo.LocalData!.Leaderboards.FirstOrDefault(x => x.ID == item.ID);
+                else localItem = _projectRepo.LocalData!.Achievements.FirstOrDefault(x => x.ID == item.ID);
+
+                if (localItem == null) continue;
+
+                // Parse Existing Logic
+                IAssetStrategy strategy = localItem.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
+                var segments = strategy.ParseLogic(localItem.Logic);
+
+                var keys = new List<string>(segments.Keys);
+
+                foreach (var segmentKey in keys)
+                {
+                    var groups = segments[segmentKey];
+                    if (groups.Count == 0) continue;
+
+                    // Identify existing groups (Region A)
+                    var existingGroups = new List<AchievementConditionGroup>();
+                    // Deep copy existing groups to avoid reference issues
+                    foreach (var g in groups)
+                    {
+                        var newG = new AchievementConditionGroup { GroupName = g.GroupName };
+                        foreach (var c in g.Conditions) newG.Conditions.Add(c.Clone());
+                        existingGroups.Add(newG);
+                    }
+
+                    // Clone for Region B
+                    var newRegionBGroups = new List<AchievementConditionGroup>();
+                    foreach (var grp in existingGroups)
+                    {
+                        var clone = new AchievementConditionGroup { GroupName = grp.GroupName + " (Region B)" };
+                        foreach (var c in grp.Conditions)
+                        {
+                            clone.Conditions.Add(c.Clone());
+                        }
+                        newRegionBGroups.Add(clone);
+                    }
+
+                    // Transform Region B Addresses
+                    foreach (var grp in newRegionBGroups)
+                    {
+                        foreach (var c in grp.Conditions)
+                        {
+                            ApplyAddressSwap(c.LeftOperand, form.AddressMap);
+                            ApplyAddressSwap(c.RightOperand, form.AddressMap);
+                        }
+                    }
+
+                    // Inject Locks
+                    // Insert Region A Lock to Existing Groups
+                    foreach (var grp in existingGroups)
+                    {
+                        grp.Conditions.InsertRange(0, regionACondsBase.Select(c => c.Clone()));
+                    }
+                    // Insert Region B Lock to New Groups
+                    foreach (var grp in newRegionBGroups)
+                    {
+                        grp.Conditions.InsertRange(0, regionBCondsBase.Select(c => c.Clone()));
+                    }
+
+                    // Reassemble
+                    var finalGroups = new List<AchievementConditionGroup>();
+
+                    // Standard Achievement Pattern: Empty Core + Alts
+                    if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core" && existingGroups[0].Conditions.Count > 0)
+                    {
+                        existingGroups[0].GroupName = "Alt 1 (Region A)";
+                        for (int i = 1; i < existingGroups.Count; i++) existingGroups[i].GroupName = $"Alt {i + 1} (Region A)";
+                        finalGroups.Add(new AchievementConditionGroup { GroupName = "Core" }); // Empty Core
+                    }
+                    else if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core")
+                    {
+                        finalGroups.Add(existingGroups[0]);
+                        existingGroups.RemoveAt(0);
+                    }
+
+                    finalGroups.AddRange(existingGroups);
+
+                    // Add Region B groups
+                    int startIdx = finalGroups.Count;
+                    for (int i = 0; i < newRegionBGroups.Count; i++)
+                    {
+                        if (!localItem.IsLeaderboard) newRegionBGroups[i].GroupName = $"Alt {startIdx + i} (Region B)";
+                    }
+                    finalGroups.AddRange(newRegionBGroups);
+
+                    segments[segmentKey] = finalGroups;
+                }
+
+                // Save Back
+                localItem.Logic = strategy.BuildLogic(segments);
+                // State will be updated to Modified when ReloadDataView calls UpdateAssetState
+                count++;
+            }
+
+            MessageBox.Show($"Multi-Region logic applied to {count} assets.", "Batch Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            // Refresh UI
+            ReloadDataView();
+
+            // If an asset is currently selected, reload it to show changes
+            if (_selectedAsset != null)
+            {
+                // Re-select finding the new Local object
+                SelectAssetInGrid(_selectedAsset);
+            }
+        }
+
+        private void ApplyAddressSwap(Operand op, Dictionary<string, string> map)
+        {
+            if (!RaLogicSyntax.MemoryTypes.Contains(op.Type)) return;
+            string addr = op.Value.Trim();
+            if (string.IsNullOrEmpty(addr)) return;
+
+            // Normalize input address for lookup (remove 0x, trim zeros)
+            string clean = addr.Replace("0x", "").Trim();
+            if (long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val))
+            {
+                string normalizedKey = val.ToString("x"); // Lowercase, no leading zeros
+
+                // Check direct match
+                if (map.ContainsKey(normalizedKey))
+                {
+                    op.Value = "0x" + map[normalizedKey];
+                }
+            }
         }
 
         // Triggered when user clicks a row in the Code Review Control
@@ -858,12 +1042,19 @@ namespace RALogicEditor
             if (asset is RaAchievement ra)
             {
                 if (!_projectRepo.LocalData.Achievements.Any(a => a.ID == ra.ID))
-                    _projectRepo.LocalData.Achievements.Add(ra);
+                {
+                    // Clone server asset before adding to local to prevent reference issues
+                    var clone = ra.Clone(false);
+                    _projectRepo.LocalData.Achievements.Add(clone);
+                }
             }
             else if (asset is RaLeaderboard rl)
             {
                 if (!_projectRepo.LocalData.Leaderboards.Any(l => l.ID == rl.ID))
-                    _projectRepo.LocalData.Leaderboards.Add(rl);
+                {
+                    var clone = rl.Clone(false);
+                    _projectRepo.LocalData.Leaderboards.Add(clone);
+                }
             }
         }
 

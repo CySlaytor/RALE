@@ -39,6 +39,7 @@ namespace RALogicEditor.Controls
         // Cache for Code Notes for Tooltips/Aliases
         // Key: Normalized Address (e.g., "0x1234"), Value: Parsed Pointer Tree
         private Dictionary<string, List<NoteNode>> _notesLookup = new();
+        private List<CodeNote> _rawNotes = new(); // Keep raw notes for Multi-Region tool
 
         // -- Events --
         public event EventHandler? TriggerTextChanged;
@@ -49,6 +50,9 @@ namespace RALogicEditor.Controls
         public event EventHandler<string>? AddressSelected;
         public event EventHandler<PointerChainArgs>? PointerChainSelected;
         public event EventHandler<List<ValidationIssue>>? ValidationCompleted;
+
+        // NEW: Event to request Multi-Region Batch Processing in MainForm
+        public event EventHandler<MultiRegionForm>? MultiRegionLogicRequested;
 
         // Public property for the Logic String (Two-way binding via ViewModel)
         [Browsable(false)]
@@ -160,6 +164,7 @@ namespace RALogicEditor.Controls
 
         public void SetNotes(List<CodeNote> notes)
         {
+            _rawNotes = notes ?? new List<CodeNote>(); // Store for Multi-Region
             _notesLookup.Clear();
             _gridManager.RangeCache.Clear();
             if (notes == null) return;
@@ -585,6 +590,9 @@ namespace RALogicEditor.Controls
                 if (index != -1 && _viewModel.GeneratorRules.ContainsKey(index)) canBake = true;
             }
             commitGeneratorToolStripMenuItem.Enabled = canBake;
+
+            // Enable Multi-Region if active groups exist and notes are loaded
+            multiRegionToolStripMenuItem.Enabled = _viewModel.ActiveGroups.Count > 0 && _rawNotes.Count > 0;
         }
 
         // Context Menu Actions - Delegated to ViewModel or GridManager
@@ -1156,6 +1164,18 @@ namespace RALogicEditor.Controls
 
             form.DisplayLogic(_viewModel.BoundAsset, allGroups, _notesLookup, _gridManager.RangeCache);
             form.Show();
+        }
+
+        // NEW: Multi-Region Support Menu Handler (Passes logic to MainForm)
+        private void multiRegionToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            using (var form = new MultiRegionForm(_rawNotes))
+            {
+                if (form.ShowDialog() != DialogResult.OK) return;
+
+                // Fire event to Main Form to handle batch processing on all assets
+                MultiRegionLogicRequested?.Invoke(this, form);
+            }
         }
     }
 }

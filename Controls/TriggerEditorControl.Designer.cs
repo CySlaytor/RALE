@@ -31,6 +31,7 @@ namespace RALogicEditor.Controls
             toolsContextMenu = new ContextMenuStrip(components);
             createGeneratorToolStripMenuItem = new ToolStripMenuItem();
             commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
+            multiRegionToolStripMenuItem = new ToolStripMenuItem(); // Added
             toolStripSeparator5 = new ToolStripSeparator();
             explainLogicToolStripMenuItem = new ToolStripMenuItem();
             splitGroups = new SplitContainer();
@@ -235,9 +236,9 @@ namespace RALogicEditor.Controls
             // 
             // toolsContextMenu
             // 
-            toolsContextMenu.Items.AddRange(new ToolStripItem[] { createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, toolStripSeparator5, explainLogicToolStripMenuItem });
+            toolsContextMenu.Items.AddRange(new ToolStripItem[] { createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, multiRegionToolStripMenuItem, toolStripSeparator5, explainLogicToolStripMenuItem });
             toolsContextMenu.Name = "toolsContextMenu";
-            toolsContextMenu.Size = new Size(209, 98);
+            toolsContextMenu.Size = new Size(209, 120);
             // 
             // createGeneratorToolStripMenuItem
             // 
@@ -252,6 +253,13 @@ namespace RALogicEditor.Controls
             commitGeneratorToolStripMenuItem.Size = new Size(208, 22);
             commitGeneratorToolStripMenuItem.Text = "Commit Generator (Bake)";
             commitGeneratorToolStripMenuItem.Click += commitGeneratorToolStripMenuItem_Click;
+            // 
+            // multiRegionToolStripMenuItem
+            // 
+            multiRegionToolStripMenuItem.Name = "multiRegionToolStripMenuItem";
+            multiRegionToolStripMenuItem.Size = new Size(208, 22);
+            multiRegionToolStripMenuItem.Text = "Multi-Region Support...";
+            multiRegionToolStripMenuItem.Click += multiRegionToolStripMenuItem_Click;
             // 
             // toolStripSeparator5
             // 
@@ -620,5 +628,6 @@ namespace RALogicEditor.Controls
         private System.Windows.Forms.ToolStripMenuItem explainLogicToolStripMenuItem = null!;
         private System.Windows.Forms.Button btnCopyDef = null!;
         private System.Windows.Forms.CheckBox chkCollapseChains = null!;
+        private System.Windows.Forms.ToolStripMenuItem multiRegionToolStripMenuItem; // Added
     }
 }
