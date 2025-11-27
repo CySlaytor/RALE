@@ -372,7 +372,63 @@ namespace RALogicEditor.Helpers
             }
         }
 
+        // Retrieves the effective list of conditions to operate on.
+        // If CollapseChains is true, this includes the hidden 'Add Address' rows preceding the selected items.
+        private List<AchievementCondition> GetEffectiveSelection()
+        {
+            if (_grid.Tag is not AchievementConditionGroup group) return new List<AchievementCondition>();
+
+            // Get currently selected objects from grid based on Tag
+            var selected = _grid.SelectedRows.Cast<DataGridViewRow>()
+                .Select(r => r.Tag as AchievementCondition)
+                .Where(c => c != null)
+                .OrderBy(c => group.Conditions.IndexOf(c!))
+                .Cast<AchievementCondition>()
+                .ToList();
+
+            // If chains are not collapsed, what you see is what you selected.
+            if (!CollapseChains) return selected;
+
+            var expanded = new List<AchievementCondition>();
+            var processed = new HashSet<AchievementCondition>();
+
+            foreach (var cond in selected)
+            {
+                int idx = group.Conditions.IndexOf(cond);
+                if (idx == -1) continue;
+
+                // Backtrack to find the hidden "Add Address" chain
+                var chain = new List<AchievementCondition>();
+                int scan = idx - 1;
+                while (scan >= 0)
+                {
+                    var prev = group.Conditions[scan];
+                    if (prev.Flag == "Add Address")
+                    {
+                        chain.Insert(0, prev);
+                        scan--;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                // Add chain items first
+                foreach (var c in chain)
+                {
+                    if (processed.Add(c)) expanded.Add(c);
+                }
+
+                // Add the selected item
+                if (processed.Add(cond)) expanded.Add(cond);
+            }
+
+            return expanded;
+        }
+
         // Copies selected rows as TSV (Text) to Clipboard
+        // Note: This remains WYSIWYG (Visible rows only) for Excel/Spreadsheet pasting.
         public void CopySelectedRows()
         {
             if (_grid.SelectedRows.Count == 0) return;
@@ -387,33 +443,29 @@ namespace RALogicEditor.Helpers
         }
 
         // Copies logic as RA Logic String (e.g. 0x123=1) to Clipboard
+        // Updated to include hidden chains if collapsed.
         public void CopySelectedLogic()
         {
-            if (_grid.SelectedRows.Count == 0) return;
+            var conditionsToCopy = GetEffectiveSelection();
+            if (conditionsToCopy.Count == 0) return;
+
             var sb = new StringBuilder();
-            foreach (DataGridViewRow row in _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index))
+            foreach (var cond in conditionsToCopy)
             {
-                if (row.Tag is AchievementCondition cond)
-                {
-                    if (sb.Length > 0) sb.Append('_');
-                    sb.Append(LogicFormatter.ConditionToString(cond));
-                }
+                if (sb.Length > 0) sb.Append('_');
+                sb.Append(LogicFormatter.ConditionToString(cond));
             }
             Clipboard.SetText(sb.ToString());
             StatusUpdateRequested?.Invoke(this, "Logic string copied to clipboard.");
         }
 
-        // REFACTORED: RestoreSelection now accepts Tags (Model Objects) to find their rows,
-        // allowing restoration even if visual indices shifted due to filtering (Collapsed Chains).
+        // Restores selection based on Model Tags
         private void RestoreSelection(List<AchievementCondition> selectedConditions)
         {
             if (selectedConditions == null || selectedConditions.Count == 0) return;
 
             _grid.ClearSelection();
-
-            // Using a set for fast lookup
             var set = new HashSet<AchievementCondition>(selectedConditions);
-
             int firstFoundIndex = -1;
 
             foreach (DataGridViewRow row in _grid.Rows)
@@ -432,21 +484,6 @@ namespace RALogicEditor.Helpers
             }
         }
 
-        // Overload for legacy calls if needed, though prefer Tag based.
-        // This one is kept if strictly index based is still required, but mapped to tags.
-        private void RestoreSelection(List<int> indicesToSelect)
-        {
-            if (_grid.Tag is not AchievementConditionGroup group) return;
-
-            var targets = new List<AchievementCondition>();
-            foreach (var idx in indicesToSelect)
-            {
-                if (idx >= 0 && idx < group.Conditions.Count)
-                    targets.Add(group.Conditions[idx]);
-            }
-            RestoreSelection(targets);
-        }
-
         // Pastes logic string from Clipboard into Grid
         public void PasteLogic()
         {
@@ -454,10 +491,10 @@ namespace RALogicEditor.Helpers
             string txt = Clipboard.GetText().Trim().Replace("\r", "").Replace("\n", "");
             if (string.IsNullOrWhiteSpace(txt)) return;
 
-            // REFACTORED: Find insertion point based on Model Object of selected row
             int insertIdx = group.Conditions.Count;
             if (_grid.SelectedRows.Count > 0)
             {
+                // Find insertion point relative to the last selected visual row's model index
                 var lastRow = _grid.SelectedRows.Cast<DataGridViewRow>().OrderByDescending(r => r.Index).First();
                 if (lastRow.Tag is AchievementCondition c)
                 {
@@ -472,7 +509,6 @@ namespace RALogicEditor.Helpers
             // Updated to use ConditionGridRenderer
             ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
 
-            // Prepare items for selection
             RestoreSelection(conds);
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
@@ -481,27 +517,23 @@ namespace RALogicEditor.Helpers
 
         public void DuplicateSelected()
         {
-            if (_grid.ReadOnly || _grid.SelectedRows.Count == 0 || _grid.Tag is not AchievementConditionGroup group) return;
+            if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
 
-            // REFACTORED: Order by Grid Index (Visual), but manipulate Model
-            var rows = _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index).ToList();
-            var originalConditions = rows.Select(r => r.Tag as AchievementCondition).Where(c => c != null).ToList();
-
+            // Use GetEffectiveSelection to include hidden chains
+            var originalConditions = GetEffectiveSelection();
             if (originalConditions.Count == 0) return;
 
-            // Find insert position: After the last selected element in the MODEL
-            // We use the last selected visual element, find its model index, and insert after.
+            // Find insert position: After the last item in the EFFECTIVE selection list
             var lastCondition = originalConditions.Last();
-            int insertIdx = group.Conditions.IndexOf(lastCondition!) + 1;
+            int insertIdx = group.Conditions.IndexOf(lastCondition) + 1;
 
-            var clones = originalConditions.Select(c => c!.Clone()).ToList();
+            var clones = originalConditions.Select(c => c.Clone()).ToList();
 
             group.Conditions.InsertRange(insertIdx, clones);
 
             // Updated to use ConditionGridRenderer
             ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
 
-            // Prepare items for selection
             RestoreSelection(clones);
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
@@ -510,26 +542,29 @@ namespace RALogicEditor.Helpers
 
         public void DeleteSelected()
         {
-            if (_grid.ReadOnly || _grid.SelectedRows.Count == 0 || _grid.Tag is not AchievementConditionGroup group) return;
+            if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
 
-            // Keep track of index to restore selection sensibly
+            // Use GetEffectiveSelection to delete hidden chains along with the leaf
+            var toDelete = GetEffectiveSelection();
+            if (toDelete.Count == 0) return;
+
+            // Determine selection restoration target (index of first deleted item)
             int firstSelIndex = -1;
-            if (_grid.SelectedRows.Count > 0)
+            if (toDelete.Count > 0)
             {
-                // Try to find index of first item to delete in model, to select item after it
-                var firstRow = _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index).First();
-                if (firstRow.Tag is AchievementCondition c)
-                    firstSelIndex = group.Conditions.IndexOf(c);
+                firstSelIndex = group.Conditions.IndexOf(toDelete[0]);
             }
 
-            foreach (DataGridViewRow row in _grid.SelectedRows) { if (row.Tag is AchievementCondition cond) group.Conditions.Remove(cond); }
+            foreach (var cond in toDelete)
+            {
+                group.Conditions.Remove(cond);
+            }
 
             // Updated to use ConditionGridRenderer
             ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
 
             if (firstSelIndex != -1)
             {
-                // If we deleted everything, select nothing. Else select item at same index (which is now the next item)
                 if (firstSelIndex >= group.Conditions.Count) firstSelIndex = group.Conditions.Count - 1;
                 if (firstSelIndex >= 0)
                 {
@@ -543,14 +578,11 @@ namespace RALogicEditor.Helpers
 
         public void MoveSelected(int dist)
         {
-            if (_grid.ReadOnly || _grid.SelectedRows.Count == 0 || _grid.Tag is not AchievementConditionGroup group) return;
+            if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
 
-            // REFACTORED: Map to Model Indices
-            var selectedConds = _grid.SelectedRows.Cast<DataGridViewRow>()
-                                .Select(r => r.Tag as AchievementCondition)
-                                .Where(c => c != null)
-                                .Cast<AchievementCondition>()
-                                .ToList();
+            // Use GetEffectiveSelection to move hidden chains along with leafs
+            var selectedConds = GetEffectiveSelection();
+            if (selectedConds.Count == 0) return;
 
             var indices = selectedConds.Select(c => group.Conditions.IndexOf(c)).OrderBy(i => i).ToList();
 
@@ -576,7 +608,6 @@ namespace RALogicEditor.Helpers
 
             var newCond = new AchievementCondition { LeftOperand = { Type = "Value", Value = "0" }, Operator = "=", RightOperand = { Type = "Value", Value = "1" } };
 
-            // REFACTORED: Insert relative to selection if present, else append
             int insertIdx = group.Conditions.Count;
             if (_grid.SelectedRows.Count > 0)
             {
@@ -621,10 +652,7 @@ namespace RALogicEditor.Helpers
             var collected = new Stack<long>();
             collected.Push(currentOffset);
 
-            // Pointer Logic Scan: Needs to look at Visual Rows? Or Model?
-            // If Collapsed, visual scan fails because intermediate rows are hidden.
-            // We must scan the MODEL.
-            // Find current condition index in model
+            // Pointer Logic Scan
             if (_grid.Tag is not AchievementConditionGroup group) return;
             if (_grid.Rows[rowIndex].Tag is not AchievementCondition currentCond) return;
 
