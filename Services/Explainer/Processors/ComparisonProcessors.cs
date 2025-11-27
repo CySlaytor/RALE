@@ -75,14 +75,16 @@ namespace RALogicEditor.Services.Explainer.Processors
             {
                 // 3. Resolve Target Text
                 // We delegate the processing of the target to the full processor list (manually checking priority)
-                // to ensure that if the target is a Transition or Accumulator, it gets formatted correctly.
+                // to ensure that if the target is a Transition, Accumulator, Pause, or Reset, it gets formatted correctly.
 
                 ProcessorResult targetRes;
                 var transProc = new TransitionProcessor();
                 var measuredProc = new MeasuredTriggerProcessor();
+                var resetProc = new ResetProcessor();
+                var pauseProc = new PauseProcessor();
                 var standardProc = new StandardConditionProcessor();
 
-                // Priority Check: Transition -> Measured -> Standard
+                // Priority Check: Transition -> Measured -> Reset -> Pause -> Standard
                 if (transProc.CanProcess(conditions, ptr))
                 {
                     targetRes = transProc.Process(ctx, conditions, ptr);
@@ -91,13 +93,21 @@ namespace RALogicEditor.Services.Explainer.Processors
                 {
                     targetRes = measuredProc.Process(ctx, conditions, ptr);
                 }
+                else if (resetProc.CanProcess(conditions, ptr))
+                {
+                    targetRes = resetProc.Process(ctx, conditions, ptr);
+                }
+                else if (pauseProc.CanProcess(conditions, ptr))
+                {
+                    targetRes = pauseProc.Process(ctx, conditions, ptr);
+                }
                 else
                 {
                     targetRes = standardProc.Process(ctx, conditions, ptr);
                 }
 
                 consumed += targetRes.ConditionsConsumed; // Add the target's consumption count
-                category = targetRes.Category; // Adopt the category of the target (e.g. Transition)
+                category = targetRes.Category; // Adopt the category of the target (e.g. Transition, Reset, Pause)
 
                 // 4. Build Final Logic String
                 // Format: "(ChainItem1 [AND/OR] ChainItem2 [AND/OR] Target)"
@@ -105,14 +115,60 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                 if (chainItems.Count > 0)
                 {
+                    // Unwrap the target text if it is a complex sentence (like MeasuredIf, Reset, Pause)
+                    // so we can place the logic chain inside the condition, not outside the sentence.
+                    string targetText = targetRes.Text;
+                    string prefixWrapper = "";
+                    string suffixWrapper = "";
+
+                    if (category == ExplanationCategory.MeasuredIf)
+                    {
+                        string p = "The Measured condition will work if ";
+                        string s = " (MeasuredIf)";
+                        if (targetText.StartsWith(p) && targetText.EndsWith(s))
+                        {
+                            prefixWrapper = p;
+                            suffixWrapper = s;
+                            targetText = targetText.Substring(p.Length, targetText.Length - p.Length - s.Length);
+                        }
+                    }
+                    else if (category == ExplanationCategory.Reset)
+                    {
+                        string p = "If ";
+                        string s = ", reset the achievement.";
+                        if (targetText.StartsWith(p) && targetText.EndsWith(s))
+                        {
+                            prefixWrapper = p;
+                            suffixWrapper = s;
+                            targetText = targetText.Substring(p.Length, targetText.Length - p.Length - s.Length);
+                        }
+                    }
+                    else if (category == ExplanationCategory.Pause)
+                    {
+                        string p = "If ";
+                        // Pause suffix varies slightly
+                        if (targetText.StartsWith(p))
+                        {
+                            int lastComma = targetText.LastIndexOf(',');
+                            if (lastComma > p.Length)
+                            {
+                                prefixWrapper = p;
+                                suffixWrapper = targetText.Substring(lastComma); // includes .
+                                targetText = targetText.Substring(p.Length, lastComma - p.Length);
+                            }
+                        }
+                    }
+
+                    sb.Append(prefixWrapper);
                     sb.Append("(");
                     foreach (var item in chainItems)
                     {
                         sb.Append(item.Text);
                         sb.Append($" {item.Connector} ");
                     }
-                    sb.Append(targetRes.Text);
+                    sb.Append(targetText);
                     sb.Append(")");
+                    sb.Append(suffixWrapper);
                 }
                 else
                 {

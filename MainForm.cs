@@ -465,6 +465,21 @@ namespace RALogicEditor
             codeNoteEditor.CommitChanges();
 
             string savePath = _currentUserFilePath;
+
+            // If path is empty, try to auto-determine based on JSON path
+            if (string.IsNullOrEmpty(savePath) && !string.IsNullOrEmpty(_currentFilePath))
+            {
+                string dir = Path.GetDirectoryName(_currentFilePath) ?? "";
+                string fileName = Path.GetFileNameWithoutExtension(_currentFilePath);
+
+                // If the loaded file was a notes file (-Notes.json), strip the suffix to find ID
+                if (fileName.EndsWith("-Notes"))
+                    fileName = fileName.Substring(0, fileName.Length - 6);
+
+                // If loading 1234.json or 1234-Notes.json, auto-save to 1234-User.txt
+                savePath = Path.Combine(dir, $"{fileName}-User.txt");
+            }
+
             if (string.IsNullOrEmpty(savePath))
             {
                 using var sfd = new SaveFileDialog { Filter = "Text Files (*.txt)|*.txt" };
