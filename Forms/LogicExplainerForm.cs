@@ -113,17 +113,12 @@ namespace RALogicEditor.Forms
             {
                 string htmlLine = line;
 
-                // 1. Headers
-                if (htmlLine.StartsWith("# "))
-                    htmlLine = $"<h1>{HtmlEncode(htmlLine.Substring(2))}</h1>";
-                else if (htmlLine.StartsWith("## "))
-                    htmlLine = $"<h2>{HtmlEncode(htmlLine.Substring(3))}</h2>";
-                else if (htmlLine.StartsWith("### "))
-                    htmlLine = $"<h3>{HtmlEncode(htmlLine.Substring(4))}</h3>";
-                else
+                // 1. Helper to process inline tokens (EXPAND)
+                // We refactor this into a function so we can call it inside headers too.
+                string ProcessLineContent(string rawText)
                 {
-                    // 2. Expansion Tokens [[EXPAND:ID:Count/Label]]
-                    var match = Regex.Match(htmlLine, @"\[\[EXPAND:([a-f0-9]+):(.*?)\]\]");
+                    // Expansion Tokens [[EXPAND:ID:Count/Label]]
+                    var match = Regex.Match(rawText, @"\[\[EXPAND:([a-f0-9]+):(.*?)\]\]");
                     if (match.Success)
                     {
                         string fullToken = match.Value;
@@ -132,7 +127,7 @@ namespace RALogicEditor.Forms
 
                         string linkText = labelArg.All(char.IsDigit)
                             ? $"[Show {labelArg} conditions]"
-                            : $"[Show {labelArg}]";
+                            : $"[{labelArg}]";
 
                         // Get content from result details
                         string content = "";
@@ -146,15 +141,43 @@ namespace RALogicEditor.Forms
                         interactiveHtml += $"<div id='{id}' class='hidden-box code-line'>{content}</div>";
 
                         // Replace the token in the line with the HTML widget
-                        string pre = HtmlEncode(htmlLine.Substring(0, match.Index));
-                        string post = HtmlEncode(htmlLine.Substring(match.Index + fullToken.Length));
+                        string pre = HtmlEncode(rawText.Substring(0, match.Index));
+                        string post = HtmlEncode(rawText.Substring(match.Index + fullToken.Length));
 
-                        // Note: divs are block elements, so putting them inside a .line div is technically valid logic flow
-                        htmlLine = $"<div class='line'>{pre} {interactiveHtml} {post}</div>";
+                        return $"{pre} {interactiveHtml} {post}";
+                    }
+                    return HtmlEncode(rawText);
+                }
+
+                // 2. Headers Logic (Now supports tokens)
+                if (htmlLine.StartsWith("# "))
+                {
+                    string content = ProcessLineContent(htmlLine.Substring(2));
+                    htmlLine = $"<h1>{content}</h1>";
+                }
+                else if (htmlLine.StartsWith("## "))
+                {
+                    string content = ProcessLineContent(htmlLine.Substring(3));
+                    htmlLine = $"<h2>{content}</h2>";
+                }
+                else if (htmlLine.StartsWith("### "))
+                {
+                    string content = ProcessLineContent(htmlLine.Substring(4));
+                    htmlLine = $"<h3>{content}</h3>";
+                }
+                else
+                {
+                    // 3. Standard Line Logic (Supports tokens)
+                    // Check if the line itself contains a token first, before encoding
+                    var match = Regex.Match(htmlLine, @"\[\[EXPAND:([a-f0-9]+):(.*?)\]\]");
+                    if (match.Success)
+                    {
+                        // Reuse the helper logic, but wrap in div
+                        htmlLine = $"<div class='line'>{ProcessLineContent(htmlLine)}</div>";
                     }
                     else
                     {
-                        // 3. Standard Line coloring
+                        // Standard Line coloring
                         string cssClass = "";
                         if (htmlLine.Contains("reset the achievement")) cssClass = "reset";
                         else if (htmlLine.Contains("pause the achievement") || htmlLine.Contains("lock the achievement")) cssClass = "pause";

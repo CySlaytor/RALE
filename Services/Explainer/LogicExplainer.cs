@@ -79,57 +79,18 @@ namespace RALogicEditor.Services
                 else regularAlts.Add(alt);
             }
 
-            // 3. Explain Regular Alts (Logic Arrays)
+            // 3. Explain Regular Alts (Logic Arrays + Multi-Region Merging)
             if (regularAlts.Count > 0)
             {
                 sb.AppendLine("## Alternative Requirements (At least one set must be true):");
-                int i = 0;
-                while (i < regularAlts.Count)
-                {
-                    // Check if multiple Alts form a repeating pattern (Array)
-                    int seqLength = DetectArraySequence(regularAlts, i);
-                    if (seqLength > 2)
-                    {
-                        var firstGroup = regularAlts[i];
-                        var lastGroup = regularAlts[i + seqLength - 1];
-                        sb.AppendLine($"### {firstGroup.GroupName} - {lastGroup.GroupName} (Array Logic):");
-                        sb.AppendLine($"Trigger when any of the following {seqLength} slots match:");
-
-                        string explanation = ExplainGroupNatural(firstGroup, notesLookup, rangeCache, showDecimal, result.DetailedInfo);
-
-                        // Indent the explanation for the expandable details
-                        var sbIndent = new StringBuilder();
-                        foreach (var line in explanation.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                            sbIndent.AppendLine("  " + line);
-
-                        string arrayId = Guid.NewGuid().ToString("N");
-                        result.DetailedInfo[arrayId] = sbIndent.ToString().TrimEnd();
-                        sb.AppendLine($"[[EXPAND:{arrayId}:Array Details]]");
-                        sb.AppendLine();
-                        i += seqLength;
-                    }
-                    else
-                    {
-                        sb.AppendLine($"### {regularAlts[i].GroupName}:");
-                        sb.AppendLine(ExplainGroupNatural(regularAlts[i], notesLookup, rangeCache, showDecimal, result.DetailedInfo));
-                        sb.AppendLine();
-                        i++;
-                    }
-                }
+                ProcessMergedGroups(regularAlts, sb, notesLookup, rangeCache, showDecimal, result.DetailedInfo);
             }
 
-            // 4. Explain Display/UX Logic
+            // 4. Explain Display/UX Logic (Multi-Region Merging applied here too)
             if (displayLogic.Count > 0)
             {
                 sb.AppendLine("## Overlay / UX Logic (Does not trigger achievement):");
-                foreach (var group in displayLogic)
-                {
-                    sb.AppendLine($"### {group.GroupName}:");
-                    // Use ExplainGroupNatural but pass isUxHeader=true to handle formatting differently
-                    string explanation = ExplainGroupNatural(group, notesLookup, rangeCache, showDecimal, result.DetailedInfo, isUxHeader: true);
-                    sb.AppendLine(explanation);
-                    sb.AppendLine();
-                }
+                ProcessMergedGroups(displayLogic, sb, notesLookup, rangeCache, showDecimal, result.DetailedInfo, isUxHeader: true);
             }
 
             // 5. Explain Global Resets
@@ -152,6 +113,114 @@ namespace RALogicEditor.Services
             return result;
         }
 
+        // New Helper to Process Groups by detecting Duplicates/Regions
+        private static void ProcessMergedGroups(
+            List<AchievementConditionGroup> groups,
+            StringBuilder sb,
+            Dictionary<string, List<NoteNode>> notes,
+            List<(long Start, long End, NoteNode Node)> range,
+            bool showDec,
+            Dictionary<string, string> details,
+            bool isUxHeader = false)
+        {
+            var processedIndices = new HashSet<int>();
+
+            for (int i = 0; i < groups.Count; i++)
+            {
+                if (processedIndices.Contains(i)) continue;
+
+                // Check for exact Logic Matches (Multi-Region Detection)
+                string currentFingerprint = GetCoreLogicFingerprint(groups[i]);
+                var matchingIndices = new List<int> { i };
+
+                for (int j = i + 1; j < groups.Count; j++)
+                {
+                    if (processedIndices.Contains(j)) continue;
+                    if (GetCoreLogicFingerprint(groups[j]) == currentFingerprint)
+                    {
+                        matchingIndices.Add(j);
+                        processedIndices.Add(j);
+                    }
+                }
+
+                // If we found duplicates, treat them as one logical block
+                if (matchingIndices.Count > 1)
+                {
+                    // Determine if this is an Array (Sequential) or Multi-Region (Split)
+                    bool isSequential = true;
+                    for (int k = 0; k < matchingIndices.Count - 1; k++)
+                    {
+                        if (matchingIndices[k + 1] != matchingIndices[k] + 1)
+                        {
+                            isSequential = false;
+                            break;
+                        }
+                    }
+
+                    if (isSequential && matchingIndices.Count > 2)
+                    {
+                        // Array Logic
+                        var firstGroup = groups[matchingIndices[0]];
+                        var lastGroup = groups[matchingIndices.Last()];
+                        sb.AppendLine($"### {firstGroup.GroupName} - {lastGroup.GroupName} (Array Logic):");
+                        sb.AppendLine($"Trigger when any of the following {matchingIndices.Count} slots match:");
+
+                        string explanation = ExplainGroupNatural(firstGroup, notes, range, showDec, details, isUxHeader);
+
+                        // Indent details
+                        var sbIndent = new StringBuilder();
+                        foreach (var line in explanation.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                            sbIndent.AppendLine("  " + line);
+
+                        string arrayId = Guid.NewGuid().ToString("N");
+                        details[arrayId] = sbIndent.ToString().TrimEnd();
+                        sb.AppendLine($"[[EXPAND:{arrayId}:Array Details]]");
+                        sb.AppendLine();
+                    }
+                    else
+                    {
+                        // Multi-Region Logic with Collapsing for Large Lists
+                        var names = matchingIndices.Select(idx => groups[idx].GroupName).ToList();
+                        string headerNames = "";
+
+                        // Threshold for collapsing: If more than 5 groups, use "X Groups" summary with expander
+                        if (names.Count > 5)
+                        {
+                            string shortList = string.Join(", ", names.Take(3));
+                            string hiddenList = string.Join(", ", names.Skip(3));
+                            string listId = Guid.NewGuid().ToString("N");
+
+                            // Store the full list in details for expansion
+                            details[listId] = hiddenList;
+
+                            // Format: Alt 1, Alt 2, Alt 3... [[EXPAND:ID:and 50 more]] (Multi-Region):
+                            headerNames = $"{shortList}... [[EXPAND:{listId}:and {names.Count - 3} more]]";
+                        }
+                        else
+                        {
+                            headerNames = string.Join(", ", names);
+                        }
+
+                        sb.AppendLine($"### {headerNames} (Multi-Region):");
+
+                        // Explain the logic of the first group
+                        string explanation = ExplainGroupNatural(groups[i], notes, range, showDec, details, isUxHeader, filterRegionLocks: true);
+                        sb.AppendLine(explanation);
+                        sb.AppendLine("- (Region specific locks apply)");
+                        sb.AppendLine();
+                    }
+                }
+                else
+                {
+                    // Single Unique Group
+                    sb.AppendLine($"### {groups[i].GroupName}:");
+                    string explanation = ExplainGroupNatural(groups[i], notes, range, showDec, details, isUxHeader);
+                    sb.AppendLine(explanation);
+                    sb.AppendLine();
+                }
+            }
+        }
+
         // Core explanation loop that iterates through conditions and delegates to processors
         private static string ExplainGroupNatural(
             AchievementConditionGroup group,
@@ -159,7 +228,8 @@ namespace RALogicEditor.Services
             List<(long Start, long End, NoteNode Node)> range,
             bool showDec,
             Dictionary<string, string> details,
-            bool isUxHeader = false)
+            bool isUxHeader = false,
+            bool filterRegionLocks = false)
         {
             var ctx = new ExplanationContext(group, notes, range, showDec);
             var results = new List<ProcessorResult>();
@@ -169,6 +239,13 @@ namespace RALogicEditor.Services
             // Execution Loop
             while (i < conditions.Count)
             {
+                // If filtering region locks, skip Pause If at the start of the group
+                if (filterRegionLocks && conditions[i].Flag == "Pause If")
+                {
+                    i++;
+                    continue;
+                }
+
                 // Find the correct processor for the current condition
                 var proc = _processors.OrderBy(p => p.Priority).First(p => p.CanProcess(conditions, i));
                 var res = proc.Process(ctx, conditions, i);
@@ -323,39 +400,54 @@ namespace RALogicEditor.Services
             };
         }
 
-        // Detects repeating patterns across multiple Alt groups
-        private static int DetectArraySequence(List<AchievementConditionGroup> alts, int startIndex)
-        {
-            if (startIndex >= alts.Count - 1) return 0;
-            string baseFingerprint = GetGroupFingerprint(alts[startIndex]);
-
-            int count = 1;
-            for (int i = startIndex + 1; i < alts.Count; i++)
-            {
-                if (GetGroupFingerprint(alts[i]) == baseFingerprint) count++;
-                else break;
-            }
-            return count;
-        }
-
-        // Generates a unique string hash for a group structure
-        private static string GetGroupFingerprint(AchievementConditionGroup group)
+        // Generates a unique string hash for a group structure IGNORING specific addresses and Region Locks
+        // This allows matching logic structure (Type, Operator, Hits) even if addresses differ (PAL vs USA)
+        private static string GetCoreLogicFingerprint(AchievementConditionGroup group)
         {
             var sb = new StringBuilder();
-            foreach (var c in group.Conditions)
+
+            // NEW LOGIC: We skip leading "Pause If" conditions entirely.
+            // These are assumed to be Region Locks.
+            // We start fingerprinting from the first non-PauseIf condition.
+            // (Or PauseIf inside the logic flow, which we can't easily distinguish, 
+            // but typically locks are at the very top).
+
+            int startIndex = 0;
+            while (startIndex < group.Conditions.Count && group.Conditions[startIndex].Flag == "Pause If")
             {
+                startIndex++;
+            }
+
+            for (int i = startIndex; i < group.Conditions.Count; i++)
+            {
+                var c = group.Conditions[i];
+
                 sb.Append(c.Flag).Append('|');
+
+                // Left Operand
                 sb.Append(c.LeftOperand.Type).Append('|');
-                // Ignore address for mem to detect structural matches
-                if (c.LeftOperand.Type != "Mem" && c.LeftOperand.Type != "Delta" && c.LeftOperand.Type != "Prior")
-                    sb.Append(c.LeftOperand.Value);
-                sb.Append('|').Append(c.Operator).Append('|');
+                sb.Append(c.LeftOperand.Size).Append('|');
+                // Include Value ONLY if not Memory (ignore addresses to match PAL/USA)
+                if (!IsMem(c.LeftOperand.Type)) sb.Append(c.LeftOperand.Value).Append('|');
+                else sb.Append("MEM|"); // Placeholder for any address
+
+                // Operator
+                sb.Append(c.Operator).Append('|');
+
+                // Right Operand
                 sb.Append(c.RightOperand.Type).Append('|');
-                if (c.RightOperand.Type != "Mem" && c.RightOperand.Type != "Delta" && c.RightOperand.Type != "Prior")
-                    sb.Append(c.RightOperand.Value);
-                sb.Append('|').Append(c.RequiredHits).Append(';');
+                sb.Append(c.RightOperand.Size).Append('|');
+                if (!IsMem(c.RightOperand.Type)) sb.Append(c.RightOperand.Value).Append('|');
+                else sb.Append("MEM|");
+
+                sb.Append(c.RequiredHits).Append(';');
             }
             return sb.ToString();
+        }
+
+        private static bool IsMem(string type)
+        {
+            return type == "Mem" || type == "Delta" || type == "Prior" || type == "BCD" || type == "Inverted";
         }
     }
 }
