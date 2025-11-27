@@ -98,7 +98,34 @@ namespace RALogicEditor.Helpers
 
                     if (notesLookup.TryGetValue(normalizedBase, out var nodes))
                     {
-                        var currentLevelNodes = nodes.Where(n => n.IndentLevel != -2 && (n.Parent == null || n.Parent.IndentLevel == -1)).ToList();
+                        // FIX: Redirect Resolution Logic added here
+                        // Check if the Base Note is a Redirect (refer to $0x...)
+                        List<NoteNode> workingNodes = nodes;
+                        int redirects = 0;
+                        while (redirects < 5 && workingNodes.Count > 0)
+                        {
+                            var root = workingNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? workingNodes[0];
+                            string content = root.Content ?? "";
+
+                            if (content.Contains("refer to", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var match = Regex.Match(content, @"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
+                                if (match.Success)
+                                {
+                                    string targetAddr = match.Groups[1].Value;
+                                    string normTarget = LogicFormatter.NormalizeAddress(targetAddr);
+                                    if (notesLookup.TryGetValue(normTarget, out var targetNodes))
+                                    {
+                                        workingNodes = targetNodes;
+                                        redirects++;
+                                        continue;
+                                    }
+                                }
+                            }
+                            break;
+                        }
+
+                        var currentLevelNodes = workingNodes.Where(n => n.IndentLevel != -2 && (n.Parent == null || n.Parent.IndentLevel == -1)).ToList();
                         bool chainValid = true;
 
                         while (chainStack.Count > 0)
@@ -154,10 +181,36 @@ namespace RALogicEditor.Helpers
             // 2. Direct Lookup
             if (notesLookup.TryGetValue(address, out var directNodes))
             {
-                var root = directNodes.FirstOrDefault();
-                if (root != null)
+                // FIX: Redirect Resolution Logic added here too
+                List<NoteNode> workingNodes = directNodes;
+                int redirects = 0;
+                while (redirects < 5 && workingNodes.Count > 0)
                 {
-                    var main = directNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? directNodes.First();
+                    var root = workingNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? workingNodes[0];
+                    string content = root.Content ?? "";
+
+                    if (content.Contains("refer to", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var match = Regex.Match(content, @"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
+                        if (match.Success)
+                        {
+                            string targetAddr = match.Groups[1].Value;
+                            string normTarget = LogicFormatter.NormalizeAddress(targetAddr);
+                            if (notesLookup.TryGetValue(normTarget, out var targetNodes))
+                            {
+                                workingNodes = targetNodes;
+                                redirects++;
+                                continue;
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                var rootNode = workingNodes.FirstOrDefault();
+                if (rootNode != null)
+                {
+                    var main = workingNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? workingNodes.First();
                     string desc = main.Description;
 
                     if (string.IsNullOrEmpty(desc) || desc.Equals("Full Note", StringComparison.OrdinalIgnoreCase))

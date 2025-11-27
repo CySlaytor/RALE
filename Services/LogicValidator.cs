@@ -6,6 +6,8 @@ using RALogicEditor.Utilities;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace RALogicEditor.Services
 {
@@ -265,6 +267,18 @@ namespace RALogicEditor.Services
             Dictionary<string, List<NoteNode>> notesLookup,
             List<(long Start, long End, NoteNode Node)>? rangeCache)
         {
+            // Internal flag to enable detailed logging. Set to true to debug pointer issues.
+            bool enableTrace = false;
+            StringBuilder? debugLog = enableTrace ? new StringBuilder() : null;
+
+            long ParseHex(string s)
+            {
+                if (string.IsNullOrWhiteSpace(s)) return -1;
+                string clean = s.Trim().Replace("0x", "", System.StringComparison.OrdinalIgnoreCase);
+                clean = Regex.Replace(clean, "[^0-9A-Fa-f]", "");
+                return long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+            }
+
             for (int i = 0; i < group.Conditions.Count; i++)
             {
                 var cond = group.Conditions[i];
@@ -288,16 +302,186 @@ namespace RALogicEditor.Services
 
                     if (string.IsNullOrWhiteSpace(alias))
                     {
+                        debugLog?.AppendLine($"Validating Operand: {op.Value} (Index: {i})");
+                        debugLog?.AppendLine("--------------------------------------------------");
+
+                        string msg = $"Address {op.Value} has no Code Note.";
+
+                        // Improved Detection: Check if this is a failure in a Pointer Chain where the Base IS documented
+                        if (i > 0 && group.Conditions[i - 1].Flag == "Add Address")
+                        {
+                            // Backtrack to find the Base Address of the chain
+                            var chain = new List<string>();
+                            int scan = i - 1;
+                            while (scan >= 0 && group.Conditions[scan].Flag == "Add Address")
+                            {
+                                chain.Insert(0, group.Conditions[scan].LeftOperand.Value);
+                                scan--;
+                            }
+
+                            if (chain.Count > 0)
+                            {
+                                debugLog?.AppendLine($"Pointer Chain Detected: {string.Join(" -> ", chain)} -> {op.Value}");
+                                string baseStr = chain[0];
+                                string normBase = LogicFormatter.NormalizeAddress(baseStr);
+
+                                List<NoteNode>? currentNodes = null;
+                                string contextMsg = "";
+
+                                // Try Direct Lookup
+                                if (notesLookup.TryGetValue(normBase, out var lookupNodes))
+                                {
+                                    currentNodes = lookupNodes;
+                                    debugLog?.AppendLine($"Base {baseStr} found in NotesLookup.");
+                                }
+                                // Try Range Cache Lookup
+                                else if (rangeCache != null)
+                                {
+                                    long baseVal = ParseHex(baseStr);
+                                    if (baseVal != -1)
+                                    {
+                                        var match = rangeCache.FirstOrDefault(r => baseVal >= r.Start && baseVal < r.End);
+                                        if (match.Node != null)
+                                        {
+                                            currentNodes = new List<NoteNode> { match.Node };
+                                            contextMsg = " (Base found in Struct Range)";
+                                            debugLog?.AppendLine($"Base {baseStr} found in RangeCache (Struct).");
+                                        }
+                                    }
+                                }
+
+                                if (currentNodes != null)
+                                {
+                                    // Base Found. Loop to resolve Redirects (Virtual Links).
+                                    int redirects = 0;
+                                    while (redirects < 5)
+                                    {
+                                        if (currentNodes.Count == 0) break;
+
+                                        var root = currentNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? currentNodes[0];
+                                        string content = root.Content ?? "";
+
+                                        if (content.Contains("refer to", System.StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            debugLog?.AppendLine($"Redirect detected: '{root.Description}'\n{content.Trim()}");
+                                            var match = Regex.Match(content, @"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
+                                            if (match.Success)
+                                            {
+                                                string targetAddr = match.Groups[1].Value;
+                                                string normTarget = LogicFormatter.NormalizeAddress(targetAddr);
+
+                                                if (notesLookup.TryGetValue(normTarget, out var targetNodes))
+                                                {
+                                                    currentNodes = targetNodes;
+                                                    contextMsg = $" (Base Linked to 0x{targetAddr}, resolved)";
+                                                    debugLog?.AppendLine($"Redirect resolved to {targetAddr}.");
+                                                    redirects++;
+                                                    continue;
+                                                }
+                                                else
+                                                {
+                                                    contextMsg = $" (Base Linked to 0x{targetAddr} but target missing)";
+                                                    debugLog?.AppendLine($"Redirect target {targetAddr} MISSING from NotesLookup.");
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        break;
+                                    }
+
+                                    // 2. Trace the Chain using the Resolved Nodes
+                                    string brokenOffset = "";
+                                    var levelNodes = currentNodes.Where(n => n.IndentLevel != -2 && (n.Parent == null || n.Parent.IndentLevel == -1)).ToList();
+
+                                    debugLog?.AppendLine($"Tracing offsets starting with {levelNodes.Count} root nodes.");
+
+                                    // Iterate intermediate offsets
+                                    for (int k = 1; k < chain.Count; k++)
+                                    {
+                                        long offVal = ParseHex(chain[k]);
+                                        debugLog?.AppendLine($"Looking for offset +{chain[k]} (0x{offVal:X})...");
+                                        NoteNode? next = null;
+                                        foreach (var n in levelNodes)
+                                        {
+                                            long nOff = ParseHex(n.Offset);
+                                            if (n.Offset.Contains("-")) nOff = -nOff;
+
+                                            // Exact match OR Range match
+                                            if (offVal >= nOff && offVal < nOff + n.Size)
+                                            {
+                                                next = n;
+                                                debugLog?.AppendLine($"  Matched Node: {n.Offset} ({n.Description})");
+                                                break;
+                                            }
+                                        }
+
+                                        if (next == null)
+                                        {
+                                            debugLog?.AppendLine($"  FAILED to find match for +{chain[k]}");
+                                            brokenOffset = chain[k];
+                                            break;
+                                        }
+                                        levelNodes = next.Children;
+                                        debugLog?.AppendLine($"  Stepped into node. Children count: {levelNodes.Count}");
+                                    }
+
+                                    if (!string.IsNullOrEmpty(brokenOffset))
+                                    {
+                                        msg = $"Pointer chain broken at intermediate offset +{brokenOffset}.{contextMsg} Verify note structure.";
+                                    }
+                                    else
+                                    {
+                                        // Chain OK, check Leaf (op.Value)
+                                        long leafVal = ParseHex(op.Value);
+                                        debugLog?.AppendLine($"Checking Leaf: +{op.Value} (0x{leafVal:X})...");
+
+                                        bool leafFound = false;
+                                        foreach (var n in levelNodes)
+                                        {
+                                            long nOff = ParseHex(n.Offset);
+                                            if (n.Offset.Contains("-")) nOff = -nOff;
+
+                                            if (leafVal >= nOff && leafVal < nOff + n.Size)
+                                            {
+                                                debugLog?.AppendLine($"  Matched Leaf: {n.Offset} ({n.Description})");
+                                                leafFound = true;
+                                                break;
+                                            }
+                                        }
+
+                                        if (!leafFound)
+                                        {
+                                            debugLog?.AppendLine("  FAILED to find leaf node.");
+                                            msg = $"Pointer leaf (+{op.Value}) not found in resolved structure of Base {baseStr}.{contextMsg}";
+                                        }
+                                        else
+                                        {
+                                            msg = $"ConditionFormatter.ResolveAlias failed but Validator trace succeeded. Base: {baseStr}{contextMsg}";
+                                            debugLog?.AppendLine("SUCCESS: Validator found the note. CodeReview logic discrepancy detected.");
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    msg = $"Pointer Base {baseStr} is undocumented. Cannot resolve chain.";
+                                    debugLog?.AppendLine($"Base {baseStr} NOT found in NotesLookup or RangeCache.");
+                                }
+                            }
+                        }
+
                         // LogicFormatter.NormalizeAddress ensures we have a clean hex string or value
                         // We use the original op.Value for display
-                        issues.Add(new ValidationIssue(
+                        var issue = new ValidationIssue(
                             FeedbackSeverity.Warning,
                             "Undocumented Memory",
-                            $"Address {op.Value} (or its pointer chain target) has no Code Note.",
+                            msg,
                             cond,
                             "",
                             asset
-                        ));
+                        );
+
+                        if (enableTrace) issue.DebugLog = debugLog?.ToString() ?? "";
+                        issues.Add(issue);
                     }
                 }
 

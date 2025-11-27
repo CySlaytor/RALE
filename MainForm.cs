@@ -342,6 +342,17 @@ namespace RALogicEditor
 
             // 2. Highlight the specific condition in the editor
             triggerEditor.SelectCondition(issue.Target);
+
+            // 3. Show Debug Dialog if available (DISABLED Internally)
+            /*
+            if (!string.IsNullOrEmpty(issue.DebugLog))
+            {
+                using (var dbg = new DebugChainForm(issue.DebugLog))
+                {
+                    dbg.ShowDialog();
+                }
+            }
+            */
         }
 
         private void SelectAssetInGrid(IAssetItem asset)

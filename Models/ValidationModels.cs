@@ -24,6 +24,9 @@ namespace RALogicEditor.Definitions
         // The asset this issue belongs to (for global list navigation)
         public IAssetItem? Asset { get; set; }
 
+        // NEW: Trace log for debugging
+        public string DebugLog { get; set; } = "";
+
         public ValidationIssue(FeedbackSeverity severity, string title, string description, AchievementCondition? target = null, string wikiUrl = "", IAssetItem? asset = null)
         {
             Severity = severity;
