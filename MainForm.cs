@@ -65,7 +65,7 @@ namespace RALogicEditor
             triggerEditor.MultiRegionLogicRequested += TriggerEditor_MultiRegionLogicRequested;
 
             // -- NEW: Logic Optimizer Request --
-            // Handles the request from the Trigger Editor's Tools menu (Not the main form menu)
+            // Handles the request from the Trigger Editor's Tools menu
             triggerEditor.LogicOptimizationRequested += LogicOptimizerToolStripMenuItem_Click;
 
             // Code Reviewer clicks: select the asset and the specific condition
@@ -154,7 +154,7 @@ namespace RALogicEditor
             AppSettings.Save();
         }
 
-        // Logic Optimizer Tool Handler (Called from TriggerEditor event)
+        // Logic Optimizer Tool Handler
         private void LogicOptimizerToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (_currentDisplayList.Count == 0)
@@ -164,31 +164,79 @@ namespace RALogicEditor
             }
 
             // Create a copy of the list to avoid enumeration issues
-            var assetsToOptimize = new List<IAssetItem>(_currentDisplayList);
+            var assetsToOptimize = new List<IAssetItem>();
+
+            foreach (var original in _currentDisplayList)
+            {
+                if (original.State == AssetState.Synced)
+                {
+                    // Create a detached clone for editing
+                    IAssetItem clone;
+                    if (original.IsLeaderboard && original is RaLeaderboard lb)
+                        clone = lb.Clone(false); // false = keep ID
+                    else if (original is RaAchievement ach)
+                        clone = ach.Clone(false);
+                    else
+                        continue;
+
+                    // Ensure state matches original for the Optimizer to detect change later
+                    clone.State = AssetState.Synced;
+                    assetsToOptimize.Add(clone);
+                }
+                else
+                {
+                    // Already local/modified, edit directly
+                    assetsToOptimize.Add(original);
+                }
+            }
 
             using (var form = new LogicOptimizerForm(assetsToOptimize))
             {
                 form.ShowDialog();
             }
 
-            // After optimization, ensure local data exists if things were modified
             _projectRepo.EnsureLocalDataExists();
 
-            // Ensure optimized assets are added to local storage if they were previously synced
+            bool anyChanges = false;
+
+            // Commit changes
             foreach (var item in assetsToOptimize)
             {
-                if (item.State == AssetState.Modified && !IsAssetInLocalStore(item))
+                // If the item became Modified (optimized)
+                if (item.State == AssetState.Modified)
                 {
-                    EnsureAssetIsLocal(item);
+                    // Check if this logic needs to be promoted to LocalData
+                    // 1. If it was already in LocalData (Modified/Local), it is updated by reference.
+                    // 2. If it was a Synced Clone, it is NOT in LocalData yet.
+
+                    if (!IsAssetInLocalStore(item))
+                    {
+                        // Add the modified clone to LocalData
+                        if (item.IsLeaderboard && item is RaLeaderboard lb)
+                            _projectRepo.LocalData!.Leaderboards.Add(lb);
+                        else if (item is RaAchievement ach)
+                            _projectRepo.LocalData!.Achievements.Add(ach);
+
+                        anyChanges = true;
+                    }
+                    else
+                    {
+                        // It was already local, check if logic actually changed vs what we had?
+                        // The optimizer modifies in place, so the LocalData list is already updated 
+                        // because 'item' is a reference to the object in LocalData.
+                        anyChanges = true;
+                    }
                 }
             }
 
-            // Refresh UI to show modified states and possibly new logic lengths
-            ReloadDataView();
-            if (_selectedAsset != null)
+            if (anyChanges)
             {
-                // Re-select finding the new object reference if needed
-                SelectAssetInGrid(_selectedAsset);
+                ReloadDataView();
+                if (_selectedAsset != null)
+                {
+                    // Re-select finding the new Local object
+                    SelectAssetInGrid(_selectedAsset);
+                }
             }
         }
 
@@ -910,14 +958,16 @@ namespace RALogicEditor
 
                 // 2. Filter by Category (Core vs Unofficial)
                 // "Local" category was removed from filter, but items might still have "Local" string
-                string itemCat = string.IsNullOrEmpty(item.Category) ? "Local" : item.Category;
 
-                // If filtering by Core or Unofficial, we match exactly.
-                // If item has "Local" category, it won't match Core or Unofficial, so it is hidden here.
-                // Users find "Local" items via Source View (New/Local), regardless of category filter usually.
-                if (!itemCat.Equals(categoryFilter, StringComparison.OrdinalIgnoreCase))
+                // FIX: Only apply category filter if NOT in "New" mode.
+                // This ensures newly created assets (which are "Local" category) appear even if the filter is set to Core.
+                if (sourceMode != "New")
                 {
-                    continue;
+                    string itemCat = string.IsNullOrEmpty(item.Category) ? "Local" : item.Category;
+                    if (!itemCat.Equals(categoryFilter, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
                 }
 
                 // 3. Filter by Search Text
