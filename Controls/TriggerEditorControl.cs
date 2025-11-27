@@ -173,6 +173,8 @@ namespace RALogicEditor.Controls
             // This helper is used purely for caching note trees for tooltips/aliases
             var parser = new PointerTreeParser();
 
+            // UPDATED: Double pass logic for aliases
+            // Pass 1: Parse all real notes
             foreach (var note in notes)
             {
                 string key = LogicFormatter.NormalizeAddress(note.Address);
@@ -193,6 +195,31 @@ namespace RALogicEditor.Controls
                     }
                 }
             }
+
+            // Pass 2: Handle Redirects for Aliasing (Refer to $0x...)
+            // If a note is empty but refers to another note, clone the tree so the Grid can display aliases.
+            var redirectRegex = new Regex(@"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
+            foreach (var note in notes)
+            {
+                // Basic check: Does it look like a real note?
+                bool hasStructure = Regex.IsMatch(note.Note, @"^[.+]", RegexOptions.Multiline);
+                if (!hasStructure)
+                {
+                    var match = redirectRegex.Match(note.Note);
+                    if (match.Success)
+                    {
+                        string targetAddr = LogicFormatter.NormalizeAddress(match.Groups[1].Value);
+                        string sourceKey = LogicFormatter.NormalizeAddress(note.Address);
+
+                        // If we have a parsed tree for target, copy it to source
+                        if (_notesLookup.TryGetValue(targetAddr, out var targetNodes))
+                        {
+                            _notesLookup[sourceKey] = targetNodes; // Shared reference is fine for lookup
+                        }
+                    }
+                }
+            }
+
             _gridManager.NotesLookup = _notesLookup;
 
             // Pass references to ViewModel so validation can use them

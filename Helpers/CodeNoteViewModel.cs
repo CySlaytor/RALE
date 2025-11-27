@@ -31,6 +31,11 @@ namespace RALogicEditor.Helpers
         // The full parsed tree of the current note
         public List<NoteNode> CurrentParsedNodes { get; private set; } = new();
 
+        // -- Redirection State --
+        public bool IsRedirected { get; private set; }
+        public string RedirectedContent { get; private set; } = "";
+        public string RedirectTargetAddress { get; private set; } = "";
+
         // -- Virtual/Edit State --
         // Unified State for both Virtual (Ghost) and Real (Existing) edits.
         // This acts as a buffer: changing DisplayText does not immediately affect the CodeNote.
@@ -96,7 +101,41 @@ namespace RALogicEditor.Helpers
             CurrentBaseNote = note;
             ClearEditState();
 
-            string normalized = note.Note.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+            // Check for Redirection (Refer to $0x...)
+            // Logic: If the note is essentially empty (no structure) AND has a referral, follow it.
+            // We check if the note has actual pointer structure (plus/dots). If not, we assume it's a stub.
+            bool hasStructure = Regex.IsMatch(note.Note, @"^[.+]", RegexOptions.Multiline);
+            var referralMatch = Regex.Match(note.Note, @"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
+
+            IsRedirected = false;
+            RedirectedContent = "";
+            RedirectTargetAddress = "";
+
+            string contentToParse = note.Note;
+
+            if (!hasStructure && referralMatch.Success)
+            {
+                string targetAddr = referralMatch.Groups[1].Value;
+                // Find the target note
+                // Normalize both to lower hex
+                string cleanTarget = targetAddr.ToLower().TrimStart('0');
+
+                var targetNote = AllNotes.FirstOrDefault(n =>
+                {
+                    string nAddr = n.Address.Replace("0x", "").ToLower().TrimStart('0');
+                    return nAddr == cleanTarget;
+                });
+
+                if (targetNote != null)
+                {
+                    IsRedirected = true;
+                    RedirectedContent = targetNote.Note;
+                    RedirectTargetAddress = targetNote.Address;
+                    contentToParse = targetNote.Note;
+                }
+            }
+
+            string normalized = contentToParse.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
             CurrentParsedNodes = _parser.ParseNoteText(normalized);
 
             NoteContentChanged?.Invoke(this, EventArgs.Empty);
@@ -104,7 +143,7 @@ namespace RALogicEditor.Helpers
 
         public void UpdateNoteContent(string newText)
         {
-            if (CurrentBaseNote == null || EditState.IsVirtual) return;
+            if (CurrentBaseNote == null || EditState.IsVirtual || IsRedirected) return;
 
             CurrentBaseNote.Note = newText;
             CurrentParsedNodes = _parser.ParseNoteText(newText);
@@ -114,7 +153,7 @@ namespace RALogicEditor.Helpers
         // This updates the buffer but NOT the underlying CodeNote.
         public void UpdateBufferedText(string newText)
         {
-            if (CurrentBaseNote == null) return;
+            if (CurrentBaseNote == null || IsRedirected) return;
 
             // If we weren't in a specific edit state, we are now editing the Root note (default fallback)
             if (EditState.TargetNode == null && !EditState.IsVirtual)
@@ -131,7 +170,7 @@ namespace RALogicEditor.Helpers
         // Called by Save (Ctrl+S) or Navigation.
         public void CommitEditState()
         {
-            if (!EditState.IsDirty || CurrentBaseNote == null) return;
+            if (!EditState.IsDirty || CurrentBaseNote == null || IsRedirected) return;
 
             string updatedBaseNote = "";
 
@@ -228,7 +267,8 @@ namespace RALogicEditor.Helpers
             // Extract content logic
             if (node.IndentLevel == -2)
             {
-                content = CurrentBaseNote?.Note ?? "";
+                // If redirected, use redirected content, else real note
+                content = IsRedirected ? RedirectedContent : (CurrentBaseNote?.Note ?? "");
             }
             else
             {
@@ -275,6 +315,11 @@ namespace RALogicEditor.Helpers
             if (CurrentBaseNote == null) return ("", "", "");
             if (uiSelectedNode == null) return ("", "", "");
 
+            // If redirected, we still generate logic using the BASE NOTE address
+            // because the user is on the PAL note (e.g. 0x1234), but looking at USA structure.
+            // The logic should point to PAL (0x1234) + Offsets.
+            // The parser uses CurrentBaseNote address as the root I:0x...
+            // So this works perfectly: Logic is built relative to PAL base, using USA tree structure.
             return _parser.GeneratePointerLogic(CurrentBaseNote, uiSelectedNode);
         }
 

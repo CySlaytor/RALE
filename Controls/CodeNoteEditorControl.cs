@@ -149,9 +149,16 @@ namespace RALogicEditor.Controls
                 // Although RequestNodeSelection is usually preferred, this fallback handles direct root updates
                 if (!_viewModel.EditState.IsVirtual && _viewModel.EditState.TargetNode == null)
                 {
-                    string normalized = _viewModel.CurrentBaseNote.Note.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
-                    txtNoteBody.ReadOnly = false;
+                    // New: If redirected, the VM provides the Linked Content, otherwise we use the Note's content
+                    string raw = _viewModel.IsRedirected ? _viewModel.RedirectedContent : _viewModel.CurrentBaseNote.Note;
+                    string normalized = raw.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+
                     txtNoteBody.Text = normalized;
+
+                    // Lock if redirected
+                    txtNoteBody.ReadOnly = _viewModel.IsRedirected;
+                    if (_viewModel.IsRedirected)
+                        lblOffsetChain.Text = $"[Virtual: Linked to {_viewModel.RedirectTargetAddress}]";
                 }
 
                 // 2. Refresh Tree Dropdown
@@ -191,6 +198,9 @@ namespace RALogicEditor.Controls
 
             var finalList = query.ToList();
             cmbVariables.DataSource = finalList;
+
+            // Disable dropdown if redirected to avoid confusing "edit via tree" actions on read-only content
+            // Though reading is fine, editing is not. Let's keep it enabled for navigation but block write.
             cmbVariables.Enabled = finalList.Count > 1 && !_viewModel.EditState.IsVirtual;
             cmbVariables.BackColor = _viewModel.EditState.IsVirtual ? SystemColors.Control : SystemColors.Window;
         }
@@ -228,15 +238,17 @@ namespace RALogicEditor.Controls
                     cmbVariables.BackColor = SystemColors.Window;
 
                     txtNoteBody.Text = state.DisplayText;
-                    txtNoteBody.ReadOnly = false;
+
+                    // Respect redirection lock
+                    txtNoteBody.ReadOnly = _viewModel.IsRedirected;
                 }
                 else
                 {
                     // Root / Default
-                    lblOffsetChain.Text = "Ready";
+                    if (!_viewModel.IsRedirected) lblOffsetChain.Text = "Ready";
                     cmbVariables.Enabled = true;
                     cmbVariables.BackColor = SystemColors.Window;
-                    txtNoteBody.ReadOnly = false;
+                    txtNoteBody.ReadOnly = _viewModel.IsRedirected;
                 }
             }
             finally
@@ -369,7 +381,12 @@ namespace RALogicEditor.Controls
             // Fallback status update, mostly handled by EditStateChanged now
             if (_viewModel.EditState.IsVirtual) return;
 
-            if (node == null) { lblOffsetChain.Text = "Ready"; return; }
+            if (node == null)
+            {
+                if (_viewModel.IsRedirected) lblOffsetChain.Text = $"[Virtual: Linked to {_viewModel.RedirectTargetAddress}]";
+                else lblOffsetChain.Text = "Ready";
+                return;
+            }
             var chain = new List<string>();
             var current = node;
             while (current != null && current.IndentLevel != -1) { chain.Insert(0, current.Offset); current = current.Parent; }
