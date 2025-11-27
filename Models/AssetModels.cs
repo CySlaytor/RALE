@@ -17,6 +17,7 @@ namespace RALogicEditor.Models
         string Description { get; set; }
         string Logic { get; set; }
         string Type { get; set; }
+        string Category { get; set; } // Tracks "Core", "Unofficial", or "Local"
         bool IsLeaderboard { get; }
         AssetState State { get; set; }
     }
@@ -32,7 +33,7 @@ namespace RALogicEditor.Models
 
     public class RaSet
     {
-        public string Type { get; set; } = "";
+        public string Type { get; set; } = ""; // "core", "unofficial"
         public List<RaAchievement> Achievements { get; set; } = new List<RaAchievement>();
         public List<RaLeaderboard> Leaderboards { get; set; } = new List<RaLeaderboard>();
     }
@@ -47,8 +48,14 @@ namespace RALogicEditor.Models
         public string BadgeName { get; set; } = "00000";
         public string Type { get; set; } = "";
 
+        // Used to determine Category: 3 = Core, 5 = Unofficial
+        public int Flags { get; set; }
+
         [JsonPropertyName("MemAddr")]
         public string Logic { get; set; } = "";
+
+        [JsonIgnore]
+        public string Category { get; set; } = "Local"; // Default to Local until linked
 
         [JsonIgnore]
         public bool IsLeaderboard => false;
@@ -69,7 +76,9 @@ namespace RALogicEditor.Models
                 Author = this.Author,
                 BadgeName = this.BadgeName,
                 Type = this.Type,
+                Flags = this.Flags,
                 Logic = this.Logic,
+                Category = this.Category,
                 State = this.State
             };
         }
@@ -92,6 +101,9 @@ namespace RALogicEditor.Models
         public string Type { get; set; } = "Leaderboard";
 
         [JsonIgnore]
+        public string Category { get; set; } = "Local"; // Default
+
+        [JsonIgnore]
         public bool IsLeaderboard => true;
 
         [JsonIgnore]
@@ -110,6 +122,7 @@ namespace RALogicEditor.Models
                 LowerIsBetter = this.LowerIsBetter,
                 Hidden = this.Hidden,
                 Logic = this.Logic,
+                Category = this.Category,
                 State = this.State
             };
         }

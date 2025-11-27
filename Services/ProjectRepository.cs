@@ -95,6 +95,24 @@ namespace RALogicEditor.Services
                 {
                     if (ServerData.Sets == null) ServerData.Sets = new List<RaSet>();
                     CurrentTitle = $"{ServerData.Title} ({ServerData.GameId})";
+
+                    // Apply categorization rules
+                    foreach (var set in ServerData.Sets)
+                    {
+                        foreach (var a in set.Achievements)
+                        {
+                            // Rule: Flags 3 = Core, Flags 5 = Unofficial. Everything else is treated as invalid/fallback.
+                            if (a.Flags == 3) a.Category = "Core";
+                            else if (a.Flags == 5) a.Category = "Unofficial";
+                            else a.Category = "Unofficial"; // Fallback for invalid/unknown flags within a server set
+                        }
+
+                        foreach (var l in set.Leaderboards)
+                        {
+                            // Leaderboards don't usually have Flags in this JSON format, utilize Set Type
+                            l.Category = set.Type;
+                        }
+                    }
                 }
             }
             catch (Exception) { /* Log handling could go here */ }
@@ -181,10 +199,14 @@ namespace RALogicEditor.Services
                         loc.State = AssetState.Synced;
                     else
                         loc.State = AssetState.Modified;
+
+                    // Propagate category from server (User.txt doesn't store category info)
+                    loc.Category = srv.Category;
                 }
                 else
                 {
                     loc.State = AssetState.Local;
+                    // loc.Category defaults to "Local" in constructor
                 }
                 list.Add(loc);
                 processedIds.Add(loc.ID);
@@ -212,6 +234,8 @@ namespace RALogicEditor.Services
             {
                 if (aa.Points != bb.Points) return false;
                 if (aa.Type != bb.Type) return false;
+                // Note: We don't compare Flags/Category for sync state, as User.txt doesn't store them.
+                // Sync state is strictly about data persisted in User.txt vs Server.
             }
             return true;
         }

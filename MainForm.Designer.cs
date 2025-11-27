@@ -47,6 +47,7 @@
             txtAssetSearch = new TextBox();
             lblAssetSearch = new Label();
             cmbSource = new ComboBox();
+            cmbCategory = new ComboBox(); // New ComboBox
             cmbAssetType = new ComboBox();
             splitEditor = new SplitContainer();
             splitMiddle = new SplitContainer();
@@ -321,6 +322,7 @@
             panelGridTop.Controls.Add(txtAssetSearch);
             panelGridTop.Controls.Add(lblAssetSearch);
             panelGridTop.Controls.Add(cmbSource);
+            panelGridTop.Controls.Add(cmbCategory);
             panelGridTop.Controls.Add(cmbAssetType);
             panelGridTop.Dock = DockStyle.Top;
             panelGridTop.Location = new Point(0, 0);
@@ -333,8 +335,8 @@
             txtAssetSearch.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             txtAssetSearch.Location = new Point(55, 32);
             txtAssetSearch.Name = "txtAssetSearch";
-            txtAssetSearch.Size = new Size(174, 23);
-            txtAssetSearch.TabIndex = 3;
+            txtAssetSearch.Size = new Size(199, 23);
+            txtAssetSearch.TabIndex = 4;
             // 
             // lblAssetSearch
             // 
@@ -342,7 +344,7 @@
             lblAssetSearch.Location = new Point(3, 35);
             lblAssetSearch.Name = "lblAssetSearch";
             lblAssetSearch.Size = new Size(45, 15);
-            lblAssetSearch.TabIndex = 2;
+            lblAssetSearch.TabIndex = 3;
             lblAssetSearch.Text = "Search:";
             // 
             // cmbSource
@@ -350,10 +352,20 @@
             cmbSource.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbSource.FormattingEnabled = true;
             cmbSource.Items.AddRange(new object[] { "Local", "JSON", "New" });
-            cmbSource.Location = new Point(149, 3);
+            cmbSource.Location = new Point(194, 3);
             cmbSource.Name = "cmbSource";
-            cmbSource.Size = new Size(80, 23);
-            cmbSource.TabIndex = 1;
+            cmbSource.Size = new Size(60, 23);
+            cmbSource.TabIndex = 2;
+            // 
+            // cmbCategory
+            // 
+            cmbCategory.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbCategory.FormattingEnabled = true;
+            cmbCategory.Items.AddRange(new object[] { "Core", "Unofficial", "Local" });
+            cmbCategory.Location = new Point(113, 3);
+            cmbCategory.Name = "cmbCategory";
+            cmbCategory.Size = new Size(75, 23);
+            cmbCategory.TabIndex = 1;
             // 
             // cmbAssetType
             // 
@@ -362,7 +374,7 @@
             cmbAssetType.Items.AddRange(new object[] { "Achievements", "Leaderboards" });
             cmbAssetType.Location = new Point(3, 3);
             cmbAssetType.Name = "cmbAssetType";
-            cmbAssetType.Size = new Size(140, 23);
+            cmbAssetType.Size = new Size(104, 23);
             cmbAssetType.TabIndex = 0;
             // 
             // splitEditor
@@ -481,6 +493,7 @@
         private System.Windows.Forms.Panel panelGridTop;
         private System.Windows.Forms.ComboBox cmbAssetType;
         private System.Windows.Forms.ComboBox cmbSource;
+        private System.Windows.Forms.ComboBox cmbCategory; // New
         private RALogicEditor.Controls.TriggerEditorControl triggerEditor;
         private RALogicEditor.Controls.CodeNoteEditorControl codeNoteEditor;
         private RALogicEditor.Controls.CodeReviewControl codeReviewControl;

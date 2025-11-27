@@ -84,8 +84,15 @@ namespace RALogicEditor
             cmbSource.Items.Clear();
             cmbSource.Items.AddRange(new object[] { "JSON", "Local", "New" });
 
+            // Initialize Category Filter (Core/Unofficial/Local)
+            cmbCategory.Items.Clear();
+            cmbCategory.Items.AddRange(new object[] { "Core", "Unofficial", "Local" });
+            cmbCategory.SelectedIndex = 0; // Default to Core
+
             cmbAssetType.SelectedIndex = 0; // Default to Achievements
             cmbSource.SelectedIndex = 0;    // Default to JSON view
+
+            // Events for filtering
             cmbAssetType.SelectedIndexChanged += (s, e) =>
             {
                 ReloadDataView();
@@ -93,6 +100,7 @@ namespace RALogicEditor
                 RunGlobalValidation();
             };
             cmbSource.SelectedIndexChanged += (s, e) => ReloadDataView();
+            cmbCategory.SelectedIndexChanged += (s, e) => ReloadDataView();
 
             // Search Box Wiring
             txtAssetSearch.TextChanged += (s, e) => ReloadDataView();
@@ -163,7 +171,21 @@ namespace RALogicEditor
                 Application.DoEvents(); // Allow UI to process the change
             }
 
-            // 2. Ensure correct Source View (JSON vs Local vs New) based on Asset State
+            // 2. Ensure correct Category (Core vs Unofficial)
+            // asset.Category is usually "core", "unofficial", "Local" (lowercase from JSON or titlecase)
+            // We need to match with ComboBox items "Core", "Unofficial", "Local"
+            string targetCat = string.IsNullOrEmpty(asset.Category) ? "Local" : asset.Category;
+            foreach (var item in cmbCategory.Items)
+            {
+                if (string.Equals(item.ToString(), targetCat, StringComparison.OrdinalIgnoreCase))
+                {
+                    cmbCategory.SelectedItem = item;
+                    Application.DoEvents();
+                    break;
+                }
+            }
+
+            // 3. Ensure correct Source View (JSON vs Local vs New) based on Asset State
             // Items: "JSON", "Local", "New" -> Indices: 0, 1, 2
             int sourceIndex = cmbSource.SelectedIndex;
             switch (asset.State)
@@ -179,13 +201,17 @@ namespace RALogicEditor
                     break;
             }
 
+            // Force switch to "JSON" view if we are looking for a synced asset, even if current view is Local/New
+            // Actually, if we are in "New" view, we can't see Synced assets.
+            // If we are in "Local" view, we can't see Synced assets.
+            // So we MUST switch to "JSON" if the asset is Synced.
             if (cmbSource.SelectedIndex != sourceIndex)
             {
                 cmbSource.SelectedIndex = sourceIndex;
                 Application.DoEvents();
             }
 
-            // 3. Find row in grid
+            // 4. Find row in grid
             foreach (DataGridViewRow row in achievementGrid.Rows)
             {
                 if (row.Tag is IAssetItem item && item.ID == asset.ID)
@@ -609,41 +635,45 @@ namespace RALogicEditor
 
             bool showLeaderboards = cmbAssetType.SelectedIndex == 1;
             string sourceMode = cmbSource.SelectedItem?.ToString() ?? "Local";
+            string categoryFilter = cmbCategory.SelectedItem?.ToString() ?? "Core";
             string filterText = txtAssetSearch.Text.Trim();
 
-            if (sourceMode == "New")
+            // Fetch merged list (contains everything)
+            var mergedList = showLeaderboards
+                ? _projectRepo.GetMergedList<RaLeaderboard>(true).Cast<IAssetItem>()
+                : _projectRepo.GetMergedList<RaAchievement>(false).Cast<IAssetItem>();
+
+            foreach (var item in mergedList)
             {
-                // Show only items created locally that don't exist on server
-                if (_projectRepo.LocalData != null)
+                UpdateAssetState(item); // Ensure State is current (Modified/Synced/Local)
+
+                // 1. Filter by Source Mode (JSON vs Local vs New)
+                if (sourceMode == "New")
                 {
-                    var list = showLeaderboards
-                       ? _projectRepo.LocalData.Leaderboards.Cast<IAssetItem>()
-                       : _projectRepo.LocalData.Achievements.Cast<IAssetItem>();
-
-                    foreach (var item in list)
-                    {
-                        UpdateAssetState(item);
-                        if (item.State == AssetState.Local) AddFilteredGridRow(item, filterText);
-                    }
+                    if (item.State != AssetState.Local) continue;
                 }
-            }
-            else
-            {
-                // JSON or Local view
-                var merged = showLeaderboards
-                    ? _projectRepo.GetMergedList<RaLeaderboard>(true)
-                    : _projectRepo.GetMergedList<RaAchievement>(false).Cast<IAssetItem>();
-
-                foreach (var item in merged)
+                else if (sourceMode == "JSON")
                 {
-                    // Keep JSON view clean: Hide purely local items (Green)
-                    if (sourceMode == "JSON" && item.State == AssetState.Local) continue;
-
-                    // Keep Local view focused on changes: Hide perfectly synced items
-                    if (sourceMode == "Local" && item.State == AssetState.Synced) continue;
-
-                    AddFilteredGridRow(item, filterText);
+                    if (item.State == AssetState.Local) continue;
                 }
+                else // "Local" view
+                {
+                    if (item.State == AssetState.Synced) continue;
+                }
+
+                // 2. Filter by Category (Core vs Unofficial vs Local)
+                // "Local" items might have empty or "Local" category string
+                string itemCat = string.IsNullOrEmpty(item.Category) ? "Local" : item.Category;
+
+                if (!itemCat.Equals(categoryFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Special case: If user selects "Local" category, we also include items with null/empty/Local category
+                    // which we handled above by defaulting itemCat to "Local".
+                    continue;
+                }
+
+                // 3. Filter by Search Text
+                AddFilteredGridRow(item, filterText);
             }
         }
 
@@ -708,7 +738,12 @@ namespace RALogicEditor
                     {
                         _selectedAsset = asset;
                     }
-                    triggerEditor.BindAchievement(_selectedAsset);
+
+                    // Display category nicely
+                    string displayCat = string.IsNullOrEmpty(_selectedAsset.Category) ? "Core" :
+                        char.ToUpper(_selectedAsset.Category[0]) + _selectedAsset.Category.Substring(1);
+
+                    triggerEditor.BindAchievement(_selectedAsset, displayCat);
                     _isLoading = false;
                 }
             }
@@ -877,20 +912,23 @@ namespace RALogicEditor
             bool leaderboard = cmbAssetType.SelectedIndex == 1;
             if (leaderboard)
             {
-                var lb = new RaLeaderboard { ID = newId, Title = "New Leaderboard", State = AssetState.Local };
+                var lb = new RaLeaderboard { ID = newId, Title = "New Leaderboard", State = AssetState.Local, Category = "Local" };
                 _projectRepo.LocalData!.Leaderboards.Add(lb);
             }
             else
             {
-                var ach = new RaAchievement { ID = newId, Title = "New Achievement", State = AssetState.Local };
+                var ach = new RaAchievement { ID = newId, Title = "New Achievement", State = AssetState.Local, Category = "Local" };
                 _projectRepo.LocalData!.Achievements.Add(ach);
             }
 
-            // Automatically switch to "New" view if not already there
+            // Automatically switch to "New" view and "Local" Category
             if (cmbSource.SelectedItem?.ToString() != "New")
                 cmbSource.SelectedItem = "New";
-            else
-                ReloadDataView();
+
+            if (cmbCategory.SelectedItem?.ToString() != "Local")
+                cmbCategory.SelectedItem = "Local";
+
+            ReloadDataView();
 
             // Select new item
             foreach (DataGridViewRow row in achievementGrid.Rows)
@@ -924,26 +962,21 @@ namespace RALogicEditor
                 {
                     if (source is RaAchievement ra)
                     {
-                        var c = ra.Clone(); c.Title += " (Copy)"; c.ID = nextId++; c.State = AssetState.Local;
+                        var c = ra.Clone(); c.Title += " (Copy)"; c.ID = nextId++; c.State = AssetState.Local; c.Category = "Local";
                         _projectRepo.LocalData!.Achievements.Add(c); newIds.Add(c.ID);
                     }
                     else if (source is RaLeaderboard rl)
                     {
-                        var c = rl.Clone(); c.Title += " (Copy)"; c.ID = nextId++; c.State = AssetState.Local;
+                        var c = rl.Clone(); c.Title += " (Copy)"; c.ID = nextId++; c.State = AssetState.Local; c.Category = "Local";
                         _projectRepo.LocalData!.Leaderboards.Add(c); newIds.Add(c.ID);
                     }
                 }
             }
 
-            // Switch to "New" view so we can see the duplicated items (Green), as JSON view hides them
-            if (cmbSource.SelectedItem?.ToString() == "JSON")
-            {
-                cmbSource.SelectedItem = "New";
-            }
-            else
-            {
-                ReloadDataView();
-            }
+            // Switch to "New" view / "Local" category so we can see the duplicated items
+            cmbSource.SelectedItem = "New";
+            cmbCategory.SelectedItem = "Local";
+            ReloadDataView();
 
             // --- Restore Selection & Focus Logic ---
             // 1. Clear Selection
