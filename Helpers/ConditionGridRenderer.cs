@@ -21,7 +21,8 @@ namespace RALogicEditor.Helpers
             bool showAliases,
             Dictionary<string, List<NoteNode>>? notesLookup,
             List<(long Start, long End, NoteNode Node)>? rangeCache,
-            List<ValidationIssue>? issues = null)
+            List<ValidationIssue>? issues = null,
+            bool collapseChains = false) // New Parameter
         {
             grid.Rows.Clear();
             if (group == null || group.Conditions == null) return;
@@ -33,10 +34,22 @@ namespace RALogicEditor.Helpers
             for (int i = 0; i < group.Conditions.Count; i++)
             {
                 var cond = group.Conditions[i];
+
+                // Filter Logic for Collapsed Chains
+                if (collapseChains && cond.Flag == "Add Address")
+                {
+                    continue;
+                }
+
+                // Always update ID to match visual order in editor, or maintain model index?
+                // The existing code did "cond.ID = i + 1", which modifies the model.
+                // If we hide rows, "i" is still the model index. 
+                // It's better to keep the ID as the Model Index so users know where they are in the real logic.
                 cond.ID = i + 1;
+
                 var row = new DataGridViewRow();
                 row.CreateCells(grid);
-                row.Tag = cond;
+                row.Tag = cond; // Critical: Link row to model object
 
                 ValidationIssue? targetIssue = null;
                 if (issues != null)

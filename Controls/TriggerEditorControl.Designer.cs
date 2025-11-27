@@ -63,6 +63,7 @@ namespace RALogicEditor.Controls
             lblEditorStatus = new ToolStripStatusLabel();
             chkShowDecimal = new CheckBox();
             chkAliasMode = new CheckBox();
+            chkCollapseChains = new CheckBox();
             panelHeader.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pbBadge).BeginInit();
             toolsContextMenu.SuspendLayout();
@@ -526,10 +527,23 @@ namespace RALogicEditor.Controls
             chkAliasMode.Text = "Show Aliases";
             chkAliasMode.UseVisualStyleBackColor = true;
             // 
+            // chkCollapseChains
+            // 
+            chkCollapseChains.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            chkCollapseChains.AutoSize = true;
+            chkCollapseChains.BackColor = SystemColors.Control;
+            chkCollapseChains.Location = new Point(362, 381);
+            chkCollapseChains.Name = "chkCollapseChains";
+            chkCollapseChains.Size = new Size(113, 19);
+            chkCollapseChains.TabIndex = 11;
+            chkCollapseChains.Text = "Collapse Chains";
+            chkCollapseChains.UseVisualStyleBackColor = true;
+            // 
             // TriggerEditorControl
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
+            Controls.Add(chkCollapseChains);
             Controls.Add(chkAliasMode);
             Controls.Add(chkShowDecimal);
             Controls.Add(splitGroups);
@@ -600,11 +614,11 @@ namespace RALogicEditor.Controls
         private System.Windows.Forms.CheckBox chkAliasMode = null!;
         private System.Windows.Forms.Button btnTools = null!;
         private System.Windows.Forms.ContextMenuStrip toolsContextMenu = null!;
-        // private System.Windows.Forms.ToolStripMenuItem pointerCalculatorToolStripMenuItem = null!; // REMOVED
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator5 = null!;
         private System.Windows.Forms.ToolStripMenuItem saveAsSnippetToolStripMenuItem = null!;
         private System.Windows.Forms.ToolStripMenuItem insertSnippetToolStripMenuItem = null!;
         private System.Windows.Forms.ToolStripMenuItem explainLogicToolStripMenuItem = null!;
         private System.Windows.Forms.Button btnCopyDef = null!;
+        private System.Windows.Forms.CheckBox chkCollapseChains = null!;
     }
 }

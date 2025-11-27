@@ -40,6 +40,8 @@ namespace RALogicEditor.Helpers
         public bool ShowDecimal { get; set; } = false;
         // Property to track Alias display
         public bool ShowAliases { get; set; } = false;
+        // Property to track Chain Collapse state
+        public bool CollapseChains { get; set; } = false;
 
         // Dictionary to lookup parsed notes by address
         // Key: Normalized Address "0x1234", Value: List of NoteNodes (Tree)
@@ -272,7 +274,6 @@ namespace RALogicEditor.Helpers
             {
                 ApplyConditionLogicRules(cond);
                 // Refresh visuals (applying ShowDecimal and ShowAliases if active)
-                // Updated to use ConditionGridRenderer instead of Helper
                 ConditionGridRenderer.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, _grid.Tag as AchievementConditionGroup, e.RowIndex);
                 LogicChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -402,28 +403,48 @@ namespace RALogicEditor.Helpers
             StatusUpdateRequested?.Invoke(this, "Logic string copied to clipboard.");
         }
 
-        private void RestoreSelection(List<int> indicesToSelect)
+        // REFACTORED: RestoreSelection now accepts Tags (Model Objects) to find their rows,
+        // allowing restoration even if visual indices shifted due to filtering (Collapsed Chains).
+        private void RestoreSelection(List<AchievementCondition> selectedConditions)
         {
-            if (indicesToSelect.Count == 0) return;
+            if (selectedConditions == null || selectedConditions.Count == 0) return;
 
-            // 1. Clear existing
             _grid.ClearSelection();
 
-            // 2. Set CurrentCell to the first item to scroll it into view and set focus anchor
-            int firstIdx = indicesToSelect.Min();
-            if (firstIdx >= 0 && firstIdx < _grid.Rows.Count)
-            {
-                _grid.CurrentCell = _grid.Rows[firstIdx].Cells[0];
-            }
+            // Using a set for fast lookup
+            var set = new HashSet<AchievementCondition>(selectedConditions);
 
-            // 3. Select all items (including the first one again to be safe)
-            foreach (int idx in indicesToSelect)
+            int firstFoundIndex = -1;
+
+            foreach (DataGridViewRow row in _grid.Rows)
             {
-                if (idx >= 0 && idx < _grid.Rows.Count)
+                if (row.Tag is AchievementCondition cond && set.Contains(cond))
                 {
-                    _grid.Rows[idx].Selected = true;
+                    row.Selected = true;
+                    if (firstFoundIndex == -1) firstFoundIndex = row.Index;
                 }
             }
+
+            if (firstFoundIndex >= 0 && firstFoundIndex < _grid.Rows.Count)
+            {
+                _grid.CurrentCell = _grid.Rows[firstFoundIndex].Cells[0];
+                _grid.FirstDisplayedScrollingRowIndex = Math.Max(0, firstFoundIndex - 5);
+            }
+        }
+
+        // Overload for legacy calls if needed, though prefer Tag based.
+        // This one is kept if strictly index based is still required, but mapped to tags.
+        private void RestoreSelection(List<int> indicesToSelect)
+        {
+            if (_grid.Tag is not AchievementConditionGroup group) return;
+
+            var targets = new List<AchievementCondition>();
+            foreach (var idx in indicesToSelect)
+            {
+                if (idx >= 0 && idx < group.Conditions.Count)
+                    targets.Add(group.Conditions[idx]);
+            }
+            RestoreSelection(targets);
         }
 
         // Pastes logic string from Clipboard into Grid
@@ -433,21 +454,26 @@ namespace RALogicEditor.Helpers
             string txt = Clipboard.GetText().Trim().Replace("\r", "").Replace("\n", "");
             if (string.IsNullOrWhiteSpace(txt)) return;
 
-            int idx = _grid.SelectedRows.Count > 0 ? _grid.SelectedRows.Cast<DataGridViewRow>().Max(r => r.Index) + 1 : _grid.Rows.Count;
-            var conds = AchievementParser.ParseAchievementTrigger(txt, 'S', false).SelectMany(g => g.Conditions).ToList();
-            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
+            // REFACTORED: Find insertion point based on Model Object of selected row
+            int insertIdx = group.Conditions.Count;
+            if (_grid.SelectedRows.Count > 0)
+            {
+                var lastRow = _grid.SelectedRows.Cast<DataGridViewRow>().OrderByDescending(r => r.Index).First();
+                if (lastRow.Tag is AchievementCondition c)
+                {
+                    insertIdx = group.Conditions.IndexOf(c) + 1;
+                }
+            }
 
-            group.Conditions.InsertRange(idx, conds);
+            var conds = AchievementParser.ParseAchievementTrigger(txt, 'S', false).SelectMany(g => g.Conditions).ToList();
+
+            group.Conditions.InsertRange(insertIdx, conds);
 
             // Updated to use ConditionGridRenderer
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
+            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
 
-            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
-                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
-
-            // Prepare indices for new items
-            var newIndices = Enumerable.Range(idx, conds.Count).ToList();
-            RestoreSelection(newIndices);
+            // Prepare items for selection
+            RestoreSelection(conds);
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
             StatusUpdateRequested?.Invoke(this, $"Logic pasted ({conds.Count} lines).");
@@ -457,23 +483,26 @@ namespace RALogicEditor.Helpers
         {
             if (_grid.ReadOnly || _grid.SelectedRows.Count == 0 || _grid.Tag is not AchievementConditionGroup group) return;
 
+            // REFACTORED: Order by Grid Index (Visual), but manipulate Model
             var rows = _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index).ToList();
-            int idx = rows.Max(r => r.Index) + 1;
+            var originalConditions = rows.Select(r => r.Tag as AchievementCondition).Where(c => c != null).ToList();
 
-            var clones = rows.Select(r => r.Tag).OfType<AchievementCondition>().Select(c => c.Clone()).ToList();
-            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
+            if (originalConditions.Count == 0) return;
 
-            group.Conditions.InsertRange(idx, clones);
+            // Find insert position: After the last selected element in the MODEL
+            // We use the last selected visual element, find its model index, and insert after.
+            var lastCondition = originalConditions.Last();
+            int insertIdx = group.Conditions.IndexOf(lastCondition!) + 1;
+
+            var clones = originalConditions.Select(c => c!.Clone()).ToList();
+
+            group.Conditions.InsertRange(insertIdx, clones);
 
             // Updated to use ConditionGridRenderer
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
+            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
 
-            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
-                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
-
-            // Prepare indices for cloned items
-            var newIndices = Enumerable.Range(idx, clones.Count).ToList();
-            RestoreSelection(newIndices);
+            // Prepare items for selection
+            RestoreSelection(clones);
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
             StatusUpdateRequested?.Invoke(this, $"Conditions duplicated ({clones.Count} lines).");
@@ -483,21 +512,29 @@ namespace RALogicEditor.Helpers
         {
             if (_grid.ReadOnly || _grid.SelectedRows.Count == 0 || _grid.Tag is not AchievementConditionGroup group) return;
 
-            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
-            int firstSelIndex = _grid.SelectedRows.Cast<DataGridViewRow>().Min(r => r.Index);
+            // Keep track of index to restore selection sensibly
+            int firstSelIndex = -1;
+            if (_grid.SelectedRows.Count > 0)
+            {
+                // Try to find index of first item to delete in model, to select item after it
+                var firstRow = _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index).First();
+                if (firstRow.Tag is AchievementCondition c)
+                    firstSelIndex = group.Conditions.IndexOf(c);
+            }
 
             foreach (DataGridViewRow row in _grid.SelectedRows) { if (row.Tag is AchievementCondition cond) group.Conditions.Remove(cond); }
 
             // Updated to use ConditionGridRenderer
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
+            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
 
-            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
-                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
-
-            if (_grid.Rows.Count > 0)
+            if (firstSelIndex != -1)
             {
-                if (firstSelIndex >= _grid.Rows.Count) firstSelIndex = _grid.Rows.Count - 1;
-                RestoreSelection(new List<int> { firstSelIndex });
+                // If we deleted everything, select nothing. Else select item at same index (which is now the next item)
+                if (firstSelIndex >= group.Conditions.Count) firstSelIndex = group.Conditions.Count - 1;
+                if (firstSelIndex >= 0)
+                {
+                    RestoreSelection(new List<AchievementCondition> { group.Conditions[firstSelIndex] });
+                }
             }
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
@@ -508,30 +545,26 @@ namespace RALogicEditor.Helpers
         {
             if (_grid.ReadOnly || _grid.SelectedRows.Count == 0 || _grid.Tag is not AchievementConditionGroup group) return;
 
-            var indices = _grid.SelectedRows.Cast<DataGridViewRow>().Select(r => r.Index).OrderBy(i => i).ToList();
+            // REFACTORED: Map to Model Indices
+            var selectedConds = _grid.SelectedRows.Cast<DataGridViewRow>()
+                                .Select(r => r.Tag as AchievementCondition)
+                                .Where(c => c != null)
+                                .Cast<AchievementCondition>()
+                                .ToList();
+
+            var indices = selectedConds.Select(c => group.Conditions.IndexOf(c)).OrderBy(i => i).ToList();
+
             if (dist < 0 && indices.Min() == 0) return;
-            if (dist > 0 && indices.Max() == _grid.Rows.Count - 1) return;
+            if (dist > 0 && indices.Max() == group.Conditions.Count - 1) return;
 
             if (dist > 0) indices.Reverse();
-
-            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
 
             foreach (var idx in indices) { var item = group.Conditions[idx]; group.Conditions.RemoveAt(idx); group.Conditions.Insert(idx + dist, item); }
 
             // Updated to use ConditionGridRenderer
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
+            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
 
-            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
-                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
-
-            // Calculate where the items moved to
-            var newIndices = new List<int>();
-            foreach (var idx in indices)
-            {
-                newIndices.Add(idx + dist);
-            }
-
-            RestoreSelection(newIndices);
+            RestoreSelection(selectedConds);
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
             StatusUpdateRequested?.Invoke(this, "Conditions moved.");
@@ -541,22 +574,25 @@ namespace RALogicEditor.Helpers
         {
             if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
 
-            int savedScroll = _grid.FirstDisplayedScrollingRowIndex;
+            var newCond = new AchievementCondition { LeftOperand = { Type = "Value", Value = "0" }, Operator = "=", RightOperand = { Type = "Value", Value = "1" } };
 
-            group.Conditions.Add(new AchievementCondition { LeftOperand = { Type = "Value", Value = "0" }, Operator = "=", RightOperand = { Type = "Value", Value = "1" } });
+            // REFACTORED: Insert relative to selection if present, else append
+            int insertIdx = group.Conditions.Count;
+            if (_grid.SelectedRows.Count > 0)
+            {
+                var lastRow = _grid.SelectedRows.Cast<DataGridViewRow>().OrderByDescending(r => r.Index).First();
+                if (lastRow.Tag is AchievementCondition c)
+                {
+                    insertIdx = group.Conditions.IndexOf(c) + 1;
+                }
+            }
+
+            group.Conditions.Insert(insertIdx, newCond);
 
             // Updated to use ConditionGridRenderer
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache);
+            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
 
-            if (savedScroll >= 0 && savedScroll < _grid.Rows.Count)
-                try { _grid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
-
-            if (_grid.Rows.Count > 0)
-            {
-                int lastIdx = _grid.Rows.Count - 1;
-                RestoreSelection(new List<int> { lastIdx });
-                _grid.FirstDisplayedScrollingRowIndex = Math.Max(0, lastIdx - 5);
-            }
+            RestoreSelection(new List<AchievementCondition> { newCond });
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -584,20 +620,34 @@ namespace RALogicEditor.Helpers
             string baseAddress = val;
             var collected = new Stack<long>();
             collected.Push(currentOffset);
-            int scanIndex = rowIndex - 1;
+
+            // Pointer Logic Scan: Needs to look at Visual Rows? Or Model?
+            // If Collapsed, visual scan fails because intermediate rows are hidden.
+            // We must scan the MODEL.
+            // Find current condition index in model
+            if (_grid.Tag is not AchievementConditionGroup group) return;
+            if (_grid.Rows[rowIndex].Tag is not AchievementCondition currentCond) return;
+
+            int modelIndex = group.Conditions.IndexOf(currentCond);
+            int scanIndex = modelIndex - 1;
             bool chainFound = false;
 
-            // Scan backwards to find "Add Address" flags indicating a pointer chain
+            // Scan backwards in MODEL
             while (scanIndex >= 0)
             {
-                var row = _grid.Rows[scanIndex];
-                string flag = row.Cells["ColFlag"].Value?.ToString() ?? "";
+                var prevCond = group.Conditions[scanIndex];
 
-                // Use model tag here as well for previous rows
-                string memVal = "";
-                if (row.Tag is AchievementCondition rCond) memVal = rCond.LeftOperand.Value;
+                // If we hit a non-AddAddress line, chain breaks
+                if (prevCond.Flag != "Add Address") break;
 
-                if (flag == "Add Address" && memVal.StartsWith("0x") && long.TryParse(memVal.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long addr)) { collected.Push(addr); scanIndex--; chainFound = true; } else break;
+                string memVal = prevCond.LeftOperand.Value;
+                if (memVal.StartsWith("0x") && long.TryParse(memVal.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long addr))
+                {
+                    collected.Push(addr);
+                    scanIndex--;
+                    chainFound = true;
+                }
+                else break;
             }
 
             if (chainFound)

@@ -31,6 +31,7 @@ namespace RALogicEditor.Controls
         private bool _isProgrammaticallyChanging; // Lock to prevent event loops when updating UI from Model
         private bool _showDecimal = false;
         private bool _showAliases = false;
+        private bool _collapseChains = false;
 
         // Current list of validation issues for highlighting specific rows
         private List<ValidationIssue> _currentIssues = new();
@@ -114,6 +115,7 @@ namespace RALogicEditor.Controls
             cmbType.SelectedIndexChanged += CmbType_SelectedIndexChanged;
             chkShowDecimal.CheckedChanged += ChkShowDecimal_CheckedChanged;
             chkAliasMode.CheckedChanged += ChkAliasMode_CheckedChanged;
+            chkCollapseChains.CheckedChanged += ChkCollapseChains_CheckedChanged;
 
             conditionGrid.ContextMenuStrip.Opening += ConditionGrid_ContextMenuStrip_Opening;
             toolsContextMenu.Opening += ToolsContextMenu_Opening;
@@ -477,7 +479,8 @@ namespace RALogicEditor.Controls
                     _showAliases,
                     _notesLookup,
                     _gridManager.RangeCache,
-                    _currentIssues);
+                    _currentIssues,
+                    _collapseChains); // Pass collapse flag
 
                 if (conditionGrid.Rows.Count > 0)
                 {
@@ -485,6 +488,10 @@ namespace RALogicEditor.Controls
                         try { conditionGrid.CurrentCell = conditionGrid.Rows[focusedRow].Cells[focusedCol]; } catch { }
 
                     conditionGrid.ClearSelection();
+                    // Only restore selections if they are still visible.
+                    // Since indices shift when rows are hidden, index-based restoration is unsafe.
+                    // GridManager handles robust selection restoration, so we rely on it if possible,
+                    // or do basic index restoration here if safe.
                     foreach (int idx in selectedIndices)
                         if (idx >= 0 && idx < conditionGrid.Rows.Count) conditionGrid.Rows[idx].Selected = true;
 
@@ -532,6 +539,13 @@ namespace RALogicEditor.Controls
 
         private void ChkShowDecimal_CheckedChanged(object? sender, EventArgs e) { _showDecimal = chkShowDecimal.Checked; _gridManager.ShowDecimal = _showDecimal; RefreshCurrentGridDisplay(); }
         private void ChkAliasMode_CheckedChanged(object? sender, EventArgs e) { _showAliases = chkAliasMode.Checked; _gridManager.ShowAliases = _showAliases; RefreshCurrentGridDisplay(); }
+
+        private void ChkCollapseChains_CheckedChanged(object? sender, EventArgs e)
+        {
+            _collapseChains = chkCollapseChains.Checked;
+            _gridManager.CollapseChains = _collapseChains; // Notify manager so it knows view is filtered
+            RefreshCurrentGridDisplay();
+        }
 
         private void CmbType_SelectedIndexChanged(object? sender, EventArgs e)
         {
@@ -983,7 +997,14 @@ namespace RALogicEditor.Controls
                     int insertIndex = activeGroup.Conditions.Count;
                     if (conditionGrid.SelectedRows.Count > 0)
                     {
-                        insertIndex = conditionGrid.SelectedRows.Cast<DataGridViewRow>().Max(r => r.Index) + 1;
+                        // Robust insert position: Use the last selected row to determine where to insert.
+                        // If filtered, grid.SelectedRows contains rows. We must get their model object to find true index.
+                        // BUT, for simple addition, finding the model index of the last selected row is safe.
+                        var lastRow = conditionGrid.SelectedRows.Cast<DataGridViewRow>().OrderByDescending(r => r.Index).First();
+                        if (lastRow.Tag is AchievementCondition c)
+                        {
+                            insertIndex = activeGroup.Conditions.IndexOf(c) + 1;
+                        }
                     }
 
                     activeGroup.Conditions.InsertRange(insertIndex, conditions);
@@ -992,14 +1013,26 @@ namespace RALogicEditor.Controls
                     RefreshCurrentGridDisplay();
 
                     // Restore selection to the new items
-                    if (conditionGrid.Rows.Count >= insertIndex + conditions.Count)
+                    // We need to find the new items in the grid.
+                    // Since we just inserted them, and Refresh repopulates grid...
+                    // We can iterate grid rows and look for the inserted objects.
+                    // This is robust even if some are hidden (though new items shouldn't be AddAddress usually unless pasted)
+                    // Note: AddConditionFromNote adds AddAddress chains potentially.
+                    // If collapsed, only the leaf is shown. We should select the leaf.
+
+                    var insertedSet = new HashSet<AchievementCondition>(conditions);
+                    conditionGrid.ClearSelection();
+                    bool firstFound = false;
+                    foreach (DataGridViewRow row in conditionGrid.Rows)
                     {
-                        conditionGrid.ClearSelection();
-                        int firstNew = insertIndex;
-                        conditionGrid.CurrentCell = conditionGrid.Rows[firstNew].Cells[0];
-                        for (int i = 0; i < conditions.Count; i++)
+                        if (row.Tag is AchievementCondition c && insertedSet.Contains(c))
                         {
-                            conditionGrid.Rows[firstNew + i].Selected = true;
+                            row.Selected = true;
+                            if (!firstFound)
+                            {
+                                conditionGrid.CurrentCell = row.Cells[0];
+                                firstFound = true;
+                            }
                         }
                     }
                 }
@@ -1019,34 +1052,21 @@ namespace RALogicEditor.Controls
 
             // Find group index
             int groupIndex = -1;
-            int conditionIndexInGroup = -1;
 
             // We must search _viewModel.ActiveGroups because that's what populate groupsList
             for (int i = 0; i < _viewModel.ActiveGroups.Count; i++)
             {
                 var group = _viewModel.ActiveGroups[i];
-                // Safe search by reference might fail if objects were cloned.
-                // Search by ID? IDs might not be unique across groups if not managed carefully.
-                // Best effort: Find object reference if same context, otherwise rely on content?
-                // Actually, Validator runs on the current live objects from ViewModel if no navigation happened.
-                // If navigation happened, objects might be different.
-
-                // BUT: ValidationIssue.Target holds a reference to the object that was validated.
-                // If validation ran on the *current* state, it should be the exact object in _viewModel.ActiveGroups.
-
                 if (group.Conditions.Contains(target))
                 {
                     groupIndex = i;
-                    conditionIndexInGroup = group.Conditions.IndexOf(target);
                     break;
                 }
             }
 
-            // If reference check fails (e.g. validation ran on a snapshot), fallback to properties match?
-            // This is risky but better than nothing.
+            // Fallback: match by ID + properties if object reference differs
             if (groupIndex == -1)
             {
-                // Fallback: match by ID + properties
                 for (int i = 0; i < _viewModel.ActiveGroups.Count; i++)
                 {
                     var group = _viewModel.ActiveGroups[i];
@@ -1057,7 +1077,8 @@ namespace RALogicEditor.Controls
                             c.LeftOperand.Value == target.LeftOperand.Value)
                         {
                             groupIndex = i;
-                            conditionIndexInGroup = j;
+                            // Update target ref so we can find it in grid later
+                            target = c;
                             break;
                         }
                     }
@@ -1065,7 +1086,7 @@ namespace RALogicEditor.Controls
                 }
             }
 
-            if (groupIndex != -1 && conditionIndexInGroup != -1)
+            if (groupIndex != -1)
             {
                 // 1. Select group in list (triggers grid refresh via event)
                 if (groupIndex >= 0 && groupIndex < groupsList.Items.Count)
@@ -1073,19 +1094,14 @@ namespace RALogicEditor.Controls
                     bool wasChanging = _isProgrammaticallyChanging;
                     _isProgrammaticallyChanging = true;
 
-                    // Manually trigger logic if selection doesn't change (to force refresh if needed)
-                    // or update selection if it does change.
                     if (!groupsList.Items[groupIndex].Selected)
                     {
                         groupsList.Items[groupIndex].Selected = true;
-                        // Manually update grid tag and refresh
                         conditionGrid.Tag = _viewModel.ActiveGroups[groupIndex];
                         RefreshCurrentGridDisplay();
                     }
                     else
                     {
-                        // Already selected, but maybe grid needs refresh if logic changed externally?
-                        // Just ensure grid tag is correct
                         conditionGrid.Tag = _viewModel.ActiveGroups[groupIndex];
                         RefreshCurrentGridDisplay();
                     }
@@ -1094,17 +1110,21 @@ namespace RALogicEditor.Controls
                     _isProgrammaticallyChanging = wasChanging;
                 }
 
-                // 2. Highlight specific row by INDEX, not Tag search
-                if (conditionIndexInGroup < conditionGrid.Rows.Count)
+                // 2. Highlight specific row by TAG match
+                // Iterate rows to find the one holding the target object.
+                // This works regardless of hidden rows (if hidden, it won't be selected, which is correct behavior).
+                foreach (DataGridViewRow row in conditionGrid.Rows)
                 {
-                    var row = conditionGrid.Rows[conditionIndexInGroup];
-                    conditionGrid.ClearSelection();
-                    row.Selected = true;
-
-                    if (row.Index >= 0)
+                    if (row.Tag == target)
                     {
-                        conditionGrid.FirstDisplayedScrollingRowIndex = row.Index;
-                        conditionGrid.CurrentCell = row.Cells[0];
+                        conditionGrid.ClearSelection();
+                        row.Selected = true;
+                        if (row.Index >= 0)
+                        {
+                            conditionGrid.FirstDisplayedScrollingRowIndex = row.Index;
+                            conditionGrid.CurrentCell = row.Cells[0];
+                        }
+                        break;
                     }
                 }
             }
