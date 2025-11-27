@@ -52,6 +52,20 @@ namespace RALogicEditor.Services
             List<(long Start, long End, NoteNode Node)>? rangeCache = null)
         {
             var allIssues = new List<ValidationIssue>();
+
+            // Check for Database Limit
+            if (asset != null && asset.Logic.Length > 65535)
+            {
+                allIssues.Add(new ValidationIssue(
+                    FeedbackSeverity.Warning,
+                    "Database Limit Exceeded",
+                    $"Logic length ({asset.Logic.Length}) exceeds the standard database limit of 65535 characters. This asset may fail to save or function correctly on the server.",
+                    null,
+                    "",
+                    asset
+                ));
+            }
+
             if (groups == null) return allIssues;
 
             // Pre-calculate which groups have resets to determine if "Global Reset" exists

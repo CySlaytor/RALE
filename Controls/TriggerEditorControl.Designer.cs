@@ -31,7 +31,8 @@ namespace RALogicEditor.Controls
             toolsContextMenu = new ContextMenuStrip(components);
             createGeneratorToolStripMenuItem = new ToolStripMenuItem();
             commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
-            multiRegionToolStripMenuItem = new ToolStripMenuItem(); // Added
+            multiRegionToolStripMenuItem = new ToolStripMenuItem();
+            logicOptimizerToolStripMenuItem = new ToolStripMenuItem(); // Added
             toolStripSeparator5 = new ToolStripSeparator();
             explainLogicToolStripMenuItem = new ToolStripMenuItem();
             splitGroups = new SplitContainer();
@@ -236,40 +237,47 @@ namespace RALogicEditor.Controls
             // 
             // toolsContextMenu
             // 
-            toolsContextMenu.Items.AddRange(new ToolStripItem[] { createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, multiRegionToolStripMenuItem, toolStripSeparator5, explainLogicToolStripMenuItem });
+            toolsContextMenu.Items.AddRange(new ToolStripItem[] { createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, multiRegionToolStripMenuItem, logicOptimizerToolStripMenuItem, toolStripSeparator5, explainLogicToolStripMenuItem });
             toolsContextMenu.Name = "toolsContextMenu";
-            toolsContextMenu.Size = new Size(209, 120);
+            toolsContextMenu.Size = new Size(221, 142);
             // 
             // createGeneratorToolStripMenuItem
             // 
             createGeneratorToolStripMenuItem.Name = "createGeneratorToolStripMenuItem";
-            createGeneratorToolStripMenuItem.Size = new Size(208, 22);
+            createGeneratorToolStripMenuItem.Size = new Size(220, 22);
             createGeneratorToolStripMenuItem.Text = "Create Generator...";
             createGeneratorToolStripMenuItem.Click += createGeneratorToolStripMenuItem_Click;
             // 
             // commitGeneratorToolStripMenuItem
             // 
             commitGeneratorToolStripMenuItem.Name = "commitGeneratorToolStripMenuItem";
-            commitGeneratorToolStripMenuItem.Size = new Size(208, 22);
+            commitGeneratorToolStripMenuItem.Size = new Size(220, 22);
             commitGeneratorToolStripMenuItem.Text = "Commit Generator (Bake)";
             commitGeneratorToolStripMenuItem.Click += commitGeneratorToolStripMenuItem_Click;
             // 
             // multiRegionToolStripMenuItem
             // 
             multiRegionToolStripMenuItem.Name = "multiRegionToolStripMenuItem";
-            multiRegionToolStripMenuItem.Size = new Size(208, 22);
+            multiRegionToolStripMenuItem.Size = new Size(220, 22);
             multiRegionToolStripMenuItem.Text = "Multi-Region Support...";
             multiRegionToolStripMenuItem.Click += multiRegionToolStripMenuItem_Click;
+            // 
+            // logicOptimizerToolStripMenuItem
+            // 
+            logicOptimizerToolStripMenuItem.Name = "logicOptimizerToolStripMenuItem";
+            logicOptimizerToolStripMenuItem.Size = new Size(220, 22);
+            logicOptimizerToolStripMenuItem.Text = "Logic Optimizer (Length)...";
+            logicOptimizerToolStripMenuItem.Click += logicOptimizerToolStripMenuItem_Click;
             // 
             // toolStripSeparator5
             // 
             toolStripSeparator5.Name = "toolStripSeparator5";
-            toolStripSeparator5.Size = new Size(205, 6);
+            toolStripSeparator5.Size = new Size(217, 6);
             // 
             // explainLogicToolStripMenuItem
             // 
             explainLogicToolStripMenuItem.Name = "explainLogicToolStripMenuItem";
-            explainLogicToolStripMenuItem.Size = new Size(208, 22);
+            explainLogicToolStripMenuItem.Size = new Size(220, 22);
             explainLogicToolStripMenuItem.Text = "Explain Logic (Preview)";
             explainLogicToolStripMenuItem.Click += explainLogicToolStripMenuItem_Click;
             // 
@@ -628,6 +636,7 @@ namespace RALogicEditor.Controls
         private System.Windows.Forms.ToolStripMenuItem explainLogicToolStripMenuItem = null!;
         private System.Windows.Forms.Button btnCopyDef = null!;
         private System.Windows.Forms.CheckBox chkCollapseChains = null!;
-        private System.Windows.Forms.ToolStripMenuItem multiRegionToolStripMenuItem; // Added
+        private System.Windows.Forms.ToolStripMenuItem multiRegionToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem logicOptimizerToolStripMenuItem; // Added
     }
 }

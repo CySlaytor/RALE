@@ -53,6 +53,8 @@ namespace RALogicEditor.Controls
 
         // Event to request Multi-Region Batch Processing in MainForm
         public event EventHandler<MultiRegionForm>? MultiRegionLogicRequested;
+        // Event to request Logic Optimization in MainForm
+        public event EventHandler? LogicOptimizationRequested;
 
         // Public property for the Logic String (Two-way binding via ViewModel)
         [Browsable(false)]
@@ -1203,6 +1205,12 @@ namespace RALogicEditor.Controls
                 // Fire event to Main Form to handle batch processing on all assets
                 MultiRegionLogicRequested?.Invoke(this, form);
             }
+        }
+
+        // Handler for Logic Optimizer Menu Item
+        private void logicOptimizerToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            LogicOptimizationRequested?.Invoke(this, EventArgs.Empty);
         }
     }
 }

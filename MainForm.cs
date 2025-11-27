@@ -64,6 +64,10 @@ namespace RALogicEditor
             // Handles the bulk update logic from the context menu
             triggerEditor.MultiRegionLogicRequested += TriggerEditor_MultiRegionLogicRequested;
 
+            // -- NEW: Logic Optimizer Request --
+            // Handles the request from the Trigger Editor's Tools menu (Not the main form menu)
+            triggerEditor.LogicOptimizationRequested += LogicOptimizerToolStripMenuItem_Click;
+
             // Code Reviewer clicks: select the asset and the specific condition
             codeReviewControl.IssueSelected += CodeReviewControl_IssueSelected;
 
@@ -148,6 +152,51 @@ namespace RALogicEditor
             // Save setting immediately
             AppSettings.Current.ShowLogicReviewer = newState;
             AppSettings.Save();
+        }
+
+        // Logic Optimizer Tool Handler (Called from TriggerEditor event)
+        private void LogicOptimizerToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            if (_currentDisplayList.Count == 0)
+            {
+                MessageBox.Show("No assets loaded or visible in the current filter.", "Logic Optimizer", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // Create a copy of the list to avoid enumeration issues
+            var assetsToOptimize = new List<IAssetItem>(_currentDisplayList);
+
+            using (var form = new LogicOptimizerForm(assetsToOptimize))
+            {
+                form.ShowDialog();
+            }
+
+            // After optimization, ensure local data exists if things were modified
+            _projectRepo.EnsureLocalDataExists();
+
+            // Ensure optimized assets are added to local storage if they were previously synced
+            foreach (var item in assetsToOptimize)
+            {
+                if (item.State == AssetState.Modified && !IsAssetInLocalStore(item))
+                {
+                    EnsureAssetIsLocal(item);
+                }
+            }
+
+            // Refresh UI to show modified states and possibly new logic lengths
+            ReloadDataView();
+            if (_selectedAsset != null)
+            {
+                // Re-select finding the new object reference if needed
+                SelectAssetInGrid(_selectedAsset);
+            }
+        }
+
+        private bool IsAssetInLocalStore(IAssetItem item)
+        {
+            if (_projectRepo.LocalData == null) return false;
+            if (item.IsLeaderboard) return _projectRepo.LocalData.Leaderboards.Any(l => l.ID == item.ID);
+            return _projectRepo.LocalData.Achievements.Any(a => a.ID == item.ID);
         }
 
         // Multi-Region Batch Logic Implementation
