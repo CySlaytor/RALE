@@ -17,25 +17,48 @@ namespace RALogicEditor.Services.Explainer.Processors
         public bool CanProcess(List<AchievementCondition> conditions, int currentIndex)
         {
             var cond = conditions[currentIndex];
-            // Check for Accumulator Chain start
+
+            // 1. Direct Accumulator Start
             bool isAccumulatorStart = cond.Flag == "Add Source" || cond.Flag == "Sub Source" ||
                                       cond.Flag == "Add Hits" || cond.Flag == "Sub Hits";
 
-            if (!isAccumulatorStart && cond.Flag == "Add Address")
+            if (isAccumulatorStart) return true;
+
+            // 2. Logic Chain Start (Add Address / AndNext / OrNext / ResetNextIf)
+            // We need to look ahead to see if this chain feeds into an accumulator.
+            // If we don't do this, the AndNextProcessor (Priority 15) will steal the start of the chain,
+            // breaking the "Array/Sum" grouping logic.
+            bool isPotentialLead = cond.Flag == "Add Address" ||
+                                   cond.Flag == "AndNext" ||
+                                   cond.Flag == "OrNext" ||
+                                   cond.Flag == "ResetNextIf";
+
+            if (isPotentialLead)
             {
-                // Look ahead to see if this pointer chain feeds into an accumulator
                 int scan = currentIndex + 1;
                 while (scan < conditions.Count)
                 {
-                    if (conditions[scan].Flag == "Add Address") { scan++; continue; }
-                    if (conditions[scan].Flag.Contains("Add") || conditions[scan].Flag.Contains("Sub"))
+                    string f = conditions[scan].Flag;
+
+                    // Continue scanning through setup flags
+                    if (f == "Add Address" || f == "AndNext" || f == "OrNext" || f == "ResetNextIf")
                     {
-                        isAccumulatorStart = true;
+                        scan++;
+                        continue;
                     }
+
+                    // Found target?
+                    if (f.Contains("Add") || f.Contains("Sub"))
+                    {
+                        // It IS an accumulator chain
+                        return true;
+                    }
+
+                    // Hit a terminal or unrelated flag (e.g. empty, PauseIf, Measured) -> Not an accumulator
                     break;
                 }
             }
-            return isAccumulatorStart;
+            return false;
         }
 
         public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int index)
