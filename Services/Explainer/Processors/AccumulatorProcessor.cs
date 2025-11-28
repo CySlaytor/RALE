@@ -65,19 +65,15 @@ namespace RALogicEditor.Services.Explainer.Processors
         {
             var result = new ProcessorResult { Category = ExplanationCategory.Complex };
 
-            // 1. Collect all consecutive accumulator chains that share the same structure
+            // 1. Collect all consecutive accumulator chains that are connected by logic gates or implicit grouping
             var chains = new List<AccumulatorChainDef>();
-            var usedIndices = new HashSet<int>();
             int currentPtr = index;
 
             while (currentPtr < conditions.Count)
             {
-                if (usedIndices.Contains(currentPtr)) break;
-
-                // Check if this line starts a valid accumulator chain
-                if (!CanProcess(conditions, currentPtr)) break;
-
+                // Extract body of the accumulator (AddSource/SubSource lines)
                 var conditionsInChain = ExtractChain(conditions, currentPtr, out int endPtr);
+
                 if (conditionsInChain.Count == 0) break;
 
                 AchievementCondition? termCond = null;
@@ -88,36 +84,53 @@ namespace RALogicEditor.Services.Explainer.Processors
                     Conditions = conditionsInChain,
                     Terminal = termCond,
                     StartIndex = currentPtr,
-                    EndIndex = endPtr
+                    EndIndex = endPtr // Terminal index
                 };
 
                 // If this is not the first chain, verify it matches the structure of the first chain
+                // This ensures we only group accumulators counting the same things (e.g. Array logic)
                 if (chains.Count > 0)
                 {
                     if (!AreChainsStructureEqual(chains[0].Conditions, chainDef.Conditions))
-                        break; // Different structure, stop collecting
+                        break;
                 }
 
                 chains.Add(chainDef);
 
-                // Mark indices as used (chain + terminal)
-                int lastIdx = (termCond != null) ? endPtr : endPtr - 1;
-                for (int k = currentPtr; k <= lastIdx && k < conditions.Count; k++) usedIndices.Add(k);
+                // Determine if we should continue collecting.
+                // We continue if:
+                // A) There is an explicit connector (AndNext/OrNext)
+                // B) There is an implicit connector (No flag, but next line starts another accumulator)
 
-                currentPtr = endPtr + 1;
+                bool hasExplicitConnector = termCond != null && (termCond.Flag == "AndNext" || termCond.Flag == "OrNext");
+
+                if (hasExplicitConnector)
+                {
+                    currentPtr = endPtr + 1;
+                }
+                else
+                {
+                    // Check ahead for implicit AND (next condition starts a valid accumulator chain)
+                    int nextIndex = endPtr + 1;
+                    if (nextIndex < conditions.Count && CanProcess(conditions, nextIndex))
+                    {
+                        currentPtr = nextIndex;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
             }
 
             // --- RECALL LOGIC CONTEXT ---
-            // Check if the previous line was a "Remember" instruction.
-            // If so, and this chain uses {recall}, link the context.
+            // Check if the previous line was a "Remember" instruction to add context to the variable name.
             string recallContext = "";
             bool hasRecallContext = false;
 
             if (index > 0 && conditions[index - 1].Flag == "Remember")
             {
                 var remCond = conditions[index - 1];
-
-                // Check if any condition in the accumulated chains actually uses the Recall operand
                 bool chainUsesRecall = chains.Any(ch => ch.Conditions.Any(c => c.LeftOperand.Type == "Recall" || c.RightOperand.Type == "Recall"));
 
                 if (chainUsesRecall)
@@ -128,7 +141,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     bool rightIsDelta = remCond.RightOperand.Type == "Delta";
                     bool rightIsMem = remCond.RightOperand.Type == "Mem";
 
-                    Operand targetOp = null;
+                    Operand? targetOp = null;
                     string direction = "";
 
                     if (remCond.Operator == "-")
@@ -158,11 +171,22 @@ namespace RALogicEditor.Services.Explainer.Processors
             // ---------------------------
 
             // 2. Analyze Chains for Transition (Delta -> Mem)
+            // Transition Requirements:
+            // 1. Must have at least one Delta chain and one Mem chain.
+            // 2. Logic must connect Delta group to Mem group via AND (standard transition logic).
+            //    If last Delta chain connects with 'OrNext', it's disjoint logic (A or B), not transition (A becomes B).
             var deltaChains = chains.Where(c => IsChainDelta(c.Conditions)).ToList();
             var memChains = chains.Where(c => !IsChainDelta(c.Conditions)).ToList();
 
-            // We merge if we have at least one Delta chain AND at least one Mem chain
-            bool isTransition = deltaChains.Count > 0 && memChains.Count > 0;
+            bool isTransition = false;
+            if (deltaChains.Count > 0 && memChains.Count > 0)
+            {
+                var lastDelta = deltaChains.Last();
+                if (lastDelta.Terminal == null || lastDelta.Terminal.Flag != "OrNext")
+                {
+                    isTransition = true;
+                }
+            }
 
             if (isTransition)
             {
@@ -170,15 +194,39 @@ namespace RALogicEditor.Services.Explainer.Processors
                 var fromConditions = deltaChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
                 var toConditions = memChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
 
-                string fromText = string.Join(" AND ", fromConditions);
-                string toText = string.Join(" AND ", toConditions);
+                // Build "From" text (Delta conditions)
+                var fromBuilder = new StringBuilder();
+                for (int i = 0; i < deltaChains.Count; i++)
+                {
+                    var chain = deltaChains[i];
+                    if (i > 0)
+                    {
+                        // Use connector from previous chain's terminal
+                        var prev = deltaChains[i - 1];
+                        string conn = (prev.Terminal != null && prev.Terminal.Flag == "OrNext") ? " OR " : " AND ";
+                        fromBuilder.Append(conn);
+                    }
+                    fromBuilder.Append(FormatTerminalCondition(chain.Terminal, ctx, conditions));
+                }
+
+                // Build "To" text (Mem conditions)
+                var toBuilder = new StringBuilder();
+                for (int i = 0; i < memChains.Count; i++)
+                {
+                    var chain = memChains[i];
+                    if (i > 0)
+                    {
+                        var prev = memChains[i - 1];
+                        string conn = (prev.Terminal != null && prev.Terminal.Flag == "OrNext") ? " OR " : " AND ";
+                        toBuilder.Append(conn);
+                    }
+                    toBuilder.Append(FormatTerminalCondition(chain.Terminal, ctx, conditions));
+                }
 
                 // FIX 1: Include Terminal in the block list for display
-                // Pass the chain definition to use the original terminal condition
                 var displayBlocks = PrepareDisplayBlocks(chains[0]);
 
                 string id = Guid.NewGuid().ToString("N");
-                // Pass the terminal condition explicitly so we can suppress it in display
                 result.DetailedDrillDowns[id] = GenerateChainDetails(displayBlocks, ctx, chains[0].Terminal);
                 string expandToken = $"[[EXPAND:{id}:{displayBlocks.Count}]]";
 
@@ -191,101 +239,117 @@ namespace RALogicEditor.Services.Explainer.Processors
                     else if (finalMemChain.Terminal.Flag == "Pause If") suffix = " (Pause If)";
                 }
 
-                result.Text = $"Sum of {displayBlocks.Count} items {expandToken} changes from ({fromText}) to ({toText}){suffix}";
+                // LogicExplainer.cs automatically adds "Trigger when" for Transition category.
+                // We should NOT include it here to avoid duplication.
+                result.Text = $"Sum of {displayBlocks.Count} items {expandToken} changes from ({fromBuilder}) to ({toBuilder}){suffix}";
                 result.Category = ExplanationCategory.Transition;
-
-                // Consume all collected chains
-                int lastIndex = chains.Last().EndIndex;
-                result.ConditionsConsumed = (lastIndex - index) + 1;
             }
             else
             {
-                // Standard Processing (Single Chain or non-matching sequence)
-                var chain1 = chains[0];
-                // FIX 1: Include Terminal in the block list for display
-                var displayBlocks = PrepareDisplayBlocks(chain1);
+                // Multi-Chain Output (A OR B OR C)
+                // We construct the text by iterating all chains and joining them.
+                var sb = new StringBuilder();
+                bool isTriggerStart = true;
 
-                string id = Guid.NewGuid().ToString("N");
-                // Pass the terminal condition explicitly
-                result.DetailedDrillDowns[id] = GenerateChainDetails(displayBlocks, ctx, chain1.Terminal);
-                string expandToken = $"[[EXPAND:{id}:{displayBlocks.Count}]]";
-
-                if (chain1.Terminal != null)
+                for (int i = 0; i < chains.Count; i++)
                 {
-                    var finalCond1 = chain1.Terminal;
-                    if (finalCond1.Flag == "MeasuredIf")
-                    {
-                        // Pass Context (Value + Size) to FormatValue for correct Bit Label resolution
-                        string valText = ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
-                        string opText = ctx.GetOperatorText(finalCond1.Operator);
+                    var chain = chains[i];
+                    var displayBlocks = PrepareDisplayBlocks(chain);
 
+                    string id = Guid.NewGuid().ToString("N");
+                    result.DetailedDrillDowns[id] = GenerateChainDetails(displayBlocks, ctx, chain.Terminal);
+                    string expandToken = $"[[EXPAND:{id}:{displayBlocks.Count}]]";
+
+                    string chainText = "";
+
+                    if (chain.Terminal != null)
+                    {
+                        var term = chain.Terminal;
                         string noun = hasRecallContext ? recallContext : "items";
-                        string criteria = $"sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
-                        result.Text = $"Accumulator: {criteria} (MeasuredIf)";
-                        result.Category = ExplanationCategory.MeasuredIf;
-                    }
-                    else if (finalCond1.Flag.StartsWith("Measured"))
-                    {
-                        bool isHitChain = chain1.Conditions.Any(c => c.Flag.Contains("Hits")) || finalCond1.Flag.Contains("Hits");
-                        string label = isHitChain ? "hits" : "value";
-                        // Pass Context (Value + Size)
-                        string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
 
-                        // Inject recall context smoothly
-                        if (hasRecallContext)
-                            result.Text = $"Start measuring {recallContext} up to {valText}: {expandToken}";
+                        // Special Flags on Terminal
+                        if (term.Flag == "MeasuredIf")
+                        {
+                            string valText = ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
+                            string opText = ctx.GetOperatorText(term.Operator);
+                            chainText = $"Accumulator: sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText} (MeasuredIf)";
+                            result.Category = ExplanationCategory.MeasuredIf;
+                            isTriggerStart = false; // Reset prefixing for MeasuredIf
+                        }
+                        else if (term.Flag.StartsWith("Measured"))
+                        {
+                            bool isHitChain = chain.Conditions.Any(c => c.Flag.Contains("Hits")) || term.Flag.Contains("Hits");
+                            string label = isHitChain ? "hits" : "value";
+                            string valText = (term.RequiredHits > 0) ? term.RequiredHits.ToString() : ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
+
+                            if (hasRecallContext)
+                                chainText = $"Start measuring {recallContext} up to {valText}: {expandToken}";
+                            else
+                                chainText = $"Start measuring {label} up to {valText}: {expandToken}";
+
+                            isTriggerStart = false;
+                        }
                         else
-                            result.Text = $"Start measuring {label} up to {valText}: {expandToken}";
+                        {
+                            // Standard Condition (Trigger/Pause/Reset)
+                            string valText = (term.RequiredHits > 0) ? term.RequiredHits.ToString() : ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
+                            string opText = ctx.GetOperatorText(term.Operator);
+
+                            string prefix = "";
+                            if (isTriggerStart)
+                            {
+                                if (term.Flag == "Pause If")
+                                {
+                                    prefix = (term.RequiredHits > 0) ? "Lock the achievement (PauseLock) when " : "Pause the achievement when ";
+                                    result.Category = ExplanationCategory.Pause;
+                                }
+                                else if (term.Flag == "Reset If")
+                                {
+                                    prefix = "Reset the achievement when ";
+                                    result.Category = ExplanationCategory.Reset;
+                                }
+                                else
+                                {
+                                    prefix = "Trigger when ";
+                                }
+                                isTriggerStart = false;
+                            }
+
+                            if (chain.Conditions.Any(c => c.Flag.Contains("Hits")))
+                            {
+                                if (hasRecallContext)
+                                    chainText = $"{prefix}{recallContext} decreasing occurs at least {valText} times: {expandToken}";
+                                else
+                                    chainText = $"{prefix}at least {valText} of the following occur: {expandToken}";
+                            }
+                            else
+                            {
+                                chainText = $"{prefix}sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
+                            }
+                        }
+
+                        // Append Connector based on current terminal flag
+                        if (i < chains.Count - 1)
+                        {
+                            string conn = term.Flag == "OrNext" ? " OR " : " AND ";
+                            chainText += conn;
+                        }
                     }
                     else
                     {
-                        // Pass Context (Value + Size)
-                        string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
-                        string opText = ctx.GetOperatorText(finalCond1.Operator);
-                        string actionPrefix = "Trigger";
-
-                        if (finalCond1.Flag == "Pause If")
-                        {
-                            actionPrefix = (finalCond1.RequiredHits > 0) ? "Lock the achievement (PauseLock)" : "Pause the achievement";
-                            result.Category = ExplanationCategory.Pause;
-                        }
-                        else if (finalCond1.Flag == "Reset If")
-                        {
-                            actionPrefix = "Reset the achievement";
-                            result.Category = ExplanationCategory.Reset;
-                        }
-
-                        if (chain1.Conditions.Any(c => c.Flag.Contains("Hits")))
-                        {
-                            if (hasRecallContext)
-                            {
-                                // Grammar Fix: "Trigger when [NPC] decreasing occurs at least 19 times"
-                                result.Text = $"{actionPrefix} when {recallContext} occurs at least {valText} times: {expandToken}";
-                            }
-                            else
-                            {
-                                result.Text = $"{actionPrefix} when at least {valText} of the following occur: {expandToken}";
-                            }
-                        }
-                        else
-                        {
-                            string noun = hasRecallContext ? recallContext : "items";
-                            if (finalCond1.Flag == "Pause If" || finalCond1.Flag == "Reset If")
-                                result.Text = $"{actionPrefix} when sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
-                            else
-                                result.Text = $"Sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
-                        }
+                        string noun = hasRecallContext ? recallContext : "Logic sequence";
+                        chainText = $"{noun} {expandToken} (Incomplete)";
                     }
-                }
-                else
-                {
-                    string noun = hasRecallContext ? recallContext : "Logic sequence";
-                    result.Text = $"{noun} {expandToken}";
+
+                    sb.Append(chainText);
                 }
 
-                int consumed = (chain1.Terminal != null) ? (chain1.EndIndex - index) + 1 : (chain1.EndIndex - index);
-                result.ConditionsConsumed = consumed;
+                result.Text = sb.ToString();
             }
+
+            // Calculate total consumed conditions
+            int lastIndex = chains.Last().EndIndex;
+            result.ConditionsConsumed = (lastIndex - index) + 1;
 
             return result;
         }
@@ -296,19 +360,12 @@ namespace RALogicEditor.Services.Explainer.Processors
             var blocks = SegmentLogicBlocks(chain.Conditions);
             if (chain.Terminal != null)
             {
-                // FIX: Check if the last block is an "orphaned" pointer chain (Add Address)
+                // Check if the last block is an "orphaned" pointer chain (Add Address)
                 // that belongs to the terminal condition. If so, merge them.
                 if (blocks.Count > 0)
                 {
                     var lastBlock = blocks.Last();
                     var lastCond = lastBlock.Last();
-
-                    // SegmentLogicBlocks splits on AddSource/Hits/Sub.
-                    // If the last block ends with AddAddress, it means it's an open pointer chain at the end of the list.
-                    // This chain belongs to the Terminal condition.
-                    // Note: 'Add Address' flag check is sufficient here because SegmentLogicBlocks guarantees
-                    // that a block ending in AddSource would have been closed and a new block started.
-                    // If the last block contains AddAddress lines, they are waiting for a consumer.
 
                     bool isSetupBlock = lastCond.Flag == "Add Address";
 
@@ -320,7 +377,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                     else
                     {
                         // Last block was a complete item. Add Terminal as a new independent item.
-                        // FIX: Add the ORIGINAL terminal condition so IndexOf works in ExplainBlock
                         blocks.Add(new List<AchievementCondition> { chain.Terminal });
                     }
                 }
@@ -373,17 +429,12 @@ namespace RALogicEditor.Services.Explainer.Processors
         {
             string left = ctx.GetOperandText(cond.LeftOperand, index, false, "", "", suppressPointers);
 
-            // FIX 2: Strip redundant "previous frame" for list items
-            // This assumes this function is called primarily for generation of the list details
+            // Strip redundant "previous frame" for list items
             string leftClean = left.Replace("previous frame ", "").Replace("prior frame ", "");
 
             if (isTerminalItem)
             {
                 // For the terminal item in the list, we only want to show the variable name (Left Operand).
-                // The comparison (e.g., > 0) is the condition for the SUM, not for this specific item in the list.
-                // Example: A + B + C > 10.
-                // List: - A, - B, - C. 
-                // C is the terminal condition line, but we just want to list "C", not "C > 10".
                 return leftClean.Trim();
             }
 
@@ -398,7 +449,6 @@ namespace RALogicEditor.Services.Explainer.Processors
         private string FormatTerminalCondition(AchievementCondition? cond, ExplanationContext ctx, List<AchievementCondition> conditions)
         {
             if (cond == null) return "(No Check)";
-            // Pass Context (Value + Size) to FormatValue
             string val = ctx.FormatValue(cond.RightOperand, conditions.IndexOf(cond), cond.LeftOperand.Value, cond.LeftOperand.Size);
             string op = cond.Operator;
 
@@ -421,18 +471,24 @@ namespace RALogicEditor.Services.Explainer.Processors
             while (ptr < conditions.Count)
             {
                 var c = conditions[ptr];
-                if (c.Flag.Contains("Add") || c.Flag.Contains("Sub") ||
-                    c.Flag.Contains("Next") || c.Flag == "Add Address")
+                // STRICTLY identifying accumulator components.
+                // We do NOT include 'Next' here because 'Next' usually belongs to the terminal condition acting as a connector,
+                // or breaks the accumulator logic if inside.
+                if (c.Flag == "Add Source" || c.Flag == "Sub Source" ||
+                    c.Flag == "Add Hits" || c.Flag == "Sub Hits" ||
+                    c.Flag == "Add Address")
                 {
                     chain.Add(c);
                 }
                 else
                 {
+                    // Any other flag (including AndNext, OrNext, ResetNextIf, ResetIf, or empty) 
+                    // terminates the accumulator body definition.
                     break;
                 }
                 ptr++;
             }
-            endPtr = ptr;
+            endPtr = ptr; // ptr points to the Terminal condition
             return chain;
         }
 
@@ -523,63 +579,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
             if (currentBlock.Count > 0) blocks.Add(currentBlock);
             return blocks;
-        }
-
-        private string GenerateChainDetails(List<List<AchievementCondition>> blocks, ExplanationContext ctx)
-        {
-            var sbChain = new StringBuilder();
-            int bIdx = 0;
-            while (bIdx < blocks.Count)
-            {
-                var exampleBlock = blocks[bIdx];
-                // Use GetName(Operand) to get Bit Labels if applicable for the chain description
-                var firstBlockCond = exampleBlock.FirstOrDefault(c => c.Flag != "Add Address");
-                string nameBase = "Unknown";
-                if (firstBlockCond != null)
-                {
-                    nameBase = ctx.GetName(firstBlockCond.LeftOperand, ctx.Group.Conditions.IndexOf(firstBlockCond), true);
-                }
-
-                // Just listing the conditions for now
-                var exampleLines = ExplainBlock(exampleBlock, ctx);
-                sbChain.AppendLine($"- {string.Join(" AND ", exampleLines)}");
-                bIdx++;
-            }
-            return sbChain.ToString().TrimEnd();
-        }
-
-        private List<string> ExplainBlock(List<AchievementCondition> block, ExplanationContext ctx)
-        {
-            var lines = new List<string>();
-            foreach (var c in block)
-            {
-                if (c.Flag == "Add Address") continue;
-                int realIdx = ctx.Group.Conditions.IndexOf(c);
-                lines.Add(ExplainSingleCondition(c, ctx, realIdx, true, true));
-            }
-            return lines;
-        }
-
-        private string ExplainSingleCondition(AchievementCondition cond, ExplanationContext ctx, int index, bool suppressHits, bool suppressPointers)
-        {
-            string left = ctx.GetOperandText(cond.LeftOperand, index, false, "", "", suppressPointers);
-            string right = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value, cond.LeftOperand.Size);
-            string op = ctx.GetOperatorText(cond.Operator);
-            string hits = (!suppressHits && cond.RequiredHits > 0) ? $" (occurs {cond.RequiredHits} times)" : "";
-            if (left.Contains("{recall}")) left = "recalled value";
-            return $"{left} {op} {right}{hits}";
-        }
-
-        private string FindMeasuredTargetName(AchievementConditionGroup group)
-        {
-            int measuredIdx = group.Conditions.FindIndex(c => c.Flag == "Measured" || c.Flag == "Measured%");
-            if (measuredIdx > 0)
-            {
-                string prevFlag = group.Conditions[measuredIdx - 1].Flag;
-                if (prevFlag == "Add Hits" || prevFlag == "Sub Hits") return "hits";
-                else if (prevFlag == "Add Source" || prevFlag == "Sub Source") return "value";
-            }
-            return "";
         }
     }
 }
