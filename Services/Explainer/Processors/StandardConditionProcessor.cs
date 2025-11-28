@@ -17,6 +17,14 @@ namespace RALogicEditor.Services.Explainer.Processors
         {
             var cond = conditions[index];
 
+            // 0. Failsafe: Hide "Add Address" lines
+            // These should normally be caught by PointerCleanupProcessor (Priority 5),
+            // but if they fall through, we must silence them here to prevent verbose pointer dumps.
+            if (cond.Flag == "Add Address")
+            {
+                return new ProcessorResult { Text = "", Category = ExplanationCategory.Context };
+            }
+
             // 1. Dummy check
             if (cond.LeftOperand.Type == "Value" && cond.RightOperand.Type == "Value")
             {
@@ -33,7 +41,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             // 2. Simple Change check (Delta)
             if (cond.LeftOperand.Type == "Mem" && cond.RightOperand.Type == "Delta" && cond.LeftOperand.Value == cond.RightOperand.Value)
             {
-                // Use GetName(Operand)
                 string name = ctx.GetName(cond.LeftOperand, index);
                 string chg = cond.Operator switch { ">" => "increases", "<" => "decreases", "!=" => "changes", "=" => "remains unchanged", _ => "compares" };
                 return new ProcessorResult { Text = $"{name} {chg}", Category = ExplanationCategory.Transition };
@@ -91,7 +98,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             if ((maskVal & (maskVal - 1)) == 0)
             {
                 int bitIndex = (int)Math.Log(maskVal, 2);
-                // Use GetName(Operand) to ensure we get Bit Labels if this is a bitwise op on a variable that has them
                 string name = ctx.GetName(cond.LeftOperand, index);
                 return $"{name} has Bit {bitIndex} set";
             }
@@ -101,8 +107,8 @@ namespace RALogicEditor.Services.Explainer.Processors
         private long ParseHex(string hex)
         {
             if (string.IsNullOrEmpty(hex)) return 0;
-            hex = hex.Replace("0x", "").Trim();
-            if (long.TryParse(hex, NumberStyles.HexNumber, null, out long val)) return val;
+            string clean = hex.Replace("0x", "").Trim();
+            if (long.TryParse(clean, NumberStyles.HexNumber, null, out long val)) return val;
             return 0;
         }
     }
