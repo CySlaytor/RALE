@@ -84,6 +84,56 @@ namespace RALogicEditor.Services.Explainer.Processors
                 currentPtr = endPtr + 1;
             }
 
+            // --- RECALL LOGIC CONTEXT ---
+            // Check if the previous line was a "Remember" instruction.
+            // If so, and this chain uses {recall}, link the context.
+            string recallContext = "";
+            bool hasRecallContext = false;
+
+            if (index > 0 && conditions[index - 1].Flag == "Remember")
+            {
+                var remCond = conditions[index - 1];
+
+                // Check if any condition in the accumulated chains actually uses the Recall operand
+                bool chainUsesRecall = chains.Any(ch => ch.Conditions.Any(c => c.LeftOperand.Type == "Recall" || c.RightOperand.Type == "Recall"));
+
+                if (chainUsesRecall)
+                {
+                    // Attempt to decipher the Remember intent (Increase vs Decrease)
+                    bool leftIsDelta = remCond.LeftOperand.Type == "Delta";
+                    bool leftIsMem = remCond.LeftOperand.Type == "Mem";
+                    bool rightIsDelta = remCond.RightOperand.Type == "Delta";
+                    bool rightIsMem = remCond.RightOperand.Type == "Mem";
+
+                    Operand targetOp = null;
+                    string direction = "";
+
+                    if (remCond.Operator == "-")
+                    {
+                        // Delta - Mem = Decreasing (Value got smaller)
+                        if (leftIsDelta && rightIsMem) { targetOp = remCond.RightOperand; direction = "decreasing"; }
+                        // Mem - Delta = Increasing (Value got bigger)
+                        else if (leftIsMem && rightIsDelta) { targetOp = remCond.LeftOperand; direction = "increasing"; }
+                    }
+
+                    if (targetOp != null)
+                    {
+                        // Get the name of the variable being tracked
+                        string varName = ctx.GetName(targetOp, index - 1, true); // true = suppress "Pointer..." prefix for cleaner text
+
+                        // Construct context string without leading "of" to fit sentence structure better
+                        recallContext = $"{varName} {direction}";
+                        hasRecallContext = true;
+                    }
+                    else
+                    {
+                        // Fallback if structure isn't simple subtraction
+                        recallContext = "stored value";
+                    }
+                }
+            }
+            // ---------------------------
+
             // 2. Analyze Chains for Transition (Delta -> Mem)
             var deltaChains = chains.Where(c => IsChainDelta(c.Conditions)).ToList();
             var memChains = chains.Where(c => !IsChainDelta(c.Conditions)).ToList();
@@ -139,7 +189,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                         // Pass Context (Value + Size) to FormatValue for correct Bit Label resolution
                         string valText = ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
                         string opText = ctx.GetOperatorText(finalCond1.Operator);
-                        string criteria = $"sum of {blocks.Count} items {expandToken} {opText} {valText}";
+
+                        string noun = hasRecallContext ? recallContext : "items";
+                        string criteria = $"sum of {blocks.Count} {noun} {expandToken} {opText} {valText}";
                         result.Text = $"Accumulator: {criteria} (MeasuredIf)";
                         result.Category = ExplanationCategory.MeasuredIf;
                     }
@@ -149,7 +201,12 @@ namespace RALogicEditor.Services.Explainer.Processors
                         string label = isHitChain ? "hits" : "value";
                         // Pass Context (Value + Size)
                         string valText = (finalCond1.RequiredHits > 0) ? finalCond1.RequiredHits.ToString() : ctx.FormatValue(finalCond1.RightOperand, conditions.IndexOf(finalCond1), finalCond1.LeftOperand.Value, finalCond1.LeftOperand.Size);
-                        result.Text = $"Start measuring {label} up to {valText}: {expandToken}";
+
+                        // Inject recall context smoothly
+                        if (hasRecallContext)
+                            result.Text = $"Start measuring {recallContext} up to {valText}: {expandToken}";
+                        else
+                            result.Text = $"Start measuring {label} up to {valText}: {expandToken}";
                     }
                     else
                     {
@@ -171,20 +228,30 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                         if (chain1.Conditions.Any(c => c.Flag.Contains("Hits")))
                         {
-                            result.Text = $"{actionPrefix} when at least {valText} of the following occur: {expandToken}";
+                            if (hasRecallContext)
+                            {
+                                // Grammar Fix: "Trigger when [NPC] decreasing occurs at least 19 times"
+                                result.Text = $"{actionPrefix} when {recallContext} occurs at least {valText} times: {expandToken}";
+                            }
+                            else
+                            {
+                                result.Text = $"{actionPrefix} when at least {valText} of the following occur: {expandToken}";
+                            }
                         }
                         else
                         {
+                            string noun = hasRecallContext ? recallContext : "items";
                             if (finalCond1.Flag == "Pause If" || finalCond1.Flag == "Reset If")
-                                result.Text = $"{actionPrefix} when sum of {blocks.Count} items {expandToken} {opText} {valText}";
+                                result.Text = $"{actionPrefix} when sum of {blocks.Count} {noun} {expandToken} {opText} {valText}";
                             else
-                                result.Text = $"Sum of {blocks.Count} items {expandToken} {opText} {valText}";
+                                result.Text = $"Sum of {blocks.Count} {noun} {expandToken} {opText} {valText}";
                         }
                     }
                 }
                 else
                 {
-                    result.Text = $"Logic sequence {expandToken}";
+                    string noun = hasRecallContext ? recallContext : "Logic sequence";
+                    result.Text = $"{noun} {expandToken}";
                 }
 
                 int consumed = (chain1.Terminal != null) ? (chain1.EndIndex - index) + 1 : (chain1.EndIndex - index);

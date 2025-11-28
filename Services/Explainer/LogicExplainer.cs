@@ -264,6 +264,18 @@ namespace RALogicEditor.Services
             bool hasMeasured = group.Conditions.Any(c => c.Flag.StartsWith("Measured"));
             bool hasTrigger = group.Conditions.Any(c => c.Flag == "Trigger");
 
+            // Filter logic to detect if there are leftover items to print
+            bool IsRemnant(ProcessorResult r)
+            {
+                if (isUxHeader && hasMeasured && (r.Text.StartsWith("A Measured Indicator") || r.Text.StartsWith("Start measuring"))) return false;
+                if (isUxHeader && r.Category == ExplanationCategory.MeasuredIf) return false;
+                if (string.IsNullOrEmpty(r.Text)) return false;
+                if (isUxHeader && (r.Text.StartsWith("Always False") || r.Text.StartsWith("Always True"))) return false;
+                return true;
+            }
+
+            bool hasRemnants = results.Any(IsRemnant);
+
             if (isUxHeader)
             {
                 if (hasMeasured)
@@ -287,18 +299,25 @@ namespace RALogicEditor.Services
                                   .Replace(". (MeasuredIf)", "")
                         );
                         sb.Append(string.Join(" AND ", cleanedIfs));
-                        sb.AppendLine(" and the following:");
+
+                        if (hasRemnants) sb.AppendLine(" and the following:");
+                        else sb.AppendLine(".");
                     }
                     else
-                        sb.AppendLine(" once the following logic is satisfied:");
+                    {
+                        if (hasRemnants) sb.AppendLine(" once the following logic is satisfied:");
+                        else sb.AppendLine(".");
+                    }
                 }
                 else if (hasTrigger)
                 {
-                    sb.AppendLine("A Trigger Indicator is displayed once the following logic is satisfied:");
+                    if (hasRemnants) sb.AppendLine("A Trigger Indicator is displayed once the following logic is satisfied:");
+                    else sb.AppendLine("A Trigger Indicator is displayed.");
                 }
                 else
                 {
-                    sb.AppendLine("Perform display logic when:");
+                    if (hasRemnants) sb.AppendLine("Perform display logic when:");
+                    else sb.AppendLine("Display logic active.");
                 }
             }
 
@@ -320,7 +339,7 @@ namespace RALogicEditor.Services
                 if (cat == ExplanationCategory.Transition && catResults.Any())
                 {
                     // Combine transitions into a single "Trigger when..." sentence if possible
-                    var validLines = catResults.Select(r => r.Text).Where(t => !string.IsNullOrEmpty(t)).Select(t => t.TrimEnd('.')).ToList();
+                    var validLines = catResults.Where(IsRemnant).Select(r => r.Text).Where(t => !string.IsNullOrEmpty(t)).Select(t => t.TrimEnd('.')).ToList();
                     if (validLines.Count > 0)
                         sb.AppendLine($"- Trigger when {string.Join(" AND ", validLines)}.");
                 }
@@ -328,20 +347,8 @@ namespace RALogicEditor.Services
                 {
                     foreach (var res in catResults)
                     {
-                        // Don't double print the header Measured line if we handled it in UX Header
-                        if (isUxHeader && hasMeasured && (res.Text.StartsWith("A Measured Indicator") || res.Text.StartsWith("Start measuring"))) continue;
-
-                        // If isUxHeader is true, MeasuredIf lines are summarized in the header ("once X and Y").
-                        // We don't need to list them again as bullet points.
-                        if (isUxHeader && cat == ExplanationCategory.MeasuredIf) continue;
-
-                        // Filter empty lines (e.g. from PointerCleanupProcessor)
-                        if (string.IsNullOrEmpty(res.Text)) continue;
-
-                        // Filter "Always False" / "Always True" lines in UX logic to avoid confusion,
-                        // as they are usually structural (preventing trigger).
-                        if (isUxHeader && (res.Text.StartsWith("Always False") || res.Text.StartsWith("Always True")))
-                            continue;
+                        // Don't double print items we filtered out
+                        if (!IsRemnant(res)) continue;
 
                         sb.AppendLine($"- {res.Text}");
                     }

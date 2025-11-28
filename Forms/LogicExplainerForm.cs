@@ -142,7 +142,10 @@ namespace RALogicEditor.Forms
 
                         // Replace the token in the line with the HTML widget
                         string pre = HtmlEncode(rawText.Substring(0, match.Index));
-                        string post = HtmlEncode(rawText.Substring(match.Index + fullToken.Length));
+
+                        // FIX: Recursively process the remainder of the line to find subsequent expansion tokens
+                        string remainder = rawText.Substring(match.Index + fullToken.Length);
+                        string post = ProcessLineContent(remainder);
 
                         return $"{pre} {interactiveHtml} {post}";
                     }
