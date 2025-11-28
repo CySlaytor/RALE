@@ -14,15 +14,6 @@ using System.Windows.Forms;
 
 namespace RALogicEditor.Forms
 {
-    // Configuration for a specific region within the Multi-Region tool.
-    public class RegionConfig
-    {
-        public string RegionName { get; set; } = "";
-        public bool IsBase { get; set; }
-        public Dictionary<string, string> AddressMap { get; set; } = new();
-        public List<AchievementCondition> LockConditions { get; set; } = new();
-    }
-
     public partial class MultiRegionForm : Form
     {
         private List<CodeNote> _allNotes;
@@ -478,5 +469,37 @@ namespace RALogicEditor.Forms
             DialogResult = DialogResult.Cancel;
             Close();
         }
+
+        private void btnHelp_Click(object sender, EventArgs e)
+        {
+            string helpText =
+                "How to use Multi-Region Generator:\n\n" +
+                "1. Code Note Setup:\n" +
+                "   - Identify the primary region's memory addresses (e.g., USA).\n" +
+                "   - For other regions (e.g., Europe), create code notes at the corresponding addresses.\n" +
+                "   - The note content must include: 'Refer to $0x[BaseAddress]'\n" +
+                "   - Example: If USA Health is 0x1234, create a note at 0x5678 (Europe) saying 'Health | Refer to $0x1234'.\n\n" +
+                "2. Region Detection:\n" +
+                "   - The tool detects regions based on keywords in your notes:\n" +
+                "     - USA / NTSC\n" +
+                "     - Europe / PAL\n" +
+                "     - Japan / NTSC-J\n" +
+                "   - If not detected, ensure your notes contain these keywords.\n\n" +
+                "3. Lock Logic:\n" +
+                "   - Use the tabs below to define specific logic that identifies each region (e.g., checking a Region ID or Serial string).\n" +
+                "   - This logic will be added as a 'Pause If' (Lock) to prevent the achievement from triggering in the wrong region.\n" +
+                "   - Paste logic using RA format (e.g., 0xH1234=1).";
+
+            MessageBox.Show(helpText, "Multi-Region Help", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+    }
+
+    // Configuration for a specific region within the Multi-Region tool.
+    public class RegionConfig
+    {
+        public string RegionName { get; set; } = "";
+        public bool IsBase { get; set; }
+        public Dictionary<string, string> AddressMap { get; set; } = new();
+        public List<AchievementCondition> LockConditions { get; set; } = new();
     }
 }

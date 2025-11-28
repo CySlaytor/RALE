@@ -27,6 +27,7 @@
             this.pasteLogicToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.copyLogicToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.deleteRowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.btnHelp = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.dgvMapping)).BeginInit();
             this.ctxGridActions.SuspendLayout();
             this.SuspendLayout();
@@ -163,11 +164,23 @@
             this.deleteRowToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.deleteRowToolStripMenuItem.Text = "Delete Row";
             // 
+            // btnHelp
+            // 
+            this.btnHelp.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.btnHelp.Location = new System.Drawing.Point(12, 520);
+            this.btnHelp.Name = "btnHelp";
+            this.btnHelp.Size = new System.Drawing.Size(75, 23);
+            this.btnHelp.TabIndex = 8;
+            this.btnHelp.Text = "Help";
+            this.btnHelp.UseVisualStyleBackColor = true;
+            this.btnHelp.Click += new System.EventHandler(this.btnHelp_Click);
+            // 
             // MultiRegionForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(784, 555);
+            this.Controls.Add(this.btnHelp);
             this.Controls.Add(this.tabControlRegions);
             this.Controls.Add(this.lblInstruction);
             this.Controls.Add(this.btnCancel);
@@ -199,5 +212,6 @@
         private System.Windows.Forms.ToolStripMenuItem pasteLogicToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem deleteRowToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem copyLogicToolStripMenuItem;
+        private System.Windows.Forms.Button btnHelp;
     }
 }
