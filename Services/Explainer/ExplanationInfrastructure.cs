@@ -79,7 +79,8 @@ namespace RALogicEditor.Services.Explainer
             string alias = ConditionFormatter.ResolveAlias(LogicFormatter.NormalizeAddress(addr), Group, index, NotesLookup, RangeCache);
             if (!string.IsNullOrEmpty(alias)) return $"[{alias}]";
 
-            if (Group != null && index > 0 && index < Group.Conditions.Count)
+            // Fix bounds check here as well to be safe
+            if (Group != null && Group.Conditions != null && index > 0 && index < Group.Conditions.Count)
             {
                 if (Group.Conditions[index - 1].Flag == "Add Address")
                 {
@@ -177,12 +178,20 @@ namespace RALogicEditor.Services.Explainer
             long targetVal = ParseHex(addr);
 
             // Lookup Logic: Pointer Chain Resolution
-            if (Group != null && index > 0)
+            // FIX: Added robust bounds checks for Group.Conditions access to prevent ArgumentOutOfRangeException
+            if (Group != null && Group.Conditions != null && index > 0 && index < Group.Conditions.Count)
             {
                 var chainStack = new Stack<string>();
                 int scan = index - 1;
                 while (scan >= 0)
                 {
+                    // FIX: Ensure scan index is valid within the current conditions list
+                    if (scan >= Group.Conditions.Count)
+                    {
+                        scan--;
+                        continue;
+                    }
+
                     var prevCond = Group.Conditions[scan];
                     if (prevCond.Flag == "Add Address")
                     {
@@ -309,12 +318,20 @@ namespace RALogicEditor.Services.Explainer
             NoteNode? targetNode = null;
 
             // 1. Pointer Chain Resolution
-            if (Group != null && index > 0)
+            // FIX: Added robust bounds checks here as well
+            if (Group != null && Group.Conditions != null && index > 0 && index < Group.Conditions.Count)
             {
                 var chainStack = new Stack<string>();
                 int scan = index - 1;
                 while (scan >= 0)
                 {
+                    // FIX: Valid scan index check
+                    if (scan >= Group.Conditions.Count)
+                    {
+                        scan--;
+                        continue;
+                    }
+
                     var prevCond = Group.Conditions[scan];
                     if (prevCond.Flag == "Add Address")
                     {

@@ -76,12 +76,20 @@ namespace RALogicEditor.Helpers
             long targetVal = ParseHex(address);
 
             // 1. Strict Pointer Chain Logic (Offsets)
-            if (group != null && rowIndex > 0)
+            // Fix: Check bounds before accessing group.Conditions
+            if (group != null && group.Conditions != null && rowIndex > 0 && rowIndex < group.Conditions.Count)
             {
                 var chainStack = new Stack<string>();
                 int scan = rowIndex - 1;
                 while (scan >= 0)
                 {
+                    // Additional check to prevent index out of range if group modified externally
+                    if (scan >= group.Conditions.Count)
+                    {
+                        scan--;
+                        continue;
+                    }
+
                     var prevCond = group.Conditions[scan];
                     if (prevCond.Flag == "Add Address")
                     {

@@ -22,6 +22,7 @@ namespace RALogicEditor.Services
             new PointerCleanupProcessor(), // Consumes "Add Address" lines silently to clean up output
             new AsciiStringProcessor(),    // Handles grouped ASCII/Region checks
             new AccumulatorProcessor(),    // Handles complex AddSource/AddHits chains
+            new SequenceProcessor(),       // Handles sequential increments (0->1, 1->2...)
             new AndNextProcessor(),        // Handles AndNext chains explicitly (e.g. "will operate once")
             new TransitionProcessor(),     // Handles Delta transitions (A > Delta A)
             new ResetProcessor(),          // Handles Reset If
