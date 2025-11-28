@@ -173,11 +173,14 @@ namespace RALogicEditor.Services.Explainer.Processors
                 string fromText = string.Join(" AND ", fromConditions);
                 string toText = string.Join(" AND ", toConditions);
 
-                // Use the first chain to generate the drill-down details
-                var blocks = SegmentLogicBlocks(chains[0].Conditions);
+                // FIX 1: Include Terminal in the block list for display
+                // Pass the chain definition to use the original terminal condition
+                var displayBlocks = PrepareDisplayBlocks(chains[0]);
+
                 string id = Guid.NewGuid().ToString("N");
-                result.DetailedDrillDowns[id] = GenerateChainDetails(blocks, ctx);
-                string expandToken = $"[[EXPAND:{id}:{blocks.Count}]]";
+                // Pass the terminal condition explicitly so we can suppress it in display
+                result.DetailedDrillDowns[id] = GenerateChainDetails(displayBlocks, ctx, chains[0].Terminal);
+                string expandToken = $"[[EXPAND:{id}:{displayBlocks.Count}]]";
 
                 string suffix = "";
                 // Check if the final Mem chain triggers a Reset or Pause
@@ -188,7 +191,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     else if (finalMemChain.Terminal.Flag == "Pause If") suffix = " (Pause If)";
                 }
 
-                result.Text = $"Sum of {blocks.Count} items {expandToken} changes from ({fromText}) to ({toText}){suffix}";
+                result.Text = $"Sum of {displayBlocks.Count} items {expandToken} changes from ({fromText}) to ({toText}){suffix}";
                 result.Category = ExplanationCategory.Transition;
 
                 // Consume all collected chains
@@ -199,10 +202,13 @@ namespace RALogicEditor.Services.Explainer.Processors
             {
                 // Standard Processing (Single Chain or non-matching sequence)
                 var chain1 = chains[0];
-                var blocks = SegmentLogicBlocks(chain1.Conditions);
+                // FIX 1: Include Terminal in the block list for display
+                var displayBlocks = PrepareDisplayBlocks(chain1);
+
                 string id = Guid.NewGuid().ToString("N");
-                result.DetailedDrillDowns[id] = GenerateChainDetails(blocks, ctx);
-                string expandToken = $"[[EXPAND:{id}:{blocks.Count}]]";
+                // Pass the terminal condition explicitly
+                result.DetailedDrillDowns[id] = GenerateChainDetails(displayBlocks, ctx, chain1.Terminal);
+                string expandToken = $"[[EXPAND:{id}:{displayBlocks.Count}]]";
 
                 if (chain1.Terminal != null)
                 {
@@ -214,7 +220,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                         string opText = ctx.GetOperatorText(finalCond1.Operator);
 
                         string noun = hasRecallContext ? recallContext : "items";
-                        string criteria = $"sum of {blocks.Count} {noun} {expandToken} {opText} {valText}";
+                        string criteria = $"sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
                         result.Text = $"Accumulator: {criteria} (MeasuredIf)";
                         result.Category = ExplanationCategory.MeasuredIf;
                     }
@@ -265,9 +271,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                         {
                             string noun = hasRecallContext ? recallContext : "items";
                             if (finalCond1.Flag == "Pause If" || finalCond1.Flag == "Reset If")
-                                result.Text = $"{actionPrefix} when sum of {blocks.Count} {noun} {expandToken} {opText} {valText}";
+                                result.Text = $"{actionPrefix} when sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
                             else
-                                result.Text = $"Sum of {blocks.Count} {noun} {expandToken} {opText} {valText}";
+                                result.Text = $"Sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
                         }
                     }
                 }
@@ -282,6 +288,111 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
 
             return result;
+        }
+
+        // Helper to merge the main chain blocks + the terminal condition for the display list
+        private List<List<AchievementCondition>> PrepareDisplayBlocks(AccumulatorChainDef chain)
+        {
+            var blocks = SegmentLogicBlocks(chain.Conditions);
+            if (chain.Terminal != null)
+            {
+                // FIX: Check if the last block is an "orphaned" pointer chain (Add Address)
+                // that belongs to the terminal condition. If so, merge them.
+                if (blocks.Count > 0)
+                {
+                    var lastBlock = blocks.Last();
+                    var lastCond = lastBlock.Last();
+
+                    // SegmentLogicBlocks splits on AddSource/Hits/Sub.
+                    // If the last block ends with AddAddress, it means it's an open pointer chain at the end of the list.
+                    // This chain belongs to the Terminal condition.
+                    // Note: 'Add Address' flag check is sufficient here because SegmentLogicBlocks guarantees
+                    // that a block ending in AddSource would have been closed and a new block started.
+                    // If the last block contains AddAddress lines, they are waiting for a consumer.
+
+                    bool isSetupBlock = lastCond.Flag == "Add Address";
+
+                    if (isSetupBlock)
+                    {
+                        // Merge Terminal into this pointer block so GetName can resolve the full chain
+                        lastBlock.Add(chain.Terminal);
+                    }
+                    else
+                    {
+                        // Last block was a complete item. Add Terminal as a new independent item.
+                        // FIX: Add the ORIGINAL terminal condition so IndexOf works in ExplainBlock
+                        blocks.Add(new List<AchievementCondition> { chain.Terminal });
+                    }
+                }
+                else
+                {
+                    blocks.Add(new List<AchievementCondition> { chain.Terminal });
+                }
+            }
+            return blocks;
+        }
+
+        private string GenerateChainDetails(List<List<AchievementCondition>> blocks, ExplanationContext ctx, AchievementCondition? terminal)
+        {
+            var sbChain = new StringBuilder();
+            int bIdx = 0;
+            while (bIdx < blocks.Count)
+            {
+                var exampleBlock = blocks[bIdx];
+                // Pass terminal to ExplainBlock
+                var exampleLines = ExplainBlock(exampleBlock, ctx, terminal);
+                // Filter out empty lines (e.g. if a block was just Add Address that got consumed without output)
+                var validLines = exampleLines.Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+
+                if (validLines.Count > 0)
+                {
+                    sbChain.AppendLine($"- {string.Join(" AND ", validLines)}");
+                }
+                bIdx++;
+            }
+            return sbChain.ToString().TrimEnd();
+        }
+
+        private List<string> ExplainBlock(List<AchievementCondition> block, ExplanationContext ctx, AchievementCondition? terminal)
+        {
+            var lines = new List<string>();
+            foreach (var c in block)
+            {
+                if (c.Flag == "Add Address") continue;
+                int realIdx = ctx.Group.Conditions.IndexOf(c);
+
+                // Determine if this is the terminal condition we want to simplify (hide operator)
+                bool isTerminal = (terminal != null && c == terminal);
+
+                lines.Add(ExplainSingleCondition(c, ctx, realIdx, true, true, isTerminal));
+            }
+            return lines;
+        }
+
+        private string ExplainSingleCondition(AchievementCondition cond, ExplanationContext ctx, int index, bool suppressHits, bool suppressPointers, bool isTerminalItem)
+        {
+            string left = ctx.GetOperandText(cond.LeftOperand, index, false, "", "", suppressPointers);
+
+            // FIX 2: Strip redundant "previous frame" for list items
+            // This assumes this function is called primarily for generation of the list details
+            string leftClean = left.Replace("previous frame ", "").Replace("prior frame ", "");
+
+            if (isTerminalItem)
+            {
+                // For the terminal item in the list, we only want to show the variable name (Left Operand).
+                // The comparison (e.g., > 0) is the condition for the SUM, not for this specific item in the list.
+                // Example: A + B + C > 10.
+                // List: - A, - B, - C. 
+                // C is the terminal condition line, but we just want to list "C", not "C > 10".
+                return leftClean.Trim();
+            }
+
+            string right = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value, cond.LeftOperand.Size);
+            string op = ctx.GetOperatorText(cond.Operator);
+            string hits = (!suppressHits && cond.RequiredHits > 0) ? $" (occurs {cond.RequiredHits} times)" : "";
+
+            if (leftClean.Contains("{recall}")) leftClean = "recalled value";
+            return $"{leftClean} {op} {right}{hits}".Trim();
         }
 
         private string FormatTerminalCondition(AchievementCondition? cond, ExplanationContext ctx, List<AchievementCondition> conditions)
