@@ -77,7 +77,11 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                 if (conditionsInChain.Count == 0) break;
 
-                bool hasAccumulatorAction = conditionsInChain.Any(c => c.Flag.Contains("Add") || c.Flag.Contains("Sub"));
+                // Strict check for accumulator flags to avoid processing "Add Address" chains as accumulators
+                bool hasAccumulatorAction = conditionsInChain.Any(c =>
+                    c.Flag == "Add Source" || c.Flag == "Sub Source" ||
+                    c.Flag == "Add Hits" || c.Flag == "Sub Hits");
+
                 if (!hasAccumulatorAction) break;
 
                 AchievementCondition? termCond = null;
@@ -90,6 +94,28 @@ namespace RALogicEditor.Services.Explainer.Processors
                     StartIndex = currentPtr,
                     EndIndex = endPtr
                 };
+
+                // "Terminal Stealing" Logic.
+                if (chains.Count > 0 && chainDef.Conditions.Count > 0)
+                {
+                    var prev = chains.Last();
+                    var first = chainDef.Conditions[0];
+
+                    bool isNakedGate = (first.Flag == "AndNext" || first.Flag == "OrNext" || first.Flag == "ResetNextIf")
+                                       && !first.Flag.Contains("Add") && !first.Flag.Contains("Sub");
+
+                    if (prev.Terminal == null && isNakedGate)
+                    {
+                        prev.Terminal = first;
+                        chainDef.Conditions.RemoveAt(0);
+
+                        if (chainDef.Conditions.Count == 0 || !chainDef.Conditions.Any(c => c.Flag.Contains("Add") || c.Flag.Contains("Sub")))
+                        {
+                            currentPtr = chainDef.StartIndex + 1;
+                            continue;
+                        }
+                    }
+                }
 
                 // Grouping Logic
                 if (chains.Count > 0)
@@ -115,7 +141,12 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                     if (!connectedByLogic && !isTransitionBoundary)
                     {
-                        if (!AreChainsStructureEqual(chains[referenceChainIndex].Conditions, chainDef.Conditions))
+                        // NEW: Allow "Array" matching where addresses differ but structure is identical
+                        // This prevents breaking the loop for 64 repeated logic blocks
+                        bool strictMatch = AreChainsStructureEqual(chains[referenceChainIndex], chainDef, false);
+                        bool arrayMatch = AreChainsStructureEqual(chains[referenceChainIndex], chainDef, true); // Ignore Addresses
+
+                        if (!strictMatch && !arrayMatch)
                             break;
                     }
                 }
@@ -205,31 +236,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                 var fromConditions = deltaChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
                 var toConditions = memChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
 
-                var fromBuilder = new StringBuilder();
-                for (int i = 0; i < deltaChains.Count; i++)
-                {
-                    var chain = deltaChains[i];
-                    if (i > 0)
-                    {
-                        var prev = deltaChains[i - 1];
-                        string conn = (prev.Terminal != null && prev.Terminal.Flag == "OrNext") ? " OR " : " AND ";
-                        fromBuilder.Append(conn);
-                    }
-                    fromBuilder.Append(FormatTerminalCondition(chain.Terminal, ctx, conditions));
-                }
-
-                var toBuilder = new StringBuilder();
-                for (int i = 0; i < memChains.Count; i++)
-                {
-                    var chain = memChains[i];
-                    if (i > 0)
-                    {
-                        var prev = memChains[i - 1];
-                        string conn = (prev.Terminal != null && prev.Terminal.Flag == "OrNext") ? " OR " : " AND ";
-                        toBuilder.Append(conn);
-                    }
-                    toBuilder.Append(FormatTerminalCondition(chain.Terminal, ctx, conditions));
-                }
+                // Collapse repetitive lists in the "from/to" strings
+                string fromText = BuildCondensedChainString(deltaChains, ctx, conditions);
+                string toText = BuildCondensedChainString(memChains, ctx, conditions);
 
                 var rawBlocks = PrepareDisplayBlocks(chains[0]);
                 var displayBlocks = DeduplicateBlocks(rawBlocks, ctx);
@@ -246,7 +255,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     else if (finalMemChain.Terminal.Flag == "Pause If") suffix = " (Pause If)";
                 }
 
-                result.Text = $"Sum of {displayBlocks.Count} items {expandToken} changes from ({fromBuilder}) to ({toBuilder}){suffix}";
+                result.Text = $"Sum of {displayBlocks.Count} items {expandToken} changes from ({fromText}) to ({toText}){suffix}";
                 result.Category = ExplanationCategory.Transition;
             }
             else
@@ -254,95 +263,163 @@ namespace RALogicEditor.Services.Explainer.Processors
                 var sb = new StringBuilder();
                 bool isTriggerStart = true;
 
-                for (int i = 0; i < chains.Count; i++)
+                int i = 0;
+                while (i < chains.Count)
                 {
-                    var chain = chains[i];
-                    var rawBlocks = PrepareDisplayBlocks(chain);
-                    var displayBlocks = DeduplicateBlocks(rawBlocks, ctx);
-
-                    string id = Guid.NewGuid().ToString("N");
-                    result.DetailedDrillDowns[id] = GenerateChainDetails(displayBlocks, ctx, chain.Terminal);
-                    string expandToken = $"[[EXPAND:{id}:{displayBlocks.Count}]]";
-
-                    string chainText = "";
-
-                    if (chain.Terminal != null)
+                    // Look ahead for structurally identical chains (Array detection)
+                    int rangeEnd = i;
+                    while (rangeEnd + 1 < chains.Count)
                     {
-                        var term = chain.Terminal;
-                        string noun = hasRecallContext ? recallContext : "items";
-
-                        if (term.Flag == "MeasuredIf")
-                        {
-                            string valText = ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
-                            string opText = ctx.GetOperatorText(term.Operator);
-                            chainText = $"Accumulator: sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText} (MeasuredIf)";
-                            result.Category = ExplanationCategory.MeasuredIf;
-                            isTriggerStart = false;
-                        }
-                        else if (term.Flag.StartsWith("Measured"))
-                        {
-                            bool isHitChain = chain.Conditions.Any(c => c.Flag.Contains("Hits")) || term.Flag.Contains("Hits");
-                            string label = isHitChain ? "hits" : "value";
-                            string valText = (term.RequiredHits > 0) ? term.RequiredHits.ToString() : ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
-
-                            if (hasRecallContext)
-                                chainText = $"Start measuring {recallContext} up to {valText}: {expandToken}";
-                            else
-                                chainText = $"Start measuring {label} up to {valText}: {expandToken}";
-
-                            isTriggerStart = false;
-                        }
+                        if (AreChainsStructureEqual(chains[i], chains[rangeEnd + 1], true)) // true = ignore addresses
+                            rangeEnd++;
                         else
+                            break;
+                    }
+
+                    int count = (rangeEnd - i) + 1;
+
+                    if (count > 3) // Threshold for collapsing
+                    {
+                        var chain = chains[i]; // Template
+                        string noun = hasRecallContext ? recallContext : "logic groups";
+
+                        string valText = "(varies)";
+                        if (chain.Terminal != null)
+                            valText = (chain.Terminal.RequiredHits > 0) ? chain.Terminal.RequiredHits.ToString() : ctx.FormatValue(chain.Terminal.RightOperand, conditions.IndexOf(chain.Terminal), chain.Terminal.LeftOperand.Value, chain.Terminal.LeftOperand.Size);
+
+                        string prefix = "";
+                        if (isTriggerStart)
                         {
-                            string valText = (term.RequiredHits > 0) ? term.RequiredHits.ToString() : ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
-                            string opText = ctx.GetOperatorText(term.Operator);
-
-                            string prefix = "";
-                            if (isTriggerStart)
-                            {
-                                if (term.Flag == "Pause If")
-                                {
-                                    prefix = (term.RequiredHits > 0) ? "Lock the achievement (PauseLock) when " : "Pause the achievement when ";
-                                    result.Category = ExplanationCategory.Pause;
-                                }
-                                else if (term.Flag == "Reset If")
-                                {
-                                    prefix = "Reset the achievement when ";
-                                    result.Category = ExplanationCategory.Reset;
-                                }
-                                else
-                                {
-                                    prefix = "Trigger when ";
-                                }
-                                isTriggerStart = false;
-                            }
-
-                            if (chain.Conditions.Any(c => c.Flag.Contains("Hits")))
-                            {
-                                if (hasRecallContext)
-                                    chainText = $"{prefix}{recallContext} decreasing occurs at least {valText} times: {expandToken}";
-                                else
-                                    chainText = $"{prefix}at least {valText} of the following occur: {expandToken}";
-                            }
-                            else
-                            {
-                                chainText = $"{prefix}sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
-                            }
+                            if (chain.Terminal != null && chain.Terminal.Flag == "Pause If") prefix = "Pause when ";
+                            else if (chain.Terminal != null && chain.Terminal.Flag == "Reset If") prefix = "Reset when ";
+                            else prefix = "Trigger when ";
+                            isTriggerStart = false;
                         }
 
-                        if (i < chains.Count - 1)
+                        // Generate details for the array
+                        var sbDetails = new StringBuilder();
+                        for (int k = i; k <= rangeEnd; k++)
                         {
-                            string conn = term.Flag == "OrNext" ? " OR " : " AND ";
-                            chainText += conn;
+                            var c = chains[k];
+                            // Generate simple explanation for this chain instance
+                            // We can use FormatTerminalCondition + maybe basic Accumulator info
+                            string instanceVal = (c.Terminal?.RequiredHits > 0) ? c.Terminal.RequiredHits.ToString() : ctx.FormatValue(c.Terminal?.RightOperand ?? new Operand(), 0);
+
+                            // Try to find distinguishing feature (the first Add Source/Hits usually)
+                            var firstAdd = c.Conditions.FirstOrDefault(cond => cond.Flag.Contains("Add") || cond.Flag.Contains("Sub"));
+                            string name = firstAdd != null ? ctx.GetName(firstAdd.LeftOperand, 0) : $"Item {k - i + 1}";
+
+                            sbDetails.AppendLine($"- {name} ... {instanceVal}");
                         }
+
+                        string id = Guid.NewGuid().ToString("N");
+                        result.DetailedDrillDowns[id] = sbDetails.ToString();
+                        string expandToken = $"[[EXPAND:{id}:{count} groups]]";
+
+                        string summary = $"{prefix}any of the following {count} {noun} match (at least {valText}): {expandToken}";
+                        sb.Append(summary);
+
+                        // If not last, add connection
+                        if (rangeEnd < chains.Count - 1)
+                        {
+                            string conn = chain.Terminal?.Flag == "OrNext" ? " OR " : " AND ";
+                            sb.Append(conn);
+                        }
+
+                        i = rangeEnd + 1;
                     }
                     else
                     {
-                        string noun = hasRecallContext ? recallContext : "Logic sequence";
-                        chainText = $"{noun} {expandToken} (Incomplete)";
-                    }
+                        // Process Single Chain (Standard Logic)
+                        var chain = chains[i];
+                        var rawBlocks = PrepareDisplayBlocks(chain);
+                        var displayBlocks = DeduplicateBlocks(rawBlocks, ctx);
 
-                    sb.Append(chainText);
+                        string id = Guid.NewGuid().ToString("N");
+                        result.DetailedDrillDowns[id] = GenerateChainDetails(displayBlocks, ctx, chain.Terminal);
+                        string expandToken = $"[[EXPAND:{id}:{displayBlocks.Count}]]";
+
+                        string chainText = "";
+
+                        if (chain.Terminal != null)
+                        {
+                            var term = chain.Terminal;
+                            string noun = hasRecallContext ? recallContext : "items";
+
+                            if (term.Flag == "MeasuredIf")
+                            {
+                                string valText = ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
+                                string opText = ctx.GetOperatorText(term.Operator);
+                                chainText = $"Accumulator: sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText} (MeasuredIf)";
+                                result.Category = ExplanationCategory.MeasuredIf;
+                                isTriggerStart = false;
+                            }
+                            else if (term.Flag.StartsWith("Measured"))
+                            {
+                                bool isHitChain = chain.Conditions.Any(c => c.Flag.Contains("Hits")) || term.Flag.Contains("Hits");
+                                string label = isHitChain ? "hits" : "value";
+                                string valText = (term.RequiredHits > 0) ? term.RequiredHits.ToString() : ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
+
+                                if (hasRecallContext)
+                                    chainText = $"Start measuring {recallContext} up to {valText}: {expandToken}";
+                                else
+                                    chainText = $"Start measuring {label} up to {valText}: {expandToken}";
+
+                                isTriggerStart = false;
+                            }
+                            else
+                            {
+                                string valText = (term.RequiredHits > 0) ? term.RequiredHits.ToString() : ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
+                                string opText = ctx.GetOperatorText(term.Operator);
+
+                                string prefix = "";
+                                if (isTriggerStart)
+                                {
+                                    if (term.Flag == "Pause If")
+                                    {
+                                        prefix = (term.RequiredHits > 0) ? "Lock the achievement (PauseLock) when " : "Pause the achievement when ";
+                                        result.Category = ExplanationCategory.Pause;
+                                    }
+                                    else if (term.Flag == "Reset If")
+                                    {
+                                        prefix = "Reset the achievement when ";
+                                        result.Category = ExplanationCategory.Reset;
+                                    }
+                                    else
+                                    {
+                                        prefix = "Trigger when ";
+                                    }
+                                    isTriggerStart = false;
+                                }
+
+                                if (chain.Conditions.Any(c => c.Flag.Contains("Hits")))
+                                {
+                                    if (hasRecallContext)
+                                        chainText = $"{prefix}{recallContext} decreasing occurs at least {valText} times: {expandToken}";
+                                    else
+                                        chainText = $"{prefix}at least {valText} of the following occur: {expandToken}";
+                                }
+                                else
+                                {
+                                    chainText = $"{prefix}sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
+                                }
+                            }
+
+                            if (i < chains.Count - 1)
+                            {
+                                string conn = term.Flag == "OrNext" ? " OR " : " AND ";
+                                chainText += conn;
+                            }
+                        }
+                        else
+                        {
+                            string noun = hasRecallContext ? recallContext : "Logic sequence";
+                            chainText = $"{noun} {expandToken} (Incomplete)";
+                        }
+
+                        sb.Append(chainText);
+                        i++;
+                    }
                 }
 
                 result.Text = sb.ToString();
@@ -361,11 +438,55 @@ namespace RALogicEditor.Services.Explainer.Processors
             return result;
         }
 
+        private string BuildCondensedChainString(List<AccumulatorChainDef> chains, ExplanationContext ctx, List<AchievementCondition> conditions)
+        {
+            var sb = new StringBuilder();
+            int i = 0;
+            while (i < chains.Count)
+            {
+                // Collapse identical terminals logic
+                int rangeEnd = i;
+                while (rangeEnd + 1 < chains.Count)
+                {
+                    // Strict match here because we are in Transition mode logic which expects specific values
+                    // However, if the transition involves an array of 64 items...
+                    // The visual output for "Do Not Break" example shows explicitly "(0x2 OR 0x1)".
+                    // So we only collapse if STRICTLY identical.
+                    if (AreChainsStructureEqual(chains[i], chains[rangeEnd + 1], false))
+                        rangeEnd++;
+                    else
+                        break;
+                }
+
+                if (i > 0)
+                {
+                    var prev = chains[i - 1];
+                    string conn = (prev.Terminal != null && prev.Terminal.Flag == "OrNext") ? " OR " : " AND ";
+                    sb.Append(conn);
+                }
+
+                string termText = FormatTerminalCondition(chains[i].Terminal, ctx, conditions);
+                sb.Append(termText);
+
+                if (rangeEnd > i)
+                {
+                    sb.Append($" (x{rangeEnd - i + 1})");
+                    i = rangeEnd + 1;
+                }
+                else
+                {
+                    i++;
+                }
+            }
+            return sb.ToString();
+        }
+
         private List<AchievementCondition> ExtractChain(List<AchievementCondition> conditions, int start, out int endPtr)
         {
             var chain = new List<AchievementCondition>();
             int ptr = start;
             var buffer = new List<AchievementCondition>();
+            bool hasAccumulator = false;
 
             while (ptr < conditions.Count)
             {
@@ -377,10 +498,12 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 else if (c.Flag == "AndNext" || c.Flag == "OrNext" || c.Flag == "ResetNextIf")
                 {
+                    if (hasAccumulator) break;
                     buffer.Add(c);
                 }
                 else if (c.Flag.Contains("Add") || c.Flag.Contains("Sub"))
                 {
+                    hasAccumulator = true;
                     chain.AddRange(buffer);
                     buffer.Clear();
                     chain.Add(c);
@@ -415,9 +538,6 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (chain.Terminal != null)
             {
-                // Check for Dummy Terminal (Value X = Value Y)
-                // If the terminal is just holding the hit count/limit and is logically dummy (0=1, 0=0),
-                // we exclude it from the visualization blocks so it doesn't show up as "- 0x0"
                 bool isDummyTerminal = chain.Terminal.LeftOperand.Type == "Value" &&
                                        chain.Terminal.RightOperand.Type == "Value";
 
@@ -436,7 +556,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             return blocks;
         }
 
-        // Helper to deduplicate identical variable blocks
         private List<List<AchievementCondition>> DeduplicateBlocks(List<List<AchievementCondition>> blocks, ExplanationContext ctx)
         {
             var unique = new List<List<AchievementCondition>>();
@@ -448,7 +567,6 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                 var leaf = block.Last();
 
-                // Bypass deduplication for Recall logic to ensure all steps are shown
                 if (leaf.LeftOperand.Type == "Recall")
                 {
                     unique.Add(block);
@@ -509,45 +627,63 @@ namespace RALogicEditor.Services.Explainer.Processors
         }
 
         private bool IsChainDelta(List<AchievementCondition> chain) =>
-            chain.Any(c => c.LeftOperand.Type == "Delta" || c.LeftOperand.Type == "Prior");
+            chain.Where(c => c.Flag != "Add Address")
+                 .Any(c => c.LeftOperand.Type == "Delta" || c.LeftOperand.Type == "Prior");
 
-        private bool AreChainsStructureEqual(List<AchievementCondition> chain1, List<AchievementCondition> chain2)
+        private bool AreChainsStructureEqual(AccumulatorChainDef c1, AccumulatorChainDef c2, bool ignoreAddresses)
         {
+            // Check Terminal consistency first
+            if ((c1.Terminal == null) != (c2.Terminal == null)) return false;
+            if (c1.Terminal != null && c2.Terminal != null)
+            {
+                if (c1.Terminal.Flag != c2.Terminal.Flag) return false;
+                if (c1.Terminal.Operator != c2.Terminal.Operator) return false;
+                if (!AreValuesEqual(c1.Terminal.RightOperand.Value, c2.Terminal.RightOperand.Value, false)) return false; // Terminals must usually match value (e.g. 5 vs 6 hits)
+            }
+
+            var chain1 = c1.Conditions;
+            var chain2 = c2.Conditions;
+
             if (chain1.Count != chain2.Count) return false;
             for (int i = 0; i < chain1.Count; i++)
             {
-                var c1 = chain1[i]; var c2 = chain2[i];
-                if (c1.Flag != c2.Flag) return false;
-                if (!AreValuesEqual(c1.LeftOperand.Value, c2.LeftOperand.Value)) return false;
+                var cond1 = chain1[i]; var cond2 = chain2[i];
+                if (cond1.Flag != cond2.Flag) return false;
 
-                if (c1.LeftOperand.Type != c2.LeftOperand.Type && c1.Flag == "Add Address") return false;
+                if (!AreValuesEqual(cond1.LeftOperand.Value, cond2.LeftOperand.Value, ignoreAddresses)) return false;
 
-                if (c1.LeftOperand.Size != c2.LeftOperand.Size) return false;
-                if (c1.Operator != c2.Operator) return false;
+                if (cond1.LeftOperand.Type != cond2.LeftOperand.Type && cond1.Flag == "Add Address") return false;
 
-                bool c1IsMemLike = IsMemLike(c1.LeftOperand.Type);
-                bool c2IsMemLike = IsMemLike(c2.LeftOperand.Type);
+                if (cond1.LeftOperand.Size != cond2.LeftOperand.Size) return false;
+                if (cond1.Operator != cond2.Operator) return false;
+
+                bool c1IsMemLike = IsMemLike(cond1.LeftOperand.Type);
+                bool c2IsMemLike = IsMemLike(cond2.LeftOperand.Type);
                 if (c1IsMemLike != c2IsMemLike) return false;
 
-                bool c1RightIsVal = c1.RightOperand.Type == "Value" || c1.RightOperand.Type == "Float" || string.IsNullOrEmpty(c1.RightOperand.Type);
-                bool c2RightIsVal = c2.RightOperand.Type == "Value" || c2.RightOperand.Type == "Float" || string.IsNullOrEmpty(c2.RightOperand.Type);
+                bool c1RightIsVal = cond1.RightOperand.Type == "Value" || cond1.RightOperand.Type == "Float" || string.IsNullOrEmpty(cond1.RightOperand.Type);
+                bool c2RightIsVal = cond2.RightOperand.Type == "Value" || cond2.RightOperand.Type == "Float" || string.IsNullOrEmpty(cond2.RightOperand.Type);
 
                 if (c1RightIsVal && c2RightIsVal)
                 {
-                    if (!AreValuesEqual(c1.RightOperand.Value, c2.RightOperand.Value)) return false;
+                    if (!AreValuesEqual(cond1.RightOperand.Value, cond2.RightOperand.Value, false)) return false; // Right side constants usually must match
                 }
                 else
                 {
-                    if (c1.RightOperand.Type != c2.RightOperand.Type) return false;
-                    if (!AreValuesEqual(c1.RightOperand.Value, c2.RightOperand.Value)) return false;
+                    if (cond1.RightOperand.Type != cond2.RightOperand.Type) return false;
+                    if (!AreValuesEqual(cond1.RightOperand.Value, cond2.RightOperand.Value, ignoreAddresses)) return false;
                 }
             }
             return true;
         }
 
-        private bool AreValuesEqual(string v1, string v2)
+        private bool AreValuesEqual(string v1, string v2, bool ignoreAddresses)
         {
             if (v1 == v2) return true;
+
+            // If checking array-compatibility, ignore actual hex values for Memory fields
+            if (ignoreAddresses) return true;
+
             string clean1 = string.IsNullOrEmpty(v1) ? "0" : v1.Trim().Replace("0x", "");
             string clean2 = string.IsNullOrEmpty(v2) ? "0" : v2.Trim().Replace("0x", "");
             if (long.TryParse(clean1, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long l1) &&
