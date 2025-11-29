@@ -1,6 +1,6 @@
 ﻿using RALogicEditor.Definitions;
 using RALogicEditor.Models;
-using RALogicEditor.Services.Explainer; // Added missing reference
+using RALogicEditor.Services.Explainer;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -18,8 +18,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             var cond = conditions[index];
 
             // 0. Failsafe: Hide "Add Address" lines
-            // These should normally be caught by PointerCleanupProcessor (Priority 5),
-            // but if they fall through, we must silence them here to prevent verbose pointer dumps.
             if (cond.Flag == "Add Address")
             {
                 return new ProcessorResult { Text = "", Category = ExplanationCategory.Context };
@@ -57,7 +55,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
 
             // 4. Standard Processing
-            // Pass contextSize to GetOperandText for Right Operand
             string left = ctx.GetOperandText(cond.LeftOperand, index);
             string right = ctx.GetOperandText(cond.RightOperand, index, true, cond.LeftOperand.Value, cond.LeftOperand.Size);
             string op = ctx.GetOperatorText(cond.Operator);

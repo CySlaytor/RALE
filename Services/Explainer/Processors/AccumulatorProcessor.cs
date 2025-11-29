@@ -1,5 +1,4 @@
-﻿// - AccumulatorProcessor.cs -
-using RALogicEditor.Definitions;
+﻿using RALogicEditor.Definitions;
 using RALogicEditor.Models;
 using System;
 using System.Collections.Generic;
@@ -12,6 +11,7 @@ namespace RALogicEditor.Services.Explainer.Processors
 {
     public class AccumulatorProcessor : ILogicProcessor
     {
+        // Priority MUST be higher (lower value) than PointerCleanupProcessor (5).
         public int Priority => 3;
 
         // Definition for internal chain tracking
@@ -25,21 +25,39 @@ namespace RALogicEditor.Services.Explainer.Processors
 
         public bool CanProcess(List<AchievementCondition> conditions, int currentIndex)
         {
-            // Look ahead to see if this chain eventually feeds into an Accumulator
-            int scan = currentIndex;
-            while (scan < conditions.Count)
+            var cond = conditions[currentIndex];
+
+            // 1. Direct Accumulator Start
+            bool isAccumulatorStart = cond.Flag == "Add Source" || cond.Flag == "Sub Source" ||
+                                      cond.Flag == "Add Hits" || cond.Flag == "Sub Hits";
+
+            if (isAccumulatorStart) return true;
+
+            // 2. Logic Chain Start (Add Address / AndNext / OrNext / ResetNextIf)
+            bool isPotentialLead = cond.Flag == "Add Address" ||
+                                   cond.Flag == "AndNext" ||
+                                   cond.Flag == "OrNext" ||
+                                   cond.Flag == "ResetNextIf";
+
+            if (isPotentialLead)
             {
-                string f = conditions[scan].Flag;
+                int scan = currentIndex + 1;
+                while (scan < conditions.Count)
+                {
+                    string f = conditions[scan].Flag;
 
-                // If we hit an explicit Accumulator flag, we can process this block
-                if (f.Contains("Add") || f.Contains("Sub")) return true;
+                    if (f == "Add Address" || f == "AndNext" || f == "OrNext" || f == "ResetNextIf")
+                    {
+                        scan++;
+                        continue;
+                    }
 
-                // If we hit a non-chaining flag (Pause, Reset, Trigger, Measured), we can't process it as an accumulator
-                // Exception: AddAddress is part of the chain logic
-                if (f != "AndNext" && f != "OrNext" && f != "ResetNextIf" && f != "Add Address")
-                    return false;
-
-                scan++;
+                    if (f.Contains("Add") || f.Contains("Sub"))
+                    {
+                        return true;
+                    }
+                    break;
+                }
             }
             return false;
         }
@@ -47,18 +65,18 @@ namespace RALogicEditor.Services.Explainer.Processors
         public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int index)
         {
             var result = new ProcessorResult { Category = ExplanationCategory.Complex };
+
+            // 1. Collect all consecutive accumulator chains
             var chains = new List<AccumulatorChainDef>();
             int currentPtr = index;
+            int referenceChainIndex = 0;
 
             while (currentPtr < conditions.Count)
             {
                 var conditionsInChain = ExtractChain(conditions, currentPtr, out int endPtr);
 
-                // If ExtractChain returned nothing, or we hit a wall, stop.
                 if (conditionsInChain.Count == 0) break;
 
-                // Validation: A valid accumulator unit MUST contain at least one Add/Sub flag
-                // Otherwise we just extracted a random AndNext chain that belongs to a Trigger.
                 bool hasAccumulatorAction = conditionsInChain.Any(c => c.Flag.Contains("Add") || c.Flag.Contains("Sub"));
                 if (!hasAccumulatorAction) break;
 
@@ -73,11 +91,34 @@ namespace RALogicEditor.Services.Explainer.Processors
                     EndIndex = endPtr
                 };
 
-                // Structure check for array grouping
+                // Grouping Logic
                 if (chains.Count > 0)
                 {
-                    if (!AreChainsStructureEqual(chains[0].Conditions, chainDef.Conditions))
-                        break;
+                    var prevChain = chains.Last();
+                    bool connectedByLogic = prevChain.Terminal != null &&
+                                            (prevChain.Terminal.Flag == "AndNext" || prevChain.Terminal.Flag == "OrNext");
+
+                    bool isTransitionBoundary = false;
+
+                    // Transition Check: Delta -> Mem
+                    if (!connectedByLogic)
+                    {
+                        bool prevIsDelta = IsChainDelta(prevChain.Conditions);
+                        bool currIsDelta = IsChainDelta(chainDef.Conditions);
+
+                        if (prevIsDelta && !currIsDelta)
+                        {
+                            isTransitionBoundary = true;
+                            referenceChainIndex = chains.Count;
+                        }
+                    }
+
+                    if (!connectedByLogic && !isTransitionBoundary)
+                    {
+                        // Enforce structure match against the current reference
+                        if (!AreChainsStructureEqual(chains[referenceChainIndex].Conditions, chainDef.Conditions))
+                            break;
+                    }
                 }
 
                 chains.Add(chainDef);
@@ -192,7 +233,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                     toBuilder.Append(FormatTerminalCondition(chain.Terminal, ctx, conditions));
                 }
 
-                var displayBlocks = PrepareDisplayBlocks(chains[0]);
+                var rawBlocks = PrepareDisplayBlocks(chains[0]);
+                // Deduplicate blocks to prevent showing the same variable twice (e.g. A=1 OR A=2)
+                var displayBlocks = DeduplicateBlocks(rawBlocks, ctx);
 
                 string id = Guid.NewGuid().ToString("N");
                 result.DetailedDrillDowns[id] = GenerateChainDetails(displayBlocks, ctx, chains[0].Terminal);
@@ -217,7 +260,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                 for (int i = 0; i < chains.Count; i++)
                 {
                     var chain = chains[i];
-                    var displayBlocks = PrepareDisplayBlocks(chain);
+                    var rawBlocks = PrepareDisplayBlocks(chain);
+                    // Deduplicate here as well for standard accumulators
+                    var displayBlocks = DeduplicateBlocks(rawBlocks, ctx);
 
                     string id = Guid.NewGuid().ToString("N");
                     result.DetailedDrillDowns[id] = GenerateChainDetails(displayBlocks, ctx, chain.Terminal);
@@ -350,10 +395,8 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 ptr++;
             }
+            chain.AddRange(buffer);
             endPtr = ptr;
-            ptr -= buffer.Count;
-            endPtr = ptr;
-
             return chain;
         }
 
@@ -365,7 +408,8 @@ namespace RALogicEditor.Services.Explainer.Processors
             foreach (var c in chain.Conditions)
             {
                 currentBlock.Add(c);
-                if (c.Flag.Contains("Add") || c.Flag.Contains("Sub"))
+                if (c.Flag == "Add Source" || c.Flag == "Sub Source" ||
+                    c.Flag == "Add Hits" || c.Flag == "Sub Hits")
                 {
                     blocks.Add(new List<AchievementCondition>(currentBlock));
                     currentBlock.Clear();
@@ -387,6 +431,32 @@ namespace RALogicEditor.Services.Explainer.Processors
             return blocks;
         }
 
+        // Helper to deduplicate identical variable blocks (e.g. same variable checked against different values in OR chain)
+        private List<List<AchievementCondition>> DeduplicateBlocks(List<List<AchievementCondition>> blocks, ExplanationContext ctx)
+        {
+            var unique = new List<List<AchievementCondition>>();
+            var seenSignatures = new HashSet<string>();
+
+            foreach (var block in blocks)
+            {
+                if (block.Count == 0) continue;
+
+                // The variable of interest is usually the leaf of the pointer chain (the last item)
+                var leaf = block.Last();
+
+                // Get the display name of the variable. This handles pointers resolution.
+                // We use the index relative to the main group conditions list.
+                int index = ctx.Group.Conditions.IndexOf(leaf);
+                string signature = ctx.GetName(leaf.LeftOperand, index, false);
+
+                if (seenSignatures.Add(signature))
+                {
+                    unique.Add(block);
+                }
+            }
+            return unique;
+        }
+
         private string GenerateChainDetails(List<List<AchievementCondition>> blocks, ExplanationContext ctx, AchievementCondition? terminal)
         {
             var sbChain = new StringBuilder();
@@ -406,18 +476,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
             }
             return sbChain.ToString().TrimEnd();
-        }
-
-        private List<string> ExplainBlock(List<AchievementCondition> block, ExplanationContext ctx, AchievementCondition? terminal)
-        {
-            var lines = new List<string>();
-            foreach (var c in block)
-            {
-                if (c.Flag == "Add Address") continue;
-                bool isTerm = (terminal != null && c == terminal);
-                lines.Add(ExplainSingleCondition(c, ctx, ctx.Group.Conditions.IndexOf(c), true, true, isTerm));
-            }
-            return lines;
         }
 
         private string ExplainSingleCondition(AchievementCondition cond, ExplanationContext ctx, int index, bool suppressHits, bool suppressPointers, bool isTerminalItem)
@@ -485,7 +543,9 @@ namespace RALogicEditor.Services.Explainer.Processors
             string clean2 = string.IsNullOrEmpty(v2) ? "0" : v2.Trim().Replace("0x", "");
             if (long.TryParse(clean1, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long l1) &&
                 long.TryParse(clean2, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long l2))
+            {
                 return l1 == l2;
+            }
             return clean1.Equals(clean2, StringComparison.OrdinalIgnoreCase);
         }
 
