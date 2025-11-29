@@ -141,13 +141,25 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                     if (!connectedByLogic && !isTransitionBoundary)
                     {
-                        // NEW: Allow "Array" matching where addresses differ but structure is identical
-                        // This prevents breaking the loop for 64 repeated logic blocks
-                        bool strictMatch = AreChainsStructureEqual(chains[referenceChainIndex], chainDef, false);
-                        bool arrayMatch = AreChainsStructureEqual(chains[referenceChainIndex], chainDef, true); // Ignore Addresses
+                        bool prevIsDelta = IsChainDelta(prevChain.Conditions);
+                        bool currIsDelta = IsChainDelta(chainDef.Conditions);
 
-                        if (!strictMatch && !arrayMatch)
-                            break;
+                        // IMPROVEMENT: Allow grouping delta constraints on strictly same variable (Same Body, Different Terminal)
+                        // This fixes the issue where "Sum > 0" and "Sum <= 6" were split into separate lines.
+                        // We check if bodies are identical (ignoreTerminal: true), and strict addresses (ignoreAddresses: false).
+                        if (prevIsDelta && currIsDelta && AreChainsStructureEqual(chains[referenceChainIndex], chainDef, ignoreAddresses: false, ignoreTerminal: true))
+                        {
+                            // Grouping allowed
+                        }
+                        else
+                        {
+                            // Fallback to standard grouping (Strict Match or Array Match)
+                            bool strictMatch = AreChainsStructureEqual(chains[referenceChainIndex], chainDef, false, false);
+                            bool arrayMatch = AreChainsStructureEqual(chains[referenceChainIndex], chainDef, true, false); // Ignore Addresses
+
+                            if (!strictMatch && !arrayMatch)
+                                break;
+                        }
                     }
                 }
 
@@ -270,7 +282,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     int rangeEnd = i;
                     while (rangeEnd + 1 < chains.Count)
                     {
-                        if (AreChainsStructureEqual(chains[i], chains[rangeEnd + 1], true)) // true = ignore addresses
+                        if (AreChainsStructureEqual(chains[i], chains[rangeEnd + 1], true, false)) // true = ignore addresses
                             rangeEnd++;
                         else
                             break;
@@ -449,10 +461,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                 while (rangeEnd + 1 < chains.Count)
                 {
                     // Strict match here because we are in Transition mode logic which expects specific values
-                    // However, if the transition involves an array of 64 items...
-                    // The visual output for "Do Not Break" example shows explicitly "(0x2 OR 0x1)".
-                    // So we only collapse if STRICTLY identical.
-                    if (AreChainsStructureEqual(chains[i], chains[rangeEnd + 1], false))
+                    if (AreChainsStructureEqual(chains[i], chains[rangeEnd + 1], false, false))
                         rangeEnd++;
                     else
                         break;
@@ -630,15 +639,18 @@ namespace RALogicEditor.Services.Explainer.Processors
             chain.Where(c => c.Flag != "Add Address")
                  .Any(c => c.LeftOperand.Type == "Delta" || c.LeftOperand.Type == "Prior");
 
-        private bool AreChainsStructureEqual(AccumulatorChainDef c1, AccumulatorChainDef c2, bool ignoreAddresses)
+        private bool AreChainsStructureEqual(AccumulatorChainDef c1, AccumulatorChainDef c2, bool ignoreAddresses, bool ignoreTerminal)
         {
-            // Check Terminal consistency first
-            if ((c1.Terminal == null) != (c2.Terminal == null)) return false;
-            if (c1.Terminal != null && c2.Terminal != null)
+            if (!ignoreTerminal)
             {
-                if (c1.Terminal.Flag != c2.Terminal.Flag) return false;
-                if (c1.Terminal.Operator != c2.Terminal.Operator) return false;
-                if (!AreValuesEqual(c1.Terminal.RightOperand.Value, c2.Terminal.RightOperand.Value, false)) return false; // Terminals must usually match value (e.g. 5 vs 6 hits)
+                // Check Terminal consistency first
+                if ((c1.Terminal == null) != (c2.Terminal == null)) return false;
+                if (c1.Terminal != null && c2.Terminal != null)
+                {
+                    if (c1.Terminal.Flag != c2.Terminal.Flag) return false;
+                    if (c1.Terminal.Operator != c2.Terminal.Operator) return false;
+                    if (!AreValuesEqual(c1.Terminal.RightOperand.Value, c2.Terminal.RightOperand.Value, false)) return false; // Terminals must usually match value (e.g. 5 vs 6 hits)
+                }
             }
 
             var chain1 = c1.Conditions;
