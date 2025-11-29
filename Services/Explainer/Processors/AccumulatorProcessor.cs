@@ -115,7 +115,6 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                     if (!connectedByLogic && !isTransitionBoundary)
                     {
-                        // Enforce structure match against the current reference
                         if (!AreChainsStructureEqual(chains[referenceChainIndex].Conditions, chainDef.Conditions))
                             break;
                     }
@@ -132,7 +131,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 else
                 {
-                    // Check implicit connectivity
                     int nextIndex = endPtr + 1;
                     if (nextIndex > currentPtr && nextIndex < conditions.Count && CanProcess(conditions, nextIndex))
                     {
@@ -234,7 +232,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
 
                 var rawBlocks = PrepareDisplayBlocks(chains[0]);
-                // Deduplicate blocks to prevent showing the same variable twice (e.g. A=1 OR A=2)
                 var displayBlocks = DeduplicateBlocks(rawBlocks, ctx);
 
                 string id = Guid.NewGuid().ToString("N");
@@ -261,7 +258,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                 {
                     var chain = chains[i];
                     var rawBlocks = PrepareDisplayBlocks(chain);
-                    // Deduplicate here as well for standard accumulators
                     var displayBlocks = DeduplicateBlocks(rawBlocks, ctx);
 
                     string id = Guid.NewGuid().ToString("N");
@@ -419,19 +415,28 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (chain.Terminal != null)
             {
-                if (blocks.Count > 0 && blocks.Last().All(c => c.Flag == "Add Address"))
+                // Check for Dummy Terminal (Value X = Value Y)
+                // If the terminal is just holding the hit count/limit and is logically dummy (0=1, 0=0),
+                // we exclude it from the visualization blocks so it doesn't show up as "- 0x0"
+                bool isDummyTerminal = chain.Terminal.LeftOperand.Type == "Value" &&
+                                       chain.Terminal.RightOperand.Type == "Value";
+
+                if (!isDummyTerminal)
                 {
-                    blocks.Last().Add(chain.Terminal);
-                }
-                else
-                {
-                    blocks.Add(new List<AchievementCondition> { chain.Terminal });
+                    if (blocks.Count > 0 && blocks.Last().All(c => c.Flag == "Add Address"))
+                    {
+                        blocks.Last().Add(chain.Terminal);
+                    }
+                    else
+                    {
+                        blocks.Add(new List<AchievementCondition> { chain.Terminal });
+                    }
                 }
             }
             return blocks;
         }
 
-        // Helper to deduplicate identical variable blocks (e.g. same variable checked against different values in OR chain)
+        // Helper to deduplicate identical variable blocks
         private List<List<AchievementCondition>> DeduplicateBlocks(List<List<AchievementCondition>> blocks, ExplanationContext ctx)
         {
             var unique = new List<List<AchievementCondition>>();
@@ -441,11 +446,15 @@ namespace RALogicEditor.Services.Explainer.Processors
             {
                 if (block.Count == 0) continue;
 
-                // The variable of interest is usually the leaf of the pointer chain (the last item)
                 var leaf = block.Last();
 
-                // Get the display name of the variable. This handles pointers resolution.
-                // We use the index relative to the main group conditions list.
+                // Bypass deduplication for Recall logic to ensure all steps are shown
+                if (leaf.LeftOperand.Type == "Recall")
+                {
+                    unique.Add(block);
+                    continue;
+                }
+
                 int index = ctx.Group.Conditions.IndexOf(leaf);
                 string signature = ctx.GetName(leaf.LeftOperand, index, false);
 
