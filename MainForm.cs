@@ -1548,10 +1548,13 @@ namespace RALogicEditor
         private void UpdateRecentMenu()
         {
             recentToolStripMenuItem.DropDownItems.Clear();
-            foreach (var file in _recentFiles.Files)
+            foreach (var entry in _recentFiles.Files)
             {
-                var item = new ToolStripMenuItem(file);
-                item.Click += (s, args) => LoadFiles(file);
+                string text = string.IsNullOrEmpty(entry.GameTitle) ? entry.Path : $"{entry.GameTitle} | {entry.Path}";
+                // Use the entry.Path for the click event
+                var item = new ToolStripMenuItem(text);
+                string path = entry.Path;
+                item.Click += (s, args) => LoadFiles(path);
                 recentToolStripMenuItem.DropDownItems.Add(item);
             }
         }
