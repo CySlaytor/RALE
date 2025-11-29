@@ -103,6 +103,29 @@ namespace RALogicEditor.Helpers
                 HandleAddressSelection(_grid.CurrentCell.RowIndex, _grid.CurrentCell.ColumnIndex);
                 e.Handled = true;
             }
+
+            // QoL: Ctrl+A to Select All
+            if (e.Control && e.KeyCode == Keys.A)
+            {
+                _grid.SelectAll();
+                e.Handled = true;
+                return;
+            }
+
+            // QoL: Alt+Up/Down for moving rows (Mirrors Context Menu)
+            if (e.Alt && e.KeyCode == Keys.Up)
+            {
+                MoveSelected(-1);
+                e.Handled = true;
+                return;
+            }
+            if (e.Alt && e.KeyCode == Keys.Down)
+            {
+                MoveSelected(1);
+                e.Handled = true;
+                return;
+            }
+
             // Prevent modification in ReadOnly mode, but allow Copy
             if (_grid.ReadOnly && e.KeyCode != Keys.C) { if (e.KeyCode == Keys.Delete || e.KeyCode == Keys.V) { e.Handled = true; return; } }
 
@@ -122,7 +145,13 @@ namespace RALogicEditor.Helpers
             if (e.Button == MouseButtons.Right && e.RowIndex >= 0 && e.ColumnIndex >= 0)
             {
                 // Ensure the row is selected on right-click
-                if (!_grid.Rows[e.RowIndex].Selected) { _grid.ClearSelection(); _grid.Rows[e.RowIndex].Selected = true; }
+                // Only clear selection if the target row is NOT already part of the selection
+                if (!_grid.Rows[e.RowIndex].Selected)
+                {
+                    _grid.ClearSelection();
+                    _grid.Rows[e.RowIndex].Selected = true;
+                }
+
                 if (_grid.ReadOnly) return;
 
                 var colName = _grid.Columns[e.ColumnIndex].Name;
@@ -459,27 +488,62 @@ namespace RALogicEditor.Helpers
         }
 
         // Restores selection based on Model Tags
+        // FIXED: Sets CurrentCell BEFORE selecting rows to prevent selection clear
         private void RestoreSelection(List<AchievementCondition> selectedConditions)
         {
             if (selectedConditions == null || selectedConditions.Count == 0) return;
 
-            _grid.ClearSelection();
             var set = new HashSet<AchievementCondition>(selectedConditions);
             int firstFoundIndex = -1;
+            var rowsToSelect = new List<int>();
 
+            // Identify rows to select
             foreach (DataGridViewRow row in _grid.Rows)
             {
                 if (row.Tag is AchievementCondition cond && set.Contains(cond))
                 {
-                    row.Selected = true;
+                    rowsToSelect.Add(row.Index);
                     if (firstFoundIndex == -1) firstFoundIndex = row.Index;
                 }
             }
 
+            if (rowsToSelect.Count == 0) return;
+
+            // 1. Set CurrentCell (Focus) FIRST to prevent it from clearing selection later
             if (firstFoundIndex >= 0 && firstFoundIndex < _grid.Rows.Count)
             {
-                _grid.CurrentCell = _grid.Rows[firstFoundIndex].Cells[0];
-                _grid.FirstDisplayedScrollingRowIndex = Math.Max(0, firstFoundIndex - 5);
+                try
+                {
+                    // Only change if not already in selection to prevent jumping focus
+                    if (_grid.CurrentCell == null || !rowsToSelect.Contains(_grid.CurrentCell.RowIndex))
+                        _grid.CurrentCell = _grid.Rows[firstFoundIndex].Cells[0];
+                }
+                catch { }
+            }
+
+            // 2. Clear and Re-apply Selection
+            _grid.ClearSelection();
+            foreach (int idx in rowsToSelect)
+            {
+                if (idx < _grid.Rows.Count)
+                    _grid.Rows[idx].Selected = true;
+            }
+
+            // 3. Ensure Visibility (Smart Scroll)
+            if (firstFoundIndex >= 0)
+            {
+                int firstVisible = _grid.FirstDisplayedScrollingRowIndex;
+                int displayed = _grid.DisplayedRowCount(false);
+
+                // Only scroll if out of view to avoid jitter
+                if (firstFoundIndex < firstVisible || firstFoundIndex >= firstVisible + displayed)
+                {
+                    try
+                    {
+                        _grid.FirstDisplayedScrollingRowIndex = Math.Max(0, firstFoundIndex - 2);
+                    }
+                    catch { }
+                }
             }
         }
 
@@ -575,27 +639,95 @@ namespace RALogicEditor.Helpers
             StatusUpdateRequested?.Invoke(this, "Conditions deleted.");
         }
 
-        public void MoveSelected(int dist)
+        public void MoveSelected(int direction)
         {
             if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
+            if (direction == 0) return;
 
-            // Use GetEffectiveSelection to move hidden chains along with leafs
-            var selectedConds = GetEffectiveSelection();
-            if (selectedConds.Count == 0) return;
+            var selectedConditions = GetEffectiveSelection();
+            if (selectedConditions.Count == 0) return;
 
-            var indices = selectedConds.Select(c => group.Conditions.IndexOf(c)).OrderBy(i => i).ToList();
+            // Strategy: Reorder the list of conditions
+            // 1. Extract all conditions into a list of "Moveable Units".
+            //    If CollapseChains is ON: A Unit is a full Pointer Chain (AddAddress...Leaf).
+            //    If CollapseChains is OFF: A Unit is a single Condition.
 
-            if (dist < 0 && indices.Min() == 0) return;
-            if (dist > 0 && indices.Max() == group.Conditions.Count - 1) return;
+            var units = new List<List<AchievementCondition>>();
 
-            if (dist > 0) indices.Reverse();
+            if (CollapseChains)
+            {
+                var currentUnit = new List<AchievementCondition>();
+                foreach (var cond in group.Conditions)
+                {
+                    currentUnit.Add(cond);
+                    // A unit ends if it's NOT an AddAddress (it's a leaf/logic gate/etc)
+                    // OR if it's the last item
+                    if (cond.Flag != "Add Address")
+                    {
+                        units.Add(new List<AchievementCondition>(currentUnit));
+                        currentUnit.Clear();
+                    }
+                }
+                // Handle trailing AddAddress (incomplete chain)
+                if (currentUnit.Count > 0) units.Add(currentUnit);
+            }
+            else
+            {
+                // Each condition is a unit
+                foreach (var cond in group.Conditions) units.Add(new List<AchievementCondition> { cond });
+            }
 
-            foreach (var idx in indices) { var item = group.Conditions[idx]; group.Conditions.RemoveAt(idx); group.Conditions.Insert(idx + dist, item); }
+            // 2. Identify which Units are selected
+            // A unit is selected if ANY of its conditions are in 'selectedConditions'
+            var selectedUnitsIndices = new HashSet<int>();
+            var selectedSet = new HashSet<AchievementCondition>(selectedConditions);
 
-            // Updated to use ConditionGridRenderer
+            for (int i = 0; i < units.Count; i++)
+            {
+                if (units[i].Any(c => selectedSet.Contains(c)))
+                    selectedUnitsIndices.Add(i);
+            }
+
+            // 3. Perform Move on Units
+            var sortedIndices = selectedUnitsIndices.OrderBy(i => i).ToList();
+
+            // Bounds check
+            if (direction < 0 && sortedIndices.Min() == 0) return; // Top
+            if (direction > 0 && sortedIndices.Max() == units.Count - 1) return; // Bottom
+
+            var newUnits = new List<List<AchievementCondition>>(units);
+
+            if (direction < 0) // Up
+            {
+                foreach (var idx in sortedIndices)
+                {
+                    var unit = newUnits[idx];
+                    newUnits.RemoveAt(idx);
+                    newUnits.Insert(idx - 1, unit);
+                }
+            }
+            else // Down
+            {
+                // Iterate reverse to avoid index shifting issues
+                for (int i = sortedIndices.Count - 1; i >= 0; i--)
+                {
+                    var idx = sortedIndices[i];
+                    var unit = newUnits[idx];
+                    newUnits.RemoveAt(idx);
+                    newUnits.Insert(idx + 1, unit);
+                }
+            }
+
+            // 4. Flatten and Apply
+            group.Conditions.Clear();
+            foreach (var unit in newUnits)
+            {
+                group.Conditions.AddRange(unit);
+            }
+
+            // 5. Refresh
             ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
-
-            RestoreSelection(selectedConds);
+            RestoreSelection(selectedConditions);
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
             StatusUpdateRequested?.Invoke(this, "Conditions moved.");
