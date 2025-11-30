@@ -77,7 +77,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             // 1. Collect all accumulator chains, including non-contiguous ones
             var chains = new List<AccumulatorChainDef>();
             int currentPtr = index;
-            int referenceChainIndex = 0;
 
             // Main collection loop
             while (currentPtr < conditions.Count)
@@ -347,6 +346,11 @@ namespace RALogicEditor.Services.Explainer.Processors
                 while (i < chains.Count)
                 {
                     var chainTemplate = chains[i];
+
+                    // --- FIX 1: Check if THIS SPECIFIC chain uses Recall ---
+                    // This prevents chains that don't use Recall (e.g. AddSource) from inheriting the "decreasing" label
+                    bool currentChainUsesRecall = chainTemplate.Conditions.Any(c => c.LeftOperand.Type == "Recall" || c.RightOperand.Type == "Recall");
+
                     bool chainHasHits = chainTemplate.Conditions.Any(c => c.Flag.Contains("Hits"));
                     bool ignoreTerminalForGrouping = isMeasuredContext && chainHasHits;
 
@@ -366,7 +370,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                     {
                         var lastChain = chains[rangeEnd];
                         var terminal = lastChain.Terminal;
-                        string noun = hasRecallContext ? recallContext : "logic groups";
+
+                        // FIX 2: Apply Recall Context only if current chain actually uses it
+                        string noun = (hasRecallContext && currentChainUsesRecall) ? recallContext : "logic groups";
 
                         bool showVal = true;
                         if (isMeasuredContext) showVal = false;
@@ -430,7 +436,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                         if (chain.Terminal != null)
                         {
                             var term = chain.Terminal;
-                            string noun = hasRecallContext ? recallContext : "items";
+
+                            // FIX 3: Apply Recall Context only if current chain actually uses it
+                            string noun = (hasRecallContext && currentChainUsesRecall) ? recallContext : "items";
 
                             if (term.Flag == "MeasuredIf")
                             {
@@ -497,7 +505,8 @@ namespace RALogicEditor.Services.Explainer.Processors
                                     if (showVal)
                                     {
                                         if (hasRecallContext)
-                                            chainText = $"{prefix}{recallContext} decreasing occurs at least {valText} times: {expandToken}";
+                                            // FIX 4: Removed duplicate "decreasing" here since recallContext usually includes direction
+                                            chainText = $"{prefix}{recallContext} occurs at least {valText} times: {expandToken}";
                                         else
                                             chainText = $"{prefix}at least {valText} of the following occur: {expandToken}";
                                     }
@@ -520,7 +529,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                         }
                         else
                         {
-                            string noun = hasRecallContext ? recallContext : "Logic sequence";
+                            string noun = (hasRecallContext && currentChainUsesRecall) ? recallContext : "Logic sequence";
                             chainText = $"{noun} {expandToken} (Incomplete)";
                         }
 
