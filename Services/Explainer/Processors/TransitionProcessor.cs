@@ -8,89 +8,51 @@ using System.Globalization;
 namespace RALogicEditor.Services.Explainer.Processors
 {
     // Handles Delta Transitions (A > Delta A)
+    // Supports both adjacent pairs and split pairs (where other conditions exist in between)
     public class TransitionProcessor : ILogicProcessor
     {
         // CRITICAL: Priority must be 1 to beat AsciiStringProcessor (2) and AccumulatorProcessor (3).
-        // Otherwise, AsciiStringProcessor claims Row 2 ("Trigger Mem...") and processes it as a single standard condition.
         public int Priority => 1;
 
         public bool CanProcess(List<AchievementCondition> conditions, int currentIndex)
         {
-            var condA = conditions[currentIndex];
+            // 1. Check if this is a "Head" (Start of transition)
+            if (FindPairIndex(conditions, currentIndex, out _)) return true;
 
-            // 1. Basic Operand Validation for A
-            if (condA.RequiredHits > 0 || condA.RightOperand.Type != "Value") return false;
+            // 2. Check if this is a "Tail" (End of transition)
+            // This is necessary to silence the tail condition in split transitions
+            if (FindHeadIndex(conditions, currentIndex, out _)) return true;
 
-            bool aIsDelta = condA.LeftOperand.Type == "Delta" || condA.LeftOperand.Type == "Prior";
-            bool aIsMem = condA.LeftOperand.Type == "Mem";
-            if (!aIsDelta && !aIsMem) return false;
-
-            // 2. Look ahead for matching pair (condB)
-            for (int j = currentIndex + 1; j < conditions.Count; j++)
-            {
-                var condB = conditions[j];
-
-                // Skip pointer chain logic
-                if (condB.Flag == "Add Address") continue;
-
-                // Validate Flag Compatibility
-                // We allow: No Flag, Trigger, Measured*, AndNext, ResetNextIf.
-                // This allows catching "Trigger Mem=6" + "AndNext Delta=5".
-                bool isValidFlag = string.IsNullOrEmpty(condB.Flag) ||
-                                   condB.Flag == "Trigger" ||
-                                   condB.Flag == "AndNext" ||
-                                   condB.Flag == "ResetNextIf" ||
-                                   condB.Flag.StartsWith("Measured");
-
-                if (!isValidFlag) return false;
-
-                // Basic Validation for B
-                if (condB.RequiredHits > 0 || condB.RightOperand.Type != "Value") continue;
-
-                bool bIsDelta = condB.LeftOperand.Type == "Delta" || condB.LeftOperand.Type == "Prior";
-                bool bIsMem = condB.LeftOperand.Type == "Mem";
-
-                // Ensure we aren't comparing Delta vs Delta or Mem vs Mem
-                if (aIsDelta && bIsDelta) continue;
-                if (aIsMem && bIsMem) continue;
-
-                // Check if they refer to the same address/value (Robust Comparison)
-                // This fixes issues where 0x005f != 0x005F or leading zeros differ
-                if (AreSameAddress(condA.LeftOperand.Value, condB.LeftOperand.Value) &&
-                    condA.LeftOperand.Size == condB.LeftOperand.Size)
-                {
-                    return true;
-                }
-            }
             return false;
         }
 
         public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int currentIndex)
         {
-            var condA = conditions[currentIndex];
-            bool aIsDelta = condA.LeftOperand.Type == "Delta" || condA.LeftOperand.Type == "Prior";
-
-            // Find the pair (re-run lookahead)
-            int pairIndex = -1;
-            for (int j = currentIndex + 1; j < conditions.Count; j++)
+            // CASE 1: This is a "Tail" (The second part of a split transition)
+            // If we are here, it means we were not consumed by the Head (because it was split).
+            // We should hide this line to avoid redundancy, as the Head already explained the transition.
+            if (FindHeadIndex(conditions, currentIndex, out int headIndex))
             {
-                var condB = conditions[j];
-                if (condB.Flag == "Add Address") continue;
-
-                // Robust comparison again to ensure we catch the same pair found in CanProcess
-                if (AreSameAddress(condA.LeftOperand.Value, condB.LeftOperand.Value) &&
-                    condA.LeftOperand.Size == condB.LeftOperand.Size)
+                // Verify interruption to be safe (though if we are being processed individually, it implies interruption or logic flow issues)
+                if (IsInterrupted(conditions, headIndex, currentIndex))
                 {
-                    // Verify types oppose (Mem vs Delta)
-                    bool bIsDelta = condB.LeftOperand.Type == "Delta" || condB.LeftOperand.Type == "Prior";
-                    if (aIsDelta != bIsDelta) { pairIndex = j; break; }
+                    return new ProcessorResult { Text = "", Category = ExplanationCategory.Transition, ConditionsConsumed = 1 };
                 }
+
+                // If not interrupted, we should have been consumed. Fallback to empty to be safe.
+                return new ProcessorResult { Text = "", Category = ExplanationCategory.Transition, ConditionsConsumed = 1 };
             }
 
-            // Fallback if something changed between CanProcess and Process
-            if (pairIndex == -1) return new StandardConditionProcessor().Process(ctx, conditions, currentIndex);
+            // CASE 2: This is a "Head"
+            if (!FindPairIndex(conditions, currentIndex, out int pairIndex))
+            {
+                // Should not happen given CanProcess, but fallback just in case
+                return new StandardConditionProcessor().Process(ctx, conditions, currentIndex);
+            }
 
+            var condA = conditions[currentIndex];
             var condPair = conditions[pairIndex];
+            bool aIsDelta = condA.LeftOperand.Type == "Delta" || condA.LeftOperand.Type == "Prior";
 
             // Use GetName(Operand) to support Bit Labels (e.g. [Started Career])
             string name = ctx.GetName(condA.LeftOperand, currentIndex);
@@ -125,30 +87,148 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
             else
             {
-                // Fallback for weird operator combinations (e.g. Delta > 5 AND Mem < 2)
+                // Fallback for weird operator combinations
                 return new StandardConditionProcessor().Process(ctx, conditions, currentIndex);
             }
 
-            return new ProcessorResult
+            // Determine Consumption
+            // If there are unrelated conditions between Head and Tail, we cannot consume the block.
+            // We consume ONLY the Head (1), and let the iterator proceed to the intermediate conditions.
+            // The Tail will be silenced when the iterator eventually reaches it (Case 1 above).
+            if (IsInterrupted(conditions, currentIndex, pairIndex))
             {
-                Text = text,
-                Category = ExplanationCategory.Transition,
-                ConditionsConsumed = (pairIndex - currentIndex) + 1
-            };
+                return new ProcessorResult
+                {
+                    Text = text,
+                    Category = ExplanationCategory.Transition,
+                    ConditionsConsumed = 1 // Only consume Head
+                };
+            }
+            else
+            {
+                // Contiguous block (adjacent or only AddAddress in between) -> Consume everything
+                return new ProcessorResult
+                {
+                    Text = text,
+                    Category = ExplanationCategory.Transition,
+                    ConditionsConsumed = (pairIndex - currentIndex) + 1
+                };
+            }
+        }
+
+        private bool FindPairIndex(List<AchievementCondition> conditions, int currentIndex, out int pairIndex)
+        {
+            pairIndex = -1;
+            var condA = conditions[currentIndex];
+
+            // 1. Basic Operand Validation for A
+            if (condA.RequiredHits > 0 || condA.RightOperand.Type != "Value") return false;
+
+            bool aIsDelta = condA.LeftOperand.Type == "Delta" || condA.LeftOperand.Type == "Prior";
+            bool aIsMem = condA.LeftOperand.Type == "Mem";
+            if (!aIsDelta && !aIsMem) return false;
+
+            // 2. Look ahead
+            for (int j = currentIndex + 1; j < conditions.Count; j++)
+            {
+                var condB = conditions[j];
+
+                // Skip pointer chain logic, as it belongs to the condition that follows it
+                if (condB.Flag == "Add Address") continue;
+
+                // Validate Flag Compatibility
+                bool isValidFlag = string.IsNullOrEmpty(condB.Flag) ||
+                                   condB.Flag == "Trigger" ||
+                                   condB.Flag == "AndNext" ||
+                                   condB.Flag == "ResetNextIf" ||
+                                   condB.Flag.StartsWith("Measured");
+
+                if (!isValidFlag) return false;
+
+                // Basic Validation for B
+                if (condB.RequiredHits > 0 || condB.RightOperand.Type != "Value") continue;
+
+                bool bIsDelta = condB.LeftOperand.Type == "Delta" || condB.LeftOperand.Type == "Prior";
+                bool bIsMem = condB.LeftOperand.Type == "Mem";
+
+                // Ensure we aren't comparing Delta vs Delta or Mem vs Mem
+                if (aIsDelta && bIsDelta) continue;
+                if (aIsMem && bIsMem) continue;
+
+                // Check if they refer to the same address/value
+                if (AreSameAddress(condA.LeftOperand.Value, condB.LeftOperand.Value) &&
+                    condA.LeftOperand.Size == condB.LeftOperand.Size)
+                {
+                    pairIndex = j;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool FindHeadIndex(List<AchievementCondition> conditions, int currentIndex, out int headIndex)
+        {
+            headIndex = -1;
+            var condB = conditions[currentIndex]; // Current is potential Tail
+
+            // Basic Validation for Tail
+            if (condB.RequiredHits > 0 || condB.RightOperand.Type != "Value") return false;
+            bool bIsDelta = condB.LeftOperand.Type == "Delta" || condB.LeftOperand.Type == "Prior";
+            bool bIsMem = condB.LeftOperand.Type == "Mem";
+            if (!bIsDelta && !bIsMem) return false;
+
+            // Look backward
+            for (int j = currentIndex - 1; j >= 0; j--)
+            {
+                var condA = conditions[j];
+
+                // Skip Add Address (could be part of this condition or previous)
+                if (condA.Flag == "Add Address") continue;
+
+                // Validate A as potential Head
+                if (condA.RequiredHits > 0 || condA.RightOperand.Type != "Value") continue;
+
+                bool aIsDelta = condA.LeftOperand.Type == "Delta" || condA.LeftOperand.Type == "Prior";
+                bool aIsMem = condA.LeftOperand.Type == "Mem";
+
+                // Opposing types check
+                if ((aIsDelta && bIsDelta) || (aIsMem && bIsMem)) continue;
+                if (!aIsDelta && !aIsMem) continue;
+
+                // Match Check
+                if (AreSameAddress(condA.LeftOperand.Value, condB.LeftOperand.Value) &&
+                    condA.LeftOperand.Size == condB.LeftOperand.Size)
+                {
+                    // Check if condA actually targets condB (Forward check from A)
+                    if (FindPairIndex(conditions, j, out int verifyIndex) && verifyIndex == currentIndex)
+                    {
+                        headIndex = j;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private bool IsInterrupted(List<AchievementCondition> conditions, int start, int end)
+        {
+            for (int k = start + 1; k < end; k++)
+            {
+                if (conditions[k].Flag != "Add Address") return true;
+            }
+            return false;
         }
 
         private bool AreSameAddress(string addrA, string addrB)
         {
             if (string.IsNullOrEmpty(addrA) || string.IsNullOrEmpty(addrB)) return false;
 
-            // Safe normalisation for "0x" vs "0X" vs no prefix
             string a = addrA.Trim();
             if (a.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) a = a.Substring(2);
 
             string b = addrB.Trim();
             if (b.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) b = b.Substring(2);
 
-            // If lengths differ significantly (leading zeros), parse as numbers
             if (a.Length != b.Length)
             {
                 if (long.TryParse(a, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long valA) &&
