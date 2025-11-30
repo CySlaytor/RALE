@@ -327,8 +327,6 @@ namespace RALogicEditor.Forms
             }
             catch { }
 
-            // 2. Fallback: Manual Parsing for Raw/Split Logic Strings
-            // Handles simple cases (0x...=1) or multi-line copies without underscores
             if (conds.Count == 0 && (text.Contains("=") || text.Contains(">") || text.Contains("<")))
             {
                 // Split by Underscore OR Newline to handle both RA format and Line-by-Line copy
