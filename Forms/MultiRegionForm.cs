@@ -17,16 +17,12 @@ namespace RALogicEditor.Forms
     public partial class MultiRegionForm : Form
     {
         private List<CodeNote> _allNotes;
-
-        // Dictionary to track grids per region tab
         private Dictionary<string, DataGridView> _regionGrids = new();
 
         public MultiRegionForm(List<CodeNote> notes)
         {
             InitializeComponent();
             _allNotes = notes;
-
-            // Enable Double Buffering for smoother grid rendering
             EnableDoubleBuffering(dgvMapping);
 
             pasteLogicToolStripMenuItem.Click += (s, e) => PasteToActiveGrid();
@@ -39,28 +35,18 @@ namespace RALogicEditor.Forms
 
         private void InitializeDynamicRegions()
         {
-            // 1. Identify Regions from Notes
             var detectedRegions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             bool hasUnknownNotes = false;
 
             foreach (var note in _allNotes)
             {
                 string region = RegionDefinitions.DetectRegion(note.Note);
-                if (region != "Unknown")
-                    detectedRegions.Add(region);
-                else
-                    hasUnknownNotes = true;
+                if (region != "Unknown") detectedRegions.Add(region);
+                else hasUnknownNotes = true;
             }
 
-            if (hasUnknownNotes && !detectedRegions.Contains("USA"))
-            {
-                detectedRegions.Add("USA");
-            }
-
-            if (detectedRegions.Count == 0)
-            {
-                detectedRegions.Add("USA");
-            }
+            if (hasUnknownNotes && !detectedRegions.Contains("USA")) detectedRegions.Add("USA");
+            if (detectedRegions.Count == 0) detectedRegions.Add("USA");
 
             string baseRegion = detectedRegions.Contains("USA") ? "USA" : detectedRegions.First();
 
@@ -96,8 +82,6 @@ namespace RALogicEditor.Forms
             grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             grid.RowHeadersWidth = 25;
             grid.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
-
-            // Set ReadOnly to true to prevent direct cell editing, but allow Paste/Delete
             grid.ReadOnly = true;
 
             grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Type", Width = 50 });
@@ -142,12 +126,14 @@ namespace RALogicEditor.Forms
                     string baseAddr = "";
                     string mappedAddr = "";
                     string mappedRegion = "";
+                    string description = note.Note.Split('\n')[0];
 
                     if (!sourceIsBaseCandidate && targetIsBaseCandidate)
                     {
                         baseAddr = targetAddrHex;
                         mappedAddr = sourceAddrHex;
                         mappedRegion = sourceRegion;
+                        if (targetNote != null) description = targetNote.Note.Split('\n')[0];
                     }
                     else if (sourceIsBaseCandidate && !targetIsBaseCandidate)
                     {
@@ -158,7 +144,7 @@ namespace RALogicEditor.Forms
 
                     if (!string.IsNullOrEmpty(baseAddr))
                     {
-                        dgvMapping.Rows.Add(baseAddr, mappedAddr, mappedRegion, note.Note.Split('\n')[0]);
+                        dgvMapping.Rows.Add(baseAddr, mappedAddr, mappedRegion, description);
                     }
                 }
             }
@@ -167,23 +153,47 @@ namespace RALogicEditor.Forms
         public List<RegionConfig> GetConfiguredRegions()
         {
             var results = new List<RegionConfig>();
-            var mappings = new Dictionary<string, Dictionary<string, string>>();
+            var simpleMappings = new Dictionary<string, Dictionary<string, string>>();
+            var rangeMappings = new Dictionary<string, List<AddressRangeMap>>();
 
             foreach (DataGridViewRow row in dgvMapping.Rows)
             {
                 if (row.IsNewRow) continue;
-                string baseAddr = row.Cells[0].Value?.ToString()?.Trim() ?? "";
-                string targetAddr = row.Cells[1].Value?.ToString()?.Trim() ?? "";
+                string baseAddrStr = row.Cells[0].Value?.ToString()?.Trim() ?? "";
+                string targetAddrStr = row.Cells[1].Value?.ToString()?.Trim() ?? "";
                 string region = row.Cells[2].Value?.ToString()?.Trim() ?? "";
+                string description = row.Cells[3].Value?.ToString() ?? "";
 
-                if (!string.IsNullOrEmpty(region) && !string.IsNullOrEmpty(baseAddr) && !string.IsNullOrEmpty(targetAddr))
+                if (!string.IsNullOrEmpty(region) && !string.IsNullOrEmpty(baseAddrStr) && !string.IsNullOrEmpty(targetAddrStr))
                 {
-                    if (!mappings.ContainsKey(region)) mappings[region] = new Dictionary<string, string>();
+                    if (!simpleMappings.ContainsKey(region)) simpleMappings[region] = new Dictionary<string, string>();
+                    if (!rangeMappings.ContainsKey(region)) rangeMappings[region] = new List<AddressRangeMap>();
 
-                    if (long.TryParse(baseAddr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long bVal) &&
-                        long.TryParse(targetAddr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long tVal))
+                    if (long.TryParse(baseAddrStr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long bVal) &&
+                        long.TryParse(targetAddrStr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long tVal))
                     {
-                        mappings[region][bVal.ToString("x")] = tVal.ToString("x");
+                        simpleMappings[region][bVal.ToString("x")] = tVal.ToString("x");
+
+                        // Updated Regex to handle Hex sizes (e.g. [0x20 bytes]) or Decimal ([32 bytes])
+                        long size = 1;
+                        var sizeMatch = Regex.Match(description, @"\[.*?((?:0x)?[0-9a-fA-F]+)\s*bytes?.*?\]", RegexOptions.IgnoreCase);
+
+                        if (sizeMatch.Success)
+                        {
+                            string sizeStr = sizeMatch.Groups[1].Value;
+                            if (sizeStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                                long.TryParse(sizeStr.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out size);
+                            else
+                                long.TryParse(sizeStr, out size);
+                        }
+
+                        rangeMappings[region].Add(new AddressRangeMap
+                        {
+                            SourceBase = bVal,
+                            TargetBase = tVal,
+                            Size = size,
+                            Region = region
+                        });
                     }
                 }
             }
@@ -192,7 +202,7 @@ namespace RALogicEditor.Forms
             {
                 string regionName = kvp.Key;
                 DataGridView grid = kvp.Value;
-                bool isBase = !mappings.ContainsKey(regionName);
+                bool isBase = !simpleMappings.ContainsKey(regionName);
 
                 foreach (TabPage page in tabControlRegions.TabPages)
                 {
@@ -210,9 +220,10 @@ namespace RALogicEditor.Forms
                     LockConditions = ExtractLogicFromGrid(grid)
                 };
 
-                if (!isBase && mappings.ContainsKey(regionName))
+                if (!isBase)
                 {
-                    config.AddressMap = mappings[regionName];
+                    if (simpleMappings.ContainsKey(regionName)) config.AddressMap = simpleMappings[regionName];
+                    if (rangeMappings.ContainsKey(regionName)) config.AddressRanges = rangeMappings[regionName];
                 }
 
                 results.Add(config);
@@ -227,7 +238,6 @@ namespace RALogicEditor.Forms
             foreach (DataGridViewRow row in grid.Rows)
             {
                 if (row.IsNewRow) continue;
-
                 var cond = new AchievementCondition();
                 cond.LeftOperand.Type = row.Cells[0].Value?.ToString() ?? "Mem";
                 cond.LeftOperand.Size = row.Cells[1].Value?.ToString() ?? "32-bit";
@@ -240,8 +250,6 @@ namespace RALogicEditor.Forms
             }
             return list;
         }
-
-        // --- Boilerplate UI Logic ---
 
         private void EnableDoubleBuffering(Control control)
         {
@@ -258,7 +266,6 @@ namespace RALogicEditor.Forms
                 {
                     var h = g.HitTest(e.X, e.Y);
                     if (h.RowIndex >= 0) { if (!g.Rows[h.RowIndex].Selected) { g.ClearSelection(); g.Rows[h.RowIndex].Selected = true; } }
-                    // Update the active grid tag for Context Menu actions
                     ctxGridActions.Tag = g;
                 }
             };
@@ -294,21 +301,9 @@ namespace RALogicEditor.Forms
             else if (e.KeyCode == Keys.Delete || e.KeyCode == Keys.Back) { DeleteFromGrid(grid); e.Handled = true; }
         }
 
-        // Active Grid Helpers
-        private void PasteToActiveGrid()
-        {
-            if (ctxGridActions.Tag is DataGridView grid) PasteToGrid(grid);
-        }
-
-        private void CopyFromActiveGrid()
-        {
-            if (ctxGridActions.Tag is DataGridView grid) CopyFromGrid(grid);
-        }
-
-        private void DeleteFromActiveGrid()
-        {
-            if (ctxGridActions.Tag is DataGridView grid) DeleteFromGrid(grid);
-        }
+        private void PasteToActiveGrid() { if (ctxGridActions.Tag is DataGridView grid) PasteToGrid(grid); }
+        private void CopyFromActiveGrid() { if (ctxGridActions.Tag is DataGridView grid) CopyFromGrid(grid); }
+        private void DeleteFromActiveGrid() { if (ctxGridActions.Tag is DataGridView grid) DeleteFromGrid(grid); }
 
         private void PasteToGrid(DataGridView grid)
         {
@@ -317,26 +312,20 @@ namespace RALogicEditor.Forms
             if (string.IsNullOrEmpty(text)) return;
 
             List<AchievementCondition> conds = new List<AchievementCondition>();
-
-            // 1. Try Standard Parser (Handles Logic Chains like S:0x..._R:0x...)
             try
             {
                 var groups = AchievementParser.ParseAchievementTrigger(text, 'S', false);
-                if (groups.Count > 0 && groups[0].Conditions.Count > 0)
-                    conds.AddRange(groups[0].Conditions);
+                if (groups.Count > 0 && groups[0].Conditions.Count > 0) conds.AddRange(groups[0].Conditions);
             }
             catch { }
 
             if (conds.Count == 0 && (text.Contains("=") || text.Contains(">") || text.Contains("<")))
             {
-                // Split by Underscore OR Newline to handle both RA format and Line-by-Line copy
                 string[] parts = text.Split(new[] { '_', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                 foreach (string part in parts)
                 {
-                    // Clean spaces
                     string cleanPart = part.Trim();
                     if (string.IsNullOrEmpty(cleanPart)) continue;
-
                     var c = ManualParseCondition(cleanPart);
                     if (c != null) conds.Add(c);
                 }
@@ -346,20 +335,11 @@ namespace RALogicEditor.Forms
             {
                 foreach (var c in conds)
                 {
-                    grid.Rows.Add(
-                        c.LeftOperand.Type,
-                        c.LeftOperand.Size,
-                        c.LeftOperand.Value,
-                        c.Operator,
-                        c.RightOperand.Type,
-                        c.RightOperand.Size,
-                        c.RightOperand.Value
-                    );
+                    grid.Rows.Add(c.LeftOperand.Type, c.LeftOperand.Size, c.LeftOperand.Value, c.Operator, c.RightOperand.Type, c.RightOperand.Size, c.RightOperand.Value);
                 }
             }
             else
             {
-                // 3. Fallback: TSV (Spreadsheet copy)
                 string[] lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                 bool added = false;
                 foreach (var line in lines)
@@ -369,50 +349,35 @@ namespace RALogicEditor.Forms
                     {
                         int idx = grid.Rows.Add();
                         var row = grid.Rows[idx];
-                        for (int i = 0; i < cells.Length && i < grid.Columns.Count; i++)
-                            row.Cells[i].Value = cells[i].Trim();
+                        for (int i = 0; i < cells.Length && i < grid.Columns.Count; i++) row.Cells[i].Value = cells[i].Trim();
                         added = true;
                     }
                 }
-
-                if (!added)
-                {
-                    MessageBox.Show("Could not parse clipboard content. Supported formats:\n1. RA Logic (0xH1234=1)\n2. Raw Logic Lines\n3. TSV (Spreadsheet)", "Paste Failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
+                if (!added) MessageBox.Show("Could not parse clipboard content.", "Paste Failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
         private AchievementCondition? ManualParseCondition(string raw)
         {
-            // Simple Regex to capture Left Op Right
-            // Group 1: Left Side (e.g. 0xX00541004)
-            // Group 2: Operator
-            // Group 3: Right Side
             var regex = new Regex(@"^([^=<>!]+)([=<>!]+)([^=<>!]+)$");
             var match = regex.Match(raw);
             if (!match.Success) return null;
-
             var cond = new AchievementCondition();
             cond.Operator = match.Groups[2].Value;
-
             ParseOperand(match.Groups[1].Value, cond.LeftOperand);
             ParseOperand(match.Groups[3].Value, cond.RightOperand);
-
             return cond;
         }
 
         private void ParseOperand(string raw, Operand op)
         {
             raw = raw.Trim();
-
-            // Check if it looks like memory (0x...)
             if (raw.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
             {
                 string body = raw.Substring(2);
                 if (body.Length > 0)
                 {
                     char typeChar = body[0];
-                    // Handle standard sizes H, X, W or implicit hex
                     if ("HXW ".Contains(char.ToUpper(typeChar)) || char.IsDigit(typeChar))
                     {
                         op.Type = "Mem";
@@ -422,82 +387,20 @@ namespace RALogicEditor.Forms
                             case ' ': op.Size = "16-bit"; body = body.Substring(1); break;
                             case 'W': op.Size = "24-bit"; body = body.Substring(1); break;
                             case 'X': op.Size = "32-bit"; body = body.Substring(1); break;
-                            default:
-                                // Assume 16-bit if purely hex digits follow 0x (e.g. 0x1234)
-                                // RA Standard implies 16-bit if no prefix char is present
-                                op.Size = "16-bit";
-                                break;
+                            default: op.Size = "16-bit"; break;
                         }
                         op.Value = "0x" + body;
                         return;
                     }
                 }
             }
-
-            // Fallback to Value
-            op.Type = "Value";
-            op.Size = "";
-            op.Value = raw;
+            op.Type = "Value"; op.Size = ""; op.Value = raw;
         }
 
-        private void CopyFromGrid(DataGridView grid)
-        {
-            if (grid.GetCellCount(DataGridViewElementStates.Selected) > 0)
-                try { Clipboard.SetDataObject(grid.GetClipboardContent()); } catch { }
-        }
-
-        private void DeleteFromGrid(DataGridView grid)
-        {
-            // Allow deletion even if grid is ReadOnly
-            if (grid.SelectedRows.Count > 0)
-            {
-                foreach (DataGridViewRow row in grid.SelectedRows)
-                    if (!row.IsNewRow) grid.Rows.Remove(row);
-            }
-        }
-
-        private void btnOK_Click(object sender, EventArgs e)
-        {
-            DialogResult = DialogResult.OK;
-            Close();
-        }
-
-        private void btnCancel_Click(object sender, EventArgs e)
-        {
-            DialogResult = DialogResult.Cancel;
-            Close();
-        }
-
-        private void btnHelp_Click(object sender, EventArgs e)
-        {
-            string helpText =
-                "How to use Multi-Region Generator:\n\n" +
-                "1. Code Note Setup:\n" +
-                "   - Identify the primary region's memory addresses (e.g., USA).\n" +
-                "   - For other regions (e.g., Europe), create code notes at the corresponding addresses.\n" +
-                "   - The note content must include: 'Refer to $0x[BaseAddress]'\n" +
-                "   - Example: If USA Health is 0x1234, create a note at 0x5678 (Europe) saying 'Health | Refer to $0x1234'.\n\n" +
-                "2. Region Detection:\n" +
-                "   - The tool detects regions based on keywords in your notes:\n" +
-                "     - USA / NTSC\n" +
-                "     - Europe / PAL\n" +
-                "     - Japan / NTSC-J\n" +
-                "   - If not detected, ensure your notes contain these keywords.\n\n" +
-                "3. Lock Logic:\n" +
-                "   - Use the tabs below to define specific logic that identifies each region (e.g., checking a Region ID or Serial string).\n" +
-                "   - This logic will be added as a 'Pause If' (Lock) to prevent the achievement from triggering in the wrong region.\n" +
-                "   - Paste logic using RA format (e.g., 0xH1234=1).";
-
-            MessageBox.Show(helpText, "Multi-Region Help", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-    }
-
-    // Configuration for a specific region within the Multi-Region tool.
-    public class RegionConfig
-    {
-        public string RegionName { get; set; } = "";
-        public bool IsBase { get; set; }
-        public Dictionary<string, string> AddressMap { get; set; } = new();
-        public List<AchievementCondition> LockConditions { get; set; } = new();
+        private void CopyFromGrid(DataGridView grid) { if (grid.GetCellCount(DataGridViewElementStates.Selected) > 0) try { Clipboard.SetDataObject(grid.GetClipboardContent()); } catch { } }
+        private void DeleteFromGrid(DataGridView grid) { if (grid.SelectedRows.Count > 0) { foreach (DataGridViewRow row in grid.SelectedRows) if (!row.IsNewRow) grid.Rows.Remove(row); } }
+        private void btnOK_Click(object sender, EventArgs e) { DialogResult = DialogResult.OK; Close(); }
+        private void btnCancel_Click(object sender, EventArgs e) { DialogResult = DialogResult.Cancel; Close(); }
+        private void btnHelp_Click(object sender, EventArgs e) { MessageBox.Show("Maps regions based on notes. Ensure base notes have size (e.g. [0x20 bytes]) for range mapping.", "Help"); }
     }
 }

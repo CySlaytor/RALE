@@ -1,5 +1,6 @@
 ﻿using RALogicEditor.Models;
 using RALogicEditor.Parsers;
+using RALogicEditor.Services; // Added for Metadata
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,6 +13,12 @@ namespace RALogicEditor.Services
     {
         public RaRoot? ServerData { get; private set; }
         public UserTextParser.UserData? LocalData { get; private set; }
+        public RichPresenceScript? RichPresence { get; set; }
+
+        public string RichPresenceFilePath { get; private set; } = "";
+
+        // Metadata Service to persist group names
+        public ProjectMetadataService Metadata { get; private set; } = new();
 
         private List<CodeNote> _serverNotes = new(); // Store original server notes for comparison
 
@@ -22,9 +29,11 @@ namespace RALogicEditor.Services
         {
             ServerData = null;
             LocalData = null;
+            RichPresence = null;
             _serverNotes.Clear();
             userFilePath = "";
             CurrentGameId = "";
+            RichPresenceFilePath = "";
 
             string dir = Path.GetDirectoryName(primaryPath) ?? "";
             string fileName = Path.GetFileNameWithoutExtension(primaryPath);
@@ -39,10 +48,14 @@ namespace RALogicEditor.Services
             }
             CurrentGameId = gameIdStr;
 
+            // Load Metadata immediately to have names ready
+            Metadata.Load(CurrentGameId);
+
             // 2. Determine Paths
             string jsonPath = Path.Combine(dir, $"{gameIdStr}.json");
             string userPath = Path.Combine(dir, $"{gameIdStr}-User.txt");
             string notesPath = Path.Combine(dir, $"{gameIdStr}-Notes.json");
+            string rpPath = Path.Combine(dir, $"{gameIdStr}-Rich.txt");
 
             string selectedExt = Path.GetExtension(primaryPath).ToLower();
 
@@ -56,7 +69,10 @@ namespace RALogicEditor.Services
             }
             else if (selectedExt == ".txt")
             {
-                userPath = primaryPath;
+                if (primaryPath.EndsWith("-Rich.txt", StringComparison.OrdinalIgnoreCase))
+                    rpPath = primaryPath;
+                else
+                    userPath = primaryPath;
             }
 
             // 3. Load Logic Data
@@ -76,6 +92,18 @@ namespace RALogicEditor.Services
 
             // 5. Load and Merge Notes
             LoadAndMergeNotes(notesPath);
+
+            // 6. Load Rich Presence
+            RichPresenceFilePath = rpPath;
+            if (File.Exists(rpPath))
+            {
+                try
+                {
+                    string rpContent = File.ReadAllText(rpPath);
+                    RichPresence = RichPresenceParser.Parse(rpContent);
+                }
+                catch { /* Ignore RP load errors */ }
+            }
         }
 
         private void LoadServerLogic(string filepath)
@@ -243,6 +271,18 @@ namespace RALogicEditor.Services
         public void EnsureLocalDataExists()
         {
             if (LocalData == null) LocalData = new UserTextParser.UserData();
+        }
+
+        public void SaveRichPresence()
+        {
+            if (RichPresence != null && !string.IsNullOrEmpty(RichPresenceFilePath))
+            {
+                try
+                {
+                    File.WriteAllText(RichPresenceFilePath, RichPresence.ToString());
+                }
+                catch { /* Ignore save errors */ }
+            }
         }
     }
 }
