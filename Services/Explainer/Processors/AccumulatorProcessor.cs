@@ -145,8 +145,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                         bool currIsDelta = IsChainDelta(chainDef.Conditions);
 
                         // IMPROVEMENT: Allow grouping delta constraints on strictly same variable (Same Body, Different Terminal)
-                        // This fixes the issue where "Sum > 0" and "Sum <= 6" were split into separate lines.
-                        // We check if bodies are identical (ignoreTerminal: true), and strict addresses (ignoreAddresses: false).
                         if (prevIsDelta && currIsDelta && AreChainsStructureEqual(chains[referenceChainIndex], chainDef, ignoreAddresses: false, ignoreTerminal: true))
                         {
                             // Grouping allowed
@@ -272,17 +270,50 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
             else
             {
+                // -- NEW: Measured Context Detection --
+                // Check if the final terminal of the entire chain sequence is Measured.
+                // If so, we restructure the output to "Start measuring ... when ..."
+                // This handles complex arrays where many groups feed into one Measured condition.
+                AchievementCondition? finalTerminal = chains.Count > 0 ? chains.Last().Terminal : null;
+                bool isMeasuredContext = false;
+                string measuredHeader = "";
+
+                if (finalTerminal != null && finalTerminal.Flag.StartsWith("Measured") && finalTerminal.Flag != "MeasuredIf")
+                {
+                    isMeasuredContext = true;
+                    bool isHitChain = chains.Any(ch => ch.Conditions.Any(c => c.Flag.Contains("Hits"))) || finalTerminal.Flag.Contains("Hits");
+                    string label = isHitChain ? "hits" : "value";
+
+                    // Use final terminal for the limit value
+                    string valText = (finalTerminal.RequiredHits > 0) ? finalTerminal.RequiredHits.ToString() : ctx.FormatValue(finalTerminal.RightOperand, conditions.IndexOf(finalTerminal), finalTerminal.LeftOperand.Value, finalTerminal.LeftOperand.Size);
+
+                    if (hasRecallContext)
+                        measuredHeader = $"Start measuring {recallContext} up to {valText}";
+                    else
+                        measuredHeader = $"Start measuring {label} up to {valText}";
+
+                    result.Category = ExplanationCategory.Complex;
+                }
+
                 var sb = new StringBuilder();
-                bool isTriggerStart = true;
+                bool isTriggerStart = !isMeasuredContext;
 
                 int i = 0;
                 while (i < chains.Count)
                 {
+                    var chainTemplate = chains[i];
+
+                    // Determine if we should ignore terminals for grouping (e.g. Add Hits feeding Measured)
+                    // Renamed from isHitChain to avoid conflict with inner scopes
+                    bool chainHasHits = chainTemplate.Conditions.Any(c => c.Flag.Contains("Hits"));
+                    bool ignoreTerminalForGrouping = isMeasuredContext && chainHasHits;
+
                     // Look ahead for structurally identical chains (Array detection)
                     int rangeEnd = i;
                     while (rangeEnd + 1 < chains.Count)
                     {
-                        if (AreChainsStructureEqual(chains[i], chains[rangeEnd + 1], true, false)) // true = ignore addresses
+                        // Pass ignoreTerminal if we are in a measured hit context to group everything together
+                        if (AreChainsStructureEqual(chains[i], chains[rangeEnd + 1], true, ignoreTerminalForGrouping))
                             rangeEnd++;
                         else
                             break;
@@ -292,32 +323,38 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                     if (count > 3) // Threshold for collapsing
                     {
-                        var chain = chains[i]; // Template
+                        // Use the LAST chain in the array to determine the effective terminal
+                        var lastChain = chains[rangeEnd];
+                        var terminal = lastChain.Terminal;
+
                         string noun = hasRecallContext ? recallContext : "logic groups";
 
+                        // Determine if we show value (suppress if Add Hits with 0 required hits, or in Measured Context)
+                        bool showVal = true;
+                        if (isMeasuredContext) showVal = false;
+                        else if (chainHasHits && (terminal == null || terminal.RequiredHits == 0)) showVal = false;
+
                         string valText = "(varies)";
-                        if (chain.Terminal != null)
-                            valText = (chain.Terminal.RequiredHits > 0) ? chain.Terminal.RequiredHits.ToString() : ctx.FormatValue(chain.Terminal.RightOperand, conditions.IndexOf(chain.Terminal), chain.Terminal.LeftOperand.Value, chain.Terminal.LeftOperand.Size);
+                        if (terminal != null)
+                            valText = (terminal.RequiredHits > 0) ? terminal.RequiredHits.ToString() : ctx.FormatValue(terminal.RightOperand, conditions.IndexOf(terminal), terminal.LeftOperand.Value, terminal.LeftOperand.Size);
 
                         string prefix = "";
                         if (isTriggerStart)
                         {
-                            if (chain.Terminal != null && chain.Terminal.Flag == "Pause If") prefix = "Pause when ";
-                            else if (chain.Terminal != null && chain.Terminal.Flag == "Reset If") prefix = "Reset when ";
+                            if (terminal != null && terminal.Flag == "Pause If") prefix = "Pause when ";
+                            else if (terminal != null && terminal.Flag == "Reset If") prefix = "Reset when ";
                             else prefix = "Trigger when ";
                             isTriggerStart = false;
                         }
 
-                        // Generate details for the array
+                        // Generate details for the array (using start index i)
                         var sbDetails = new StringBuilder();
                         for (int k = i; k <= rangeEnd; k++)
                         {
                             var c = chains[k];
                             // Generate simple explanation for this chain instance
-                            // We can use FormatTerminalCondition + maybe basic Accumulator info
                             string instanceVal = (c.Terminal?.RequiredHits > 0) ? c.Terminal.RequiredHits.ToString() : ctx.FormatValue(c.Terminal?.RightOperand ?? new Operand(), 0);
 
-                            // Try to find distinguishing feature (the first Add Source/Hits usually)
                             var firstAdd = c.Conditions.FirstOrDefault(cond => cond.Flag.Contains("Add") || cond.Flag.Contains("Sub"));
                             string name = firstAdd != null ? ctx.GetName(firstAdd.LeftOperand, 0) : $"Item {k - i + 1}";
 
@@ -328,13 +365,17 @@ namespace RALogicEditor.Services.Explainer.Processors
                         result.DetailedDrillDowns[id] = sbDetails.ToString();
                         string expandToken = $"[[EXPAND:{id}:{count} groups]]";
 
-                        string summary = $"{prefix}any of the following {count} {noun} match (at least {valText}): {expandToken}";
+                        string summary;
+                        if (showVal)
+                            summary = $"{prefix}any of the following {count} {noun} match (at least {valText}): {expandToken}";
+                        else
+                            summary = $"{prefix}any of the following {count} {noun} match: {expandToken}";
+
                         sb.Append(summary);
 
-                        // If not last, add connection
                         if (rangeEnd < chains.Count - 1)
                         {
-                            string conn = chain.Terminal?.Flag == "OrNext" ? " OR " : " AND ";
+                            string conn = terminal?.Flag == "OrNext" ? " OR " : " AND ";
                             sb.Append(conn);
                         }
 
@@ -364,23 +405,38 @@ namespace RALogicEditor.Services.Explainer.Processors
                                 string opText = ctx.GetOperatorText(term.Operator);
                                 chainText = $"Accumulator: sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText} (MeasuredIf)";
                                 result.Category = ExplanationCategory.MeasuredIf;
-                                isTriggerStart = false;
+                                isTriggerStart = false; // Reset trigger start since MeasuredIf usually standalone
                             }
                             else if (term.Flag.StartsWith("Measured"))
                             {
-                                bool isHitChain = chain.Conditions.Any(c => c.Flag.Contains("Hits")) || term.Flag.Contains("Hits");
-                                string label = isHitChain ? "hits" : "value";
+                                // If inside MeasuredContext, we just describe the accumulation, not "Start measuring"
                                 string valText = (term.RequiredHits > 0) ? term.RequiredHits.ToString() : ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
+                                string opText = ctx.GetOperatorText(term.Operator);
 
-                                if (hasRecallContext)
-                                    chainText = $"Start measuring {recallContext} up to {valText}: {expandToken}";
+                                if (isMeasuredContext)
+                                {
+                                    // Just the input part
+                                    chainText = $"sum of {displayBlocks.Count} {noun} {expandToken} {opText} {valText}";
+                                }
                                 else
-                                    chainText = $"Start measuring {label} up to {valText}: {expandToken}";
-
-                                isTriggerStart = false;
+                                {
+                                    bool isHitChain = chain.Conditions.Any(c => c.Flag.Contains("Hits")) || term.Flag.Contains("Hits");
+                                    string label = isHitChain ? "hits" : "value";
+                                    if (hasRecallContext)
+                                        chainText = $"Start measuring {recallContext} up to {valText}: {expandToken}";
+                                    else
+                                        chainText = $"Start measuring {label} up to {valText}: {expandToken}";
+                                    isTriggerStart = false;
+                                }
                             }
                             else
                             {
+                                // Determine if we show value
+                                bool isHitChain = chain.Conditions.Any(c => c.Flag.Contains("Hits"));
+                                bool showVal = true;
+                                if (isMeasuredContext) showVal = false;
+                                else if (isHitChain && term.RequiredHits == 0) showVal = false;
+
                                 string valText = (term.RequiredHits > 0) ? term.RequiredHits.ToString() : ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
                                 string opText = ctx.GetOperatorText(term.Operator);
 
@@ -404,12 +460,20 @@ namespace RALogicEditor.Services.Explainer.Processors
                                     isTriggerStart = false;
                                 }
 
-                                if (chain.Conditions.Any(c => c.Flag.Contains("Hits")))
+                                if (isHitChain)
                                 {
-                                    if (hasRecallContext)
-                                        chainText = $"{prefix}{recallContext} decreasing occurs at least {valText} times: {expandToken}";
+                                    if (showVal)
+                                    {
+                                        if (hasRecallContext)
+                                            chainText = $"{prefix}{recallContext} decreasing occurs at least {valText} times: {expandToken}";
+                                        else
+                                            chainText = $"{prefix}at least {valText} of the following occur: {expandToken}";
+                                    }
                                     else
-                                        chainText = $"{prefix}at least {valText} of the following occur: {expandToken}";
+                                    {
+                                        // No value limit (just accumulation or connector)
+                                        chainText = $"{prefix}the following occur: {expandToken}";
+                                    }
                                 }
                                 else
                                 {
@@ -434,7 +498,19 @@ namespace RALogicEditor.Services.Explainer.Processors
                     }
                 }
 
-                result.Text = sb.ToString();
+                // If we detected a Measured context, prepend the header
+                if (isMeasuredContext)
+                {
+                    // Check if sb already starts with a connector or something clean
+                    string body = sb.ToString();
+                    // If multiple groups were found, they are joined by AND/OR.
+                    // We wrap the whole thing.
+                    result.Text = $"{measuredHeader} when {body}";
+                }
+                else
+                {
+                    result.Text = sb.ToString();
+                }
             }
 
             if (chains.Count > 0)
