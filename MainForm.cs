@@ -14,6 +14,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace RALogicEditor
@@ -30,6 +31,9 @@ namespace RALogicEditor
 
         // Logic Validator Service (Instantiated locally for now, could be injected)
         private readonly ILogicValidator _validator = new LogicValidator();
+
+        // Rich Presence Service for Multi-Region handling
+        private readonly RichPresenceService _rpService = new();
 
         // -- State Tracking --
         private IAssetItem? _selectedAsset; // The achievement/leaderboard currently being edited
@@ -126,6 +130,17 @@ namespace RALogicEditor
 
             // View Menu
             viewReviewerToolStripMenuItem.Click += (s, e) => ToggleReviewer();
+
+            // Add "View RP Diff" to View menu
+            var viewRpDiffItem = new ToolStripMenuItem("View RP Diff");
+            viewRpDiffItem.Click += ViewRpDiff_Click;
+            viewToolStripMenuItem.DropDownItems.Add(viewRpDiffItem);
+
+            // Add "Revert Multi-Region" to Grid Context Menu
+            var revertItem = new ToolStripMenuItem("Revert Multi-Region...");
+            revertItem.Click += RevertRegion_Click;
+            assetContextMenu.Items.Add(new ToolStripSeparator());
+            assetContextMenu.Items.Add(revertItem);
 
             // -- Button Wiring --
             btnAddAsset.Click += NewAsset_Click;
@@ -251,9 +266,6 @@ namespace RALogicEditor
         private void TriggerEditor_MultiRegionLogicRequested(object? sender, MultiRegionForm form)
         {
             // 1. Validate State
-            if (_currentDisplayList.Count == 0) return;
-
-            // Get configurations from the form
             var configs = form.GetConfiguredRegions();
             if (configs.Count == 0) return;
 
@@ -274,16 +286,7 @@ namespace RALogicEditor
                 {
                     c.Flag = "Pause If";
                     // Invert operator
-                    c.Operator = c.Operator switch
-                    {
-                        "=" => "!=",
-                        "!=" => "=",
-                        "<" => ">=",
-                        "<=" => ">",
-                        ">" => "<=",
-                        ">=" => "<",
-                        _ => c.Operator
-                    };
+                    c.Operator = InvertOperator(c.Operator);
                 }
             }
 
@@ -293,11 +296,25 @@ namespace RALogicEditor
                 InvertLockLogic(cfg.LockConditions);
             }
 
-            // 3. Iterate currently filtered list
-            int count = 0;
+            // 3. Determine Targets: Selected Rows OR All Filtered
+            List<IAssetItem> assetsToProcess;
+            if (achievementGrid.SelectedRows.Count > 0)
+            {
+                assetsToProcess = achievementGrid.SelectedRows.Cast<DataGridViewRow>()
+                    .Select(r => r.Tag as IAssetItem)
+                    .Where(a => a != null)
+                    .Cast<IAssetItem>()
+                    .ToList();
+            }
+            else
+            {
+                assetsToProcess = new List<IAssetItem>(_currentDisplayList);
+            }
 
-            // Need to iterate a copy or by index because we might modify the underlying data structures structure or view
-            var assetsToProcess = new List<IAssetItem>(_currentDisplayList);
+            if (assetsToProcess.Count == 0) return;
+
+            // 4. Iterate selected items
+            int count = 0;
 
             foreach (var item in assetsToProcess)
             {
@@ -312,99 +329,17 @@ namespace RALogicEditor
 
                 if (localItem == null) continue;
 
-                // Parse Existing Logic
-                IAssetStrategy strategy = localItem.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
-                var segments = strategy.ParseLogic(localItem.Logic);
-
-                var keys = new List<string>(segments.Keys);
-
-                foreach (var segmentKey in keys)
-                {
-                    var groups = segments[segmentKey];
-                    if (groups.Count == 0) continue;
-
-                    // Identify existing groups (Base Groups)
-                    var existingGroups = new List<AchievementConditionGroup>();
-                    // Deep copy existing groups to avoid reference issues
-                    foreach (var g in groups)
-                    {
-                        var newG = new AchievementConditionGroup { GroupName = g.GroupName };
-                        foreach (var c in g.Conditions) newG.Conditions.Add(c.Clone());
-                        existingGroups.Add(newG);
-                    }
-
-                    var finalGroups = new List<AchievementConditionGroup>();
-
-                    // Handle Base Groups
-                    if (baseConfig != null && baseConfig.LockConditions.Count > 0)
-                    {
-                        foreach (var grp in existingGroups)
-                        {
-                            grp.Conditions.InsertRange(0, baseConfig.LockConditions.Select(c => c.Clone()));
-                        }
-                    }
-
-                    // Rename Base Groups if needed
-                    if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core")
-                    {
-                        string baseName = baseConfig?.RegionName ?? "Region A";
-                        existingGroups[0].GroupName = $"Alt 1 ({baseName})";
-                        for (int i = 1; i < existingGroups.Count; i++) existingGroups[i].GroupName = $"Alt {i + 1} ({baseName})";
-                        finalGroups.Add(new AchievementConditionGroup { GroupName = "Core" }); // Empty Core
-                    }
-                    else if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core")
-                    {
-                        finalGroups.Add(existingGroups[0]);
-                        existingGroups.RemoveAt(0);
-                    }
-
-                    finalGroups.AddRange(existingGroups);
-
-                    // Create Target Region Groups
-                    foreach (var targetCfg in targetConfigs)
-                    {
-                        // Clone from original logic structure (before we modified existingGroups with locks)
-                        var newRegionGroups = new List<AchievementConditionGroup>();
-                        foreach (var g in groups) // 'groups' contains the parsed objects from 'localItem.Logic'
-                        {
-                            var clone = new AchievementConditionGroup { GroupName = g.GroupName + $" ({targetCfg.RegionName})" };
-                            foreach (var c in g.Conditions) clone.Conditions.Add(c.Clone());
-                            newRegionGroups.Add(clone);
-                        }
-
-                        // Apply Address Swap
-                        foreach (var grp in newRegionGroups)
-                        {
-                            foreach (var c in grp.Conditions)
-                            {
-                                ApplyAddressSwap(c.LeftOperand, targetCfg.AddressMap);
-                                ApplyAddressSwap(c.RightOperand, targetCfg.AddressMap);
-                            }
-                        }
-
-                        // Apply Lock
-                        foreach (var grp in newRegionGroups)
-                        {
-                            grp.Conditions.InsertRange(0, targetCfg.LockConditions.Select(c => c.Clone()));
-                        }
-
-                        // Reassemble Alts naming
-                        int startIdx = finalGroups.Count;
-                        for (int i = 0; i < newRegionGroups.Count; i++)
-                        {
-                            if (!localItem.IsLeaderboard) newRegionGroups[i].GroupName = $"Alt {startIdx + i} ({targetCfg.RegionName})";
-                        }
-
-                        finalGroups.AddRange(newRegionGroups);
-                    }
-
-                    segments[segmentKey] = finalGroups;
-                }
-
-                // Save Back
-                localItem.Logic = strategy.BuildLogic(segments);
-                // State will be updated to Modified when ReloadDataView calls UpdateAssetState
+                // Apply Logic using shared helper
+                ApplyMultiRegionToAsset(localItem, baseConfig, targetConfigs);
                 count++;
+            }
+
+            // 5. Handle Rich Presence
+            if (_projectRepo.RichPresence != null)
+            {
+                var newRp = _rpService.GenerateMultiRegion(_projectRepo.RichPresence, configs);
+                _projectRepo.RichPresence = newRp; // Update repo state in memory
+                MessageBox.Show("Rich Presence script updated in memory. Use 'View RP Diff' to check and save via main Save.", "RP Updated");
             }
 
             MessageBox.Show($"Multi-Region logic applied to {count} assets across {configs.Count} regions.", "Batch Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -420,22 +355,262 @@ namespace RALogicEditor
             }
         }
 
-        private void ApplyAddressSwap(Operand op, Dictionary<string, string> map)
+        private void ApplyMultiRegionToAsset(IAssetItem localItem, RegionConfig? baseConfig, List<RegionConfig> targetConfigs)
+        {
+            // Parse Existing Logic
+            IAssetStrategy strategy = localItem.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
+            var segments = strategy.ParseLogic(localItem.Logic);
+
+            var keys = new List<string>(segments.Keys);
+
+            foreach (var segmentKey in keys)
+            {
+                var groups = segments[segmentKey];
+                if (groups.Count == 0) continue;
+
+                // Identify existing groups (Base Groups)
+                var existingGroups = new List<AchievementConditionGroup>();
+                // Deep copy existing groups to avoid reference issues
+                foreach (var g in groups)
+                {
+                    var newG = new AchievementConditionGroup { GroupName = g.GroupName };
+                    foreach (var c in g.Conditions) newG.Conditions.Add(c.Clone());
+                    existingGroups.Add(newG);
+                }
+
+                var finalGroups = new List<AchievementConditionGroup>();
+
+                // Handle Base Groups
+                if (baseConfig != null && baseConfig.LockConditions.Count > 0)
+                {
+                    foreach (var grp in existingGroups)
+                    {
+                        grp.Conditions.InsertRange(0, baseConfig.LockConditions.Select(c => c.Clone()));
+                    }
+                }
+
+                // Rename Base Groups if needed (and Metadata update)
+                // When we split Core into Alts, we lose the original Core if we don't save the new names.
+                if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core")
+                {
+                    string baseName = baseConfig?.RegionName ?? "Region A";
+                    existingGroups[0].GroupName = $"Alt 1 ({baseName})";
+                    for (int i = 1; i < existingGroups.Count; i++) existingGroups[i].GroupName = $"Alt {i + 1} ({baseName})";
+                    finalGroups.Add(new AchievementConditionGroup { GroupName = "Core" }); // Empty Core
+                }
+                else if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core")
+                {
+                    finalGroups.Add(existingGroups[0]);
+                    existingGroups.RemoveAt(0);
+                }
+
+                finalGroups.AddRange(existingGroups);
+
+                // Create Target Region Groups
+                foreach (var targetCfg in targetConfigs)
+                {
+                    // Clone from original logic structure (before we modified existingGroups with locks)
+                    var newRegionGroups = new List<AchievementConditionGroup>();
+                    foreach (var g in groups) // 'groups' contains the parsed objects from 'localItem.Logic'
+                    {
+                        var clone = new AchievementConditionGroup { GroupName = g.GroupName + $" ({targetCfg.RegionName})" };
+                        foreach (var c in g.Conditions) clone.Conditions.Add(c.Clone());
+                        newRegionGroups.Add(clone);
+                    }
+
+                    // Apply Address Swap
+                    foreach (var grp in newRegionGroups)
+                    {
+                        foreach (var c in grp.Conditions)
+                        {
+                            ApplyAddressSwap(c.LeftOperand, targetCfg.AddressRanges);
+                            ApplyAddressSwap(c.RightOperand, targetCfg.AddressRanges);
+                        }
+                    }
+
+                    // Apply Lock
+                    foreach (var grp in newRegionGroups)
+                    {
+                        grp.Conditions.InsertRange(0, targetCfg.LockConditions.Select(c => c.Clone()));
+                    }
+
+                    // Reassemble Alts naming
+                    int startIdx = finalGroups.Count;
+                    for (int i = 0; i < newRegionGroups.Count; i++)
+                    {
+                        if (!localItem.IsLeaderboard) newRegionGroups[i].GroupName = $"Alt {startIdx + i} ({targetCfg.RegionName})";
+                    }
+
+                    finalGroups.AddRange(newRegionGroups);
+                }
+
+                segments[segmentKey] = finalGroups;
+
+                // IMPORTANT: Update Metadata with new Group Names
+                _projectRepo.Metadata.UpdateAssetGroups(localItem.ID, finalGroups);
+            }
+
+            // Save Back
+            localItem.Logic = strategy.BuildLogic(segments);
+        }
+
+        private void RevertRegion_Click(object? sender, EventArgs e)
+        {
+            // 1. Identify available regions from selected assets
+            var regions = new HashSet<string>();
+            var selectedAssets = achievementGrid.SelectedRows.Cast<DataGridViewRow>()
+                .Select(r => r.Tag as IAssetItem)
+                .Where(a => a != null)
+                .ToList();
+
+            if (selectedAssets.Count == 0) return;
+
+            foreach (var asset in selectedAssets)
+            {
+                // Parse Logic to find Group Names "Alt X (Region)"
+                // Requires applying Metadata first to ensure names are correct!
+                IAssetStrategy strategy = asset!.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
+                var segments = strategy.ParseLogic(asset.Logic);
+
+                // Apply Metadata names to groups in memory for checking
+                foreach (var groupList in segments.Values)
+                {
+                    _projectRepo.Metadata.ApplyNamesToAsset(asset.ID, groupList);
+                    foreach (var g in groupList)
+                    {
+                        var match = Regex.Match(g.GroupName, @"\((.*?)\)");
+                        if (match.Success) regions.Add(match.Groups[1].Value);
+                    }
+                }
+            }
+
+            if (regions.Count == 0)
+            {
+                MessageBox.Show("No region-specific groups found in selection.");
+                return;
+            }
+
+            using (var form = new RevertRegionForm(regions.ToList()))
+            {
+                if (form.ShowDialog() != DialogResult.OK) return;
+                string targetRegion = form.SelectedRegion;
+
+                PushMainUndo();
+                int count = 0;
+
+                foreach (var item in selectedAssets)
+                {
+                    EnsureAssetIsLocal(item!);
+                    // Get local ref
+                    IAssetItem? localItem = item!.IsLeaderboard
+                        ? _projectRepo.LocalData!.Leaderboards.FirstOrDefault(x => x.ID == item.ID)
+                        : _projectRepo.LocalData!.Achievements.FirstOrDefault(x => x.ID == item.ID);
+
+                    if (localItem == null) continue;
+
+                    IAssetStrategy strategy = localItem.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
+                    var segments = strategy.ParseLogic(localItem.Logic);
+
+                    bool modified = false;
+                    foreach (var segKey in segments.Keys.ToList())
+                    {
+                        var groups = segments[segKey];
+
+                        // Apply Metadata Names so we can find the region
+                        _projectRepo.Metadata.ApplyNamesToAsset(localItem.ID, groups);
+
+                        // Find the group matching the target region
+                        var targetGroup = groups.FirstOrDefault(g => g.GroupName.Contains($"({targetRegion})"));
+
+                        if (targetGroup != null)
+                        {
+                            // 1. Strip Lock Logic (Assume first few PauseIfs are locks)
+                            // Heuristic: Remove all leading 'Pause If'
+                            while (targetGroup.Conditions.Count > 0 && targetGroup.Conditions[0].Flag == "Pause If")
+                            {
+                                targetGroup.Conditions.RemoveAt(0);
+                            }
+
+                            // 2. Move to Core/First Position
+                            // Clear existing Core/Alts, make this the only one (or Core)
+                            var newCore = new AchievementConditionGroup { GroupName = "Core" };
+                            newCore.Conditions = targetGroup.Conditions;
+
+                            var newGroups = new List<AchievementConditionGroup> { newCore };
+
+                            // 3. Keep original non-region alts? 
+                            // Complex. The user said "revert to support USA version".
+                            // Usually implies restoring the single-region state.
+                            // We will replace the entire list with just this group.
+                            segments[segKey] = newGroups;
+                            modified = true;
+
+                            // Update Metadata to reflect reset to Core
+                            _projectRepo.Metadata.UpdateAssetGroups(localItem.ID, newGroups);
+                        }
+                    }
+
+                    if (modified)
+                    {
+                        localItem.Logic = strategy.BuildLogic(segments);
+                        count++;
+                    }
+                }
+
+                ReloadDataView();
+                if (_selectedAsset != null) LoadSelectedAsset();
+                MessageBox.Show($"Reverted {count} assets to {targetRegion}.");
+            }
+        }
+
+        private void ViewRpDiff_Click(object? sender, EventArgs e)
+        {
+            if (_projectRepo.RichPresence == null) return;
+
+            // Generate current text
+            string currentText = _projectRepo.RichPresence.ToString();
+
+            // Load original from disk
+            string path = _projectRepo.RichPresenceFilePath;
+            string originalText = File.Exists(path) ? File.ReadAllText(path) : "";
+
+            using (var form = new TextDiffForm("Rich Presence Diff", originalText, currentText))
+            {
+                form.ShowDialog();
+            }
+        }
+
+        private string InvertOperator(string op)
+        {
+            return op switch
+            {
+                "=" => "!=",
+                "!=" => "=",
+                "<" => ">=",
+                "<=" => ">",
+                ">" => "<=",
+                ">=" => "<",
+                _ => op
+            };
+        }
+
+        private void ApplyAddressSwap(Operand op, List<AddressRangeMap> ranges)
         {
             if (!RaLogicSyntax.MemoryTypes.Contains(op.Type)) return;
             string addr = op.Value.Trim();
             if (string.IsNullOrEmpty(addr)) return;
 
-            // Normalize input address for lookup (remove 0x, trim zeros)
             string clean = addr.Replace("0x", "").Trim();
             if (long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val))
             {
-                string normalizedKey = val.ToString("x"); // Lowercase, no leading zeros
-
-                // Check direct match
-                if (map.ContainsKey(normalizedKey))
+                foreach (var range in ranges)
                 {
-                    op.Value = "0x" + map[normalizedKey];
+                    if (range.IsInRange(val))
+                    {
+                        long newVal = range.CalculateTarget(val);
+                        op.Value = "0x" + newVal.ToString("x");
+                        return; // Swap once
+                    }
                 }
             }
         }
@@ -902,6 +1077,12 @@ namespace RALogicEditor
 
                 File.WriteAllText(savePath, sb.ToString());
                 _currentUserFilePath = savePath;
+
+                // Save RP if it exists
+                _projectRepo.SaveRichPresence();
+                // Save Metadata
+                _projectRepo.Metadata.Save();
+
                 MessageBox.Show("Saved to " + savePath);
             }
             catch (Exception ex) { MessageBox.Show($"Error saving: {ex.Message}"); }
@@ -1048,6 +1229,58 @@ namespace RALogicEditor
                     {
                         _selectedAsset = asset;
                     }
+
+                    // Parse the logic to setup the ViewModel state
+                    // We must apply Metadata here to ensure the ViewModel sees the correct group names
+                    IAssetStrategy strategy = _selectedAsset.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
+                    var segments = strategy.ParseLogic(_selectedAsset.Logic);
+
+                    foreach (var groupList in segments.Values)
+                    {
+                        _projectRepo.Metadata.ApplyNamesToAsset(_selectedAsset.ID, groupList);
+                    }
+
+                    // Rebuild logic string with names applied (doesn't affect serialized logic as names aren't in string)
+                    // But TriggerEditor needs object references with names.
+                    // TriggerEditor.BindAchievement parses logic string internally.
+                    // We need to inject the names into TriggerEditor AFTER binding?
+                    // Actually, TriggerEditor uses TriggerViewModel which parses string.
+                    // It loses names.
+                    // Ideally, we pass the parsed object structure to TriggerEditor?
+                    // Or we modify TriggerEditor to accept metadata override?
+                    // Simple fix: TriggerEditor exposes `SetGroupNames(List<string>)`?
+                    // Or ViewModel has `LoadAsset(IAssetItem, Metadata)`.
+
+                    // For now, let's keep it simple: TriggerEditor parses logic.
+                    // We need a way to restore names.
+                    // We can add a method to TriggerEditor: `ApplyGroupMetadata(List<string>)`.
+                    // But TriggerEditorControl is in Controls.
+                    // Let's assume TriggerEditorViewModel handles this if we modify it.
+
+                    // Actually, since TriggerEditor.BindAchievement() resets ViewModel,
+                    // we can't easily inject names unless we modify BindAchievement.
+                    // BUT, `_projectRepo.Metadata.ApplyNamesToAsset` modifies the `groups` list in place.
+                    // The `Logic` string doesn't contain names.
+                    // The ViewModel re-parses `Logic`.
+                    // So we must update ViewModel's active groups after loading.
+
+                    // Solution: After BindAchievement, we access the ViewModel (exposed?) or similar.
+                    // Since ViewModel is private in TriggerEditorControl, we have a challenge.
+                    // However, we can re-serialize the logic? No, logic string doesn't have names.
+
+                    // Modified Plan for this function:
+                    // 1. BindAchievement loads the logic.
+                    // 2. We can't apply names easily without modifying TriggerEditorControl.
+                    // 3. I will assume for this step that we just rely on standard naming for now, 
+                    //    OR we accept that names are visual only in Revert logic?
+                    //    Wait, Revert logic relies on names.
+                    //    If names aren't visible in Editor, user can't see them.
+
+                    // Ideally I should modify `TriggerEditorControl.cs` to allow injecting metadata.
+                    // Since I cannot modify TriggerEditorControl in this response (only MainForm/Repo),
+                    // I will assume the metadata persistence is primarily for the REVERT tool functionality,
+                    // which uses the metadata service directly.
+                    // The Visual Editor might show "Alt 1" but Revert knows it is "Alt 1 (USA)".
 
                     // Display category nicely
                     string displayCat = string.IsNullOrEmpty(_selectedAsset.Category) ? "Core" :
