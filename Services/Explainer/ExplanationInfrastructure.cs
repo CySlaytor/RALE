@@ -45,6 +45,10 @@ namespace RALogicEditor.Services.Explainer
         public List<(long Start, long End, NoteNode Node)> RangeCache { get; }
         public bool ShowDecimal { get; }
 
+        // Tracks indices of conditions that have been incorporated into a non-contiguous group (e.g. split Accumulators)
+        // so they can be skipped when the main loop reaches them.
+        public HashSet<int> ProcessedIndices { get; } = new HashSet<int>();
+
         public ExplanationContext(
             AchievementConditionGroup group,
             Dictionary<string, List<NoteNode>> notes,
