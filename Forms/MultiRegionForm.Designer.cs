@@ -28,6 +28,7 @@
             this.copyLogicToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.deleteRowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.btnHelp = new System.Windows.Forms.Button();
+            this.chkUpdateRP = new System.Windows.Forms.CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.dgvMapping)).BeginInit();
             this.ctxGridActions.SuspendLayout();
             this.SuspendLayout();
@@ -175,11 +176,25 @@
             this.btnHelp.UseVisualStyleBackColor = true;
             this.btnHelp.Click += new System.EventHandler(this.btnHelp_Click);
             // 
+            // chkUpdateRP
+            // 
+            this.chkUpdateRP.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.chkUpdateRP.AutoSize = true;
+            this.chkUpdateRP.Checked = true;
+            this.chkUpdateRP.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkUpdateRP.Location = new System.Drawing.Point(460, 523);
+            this.chkUpdateRP.Name = "chkUpdateRP";
+            this.chkUpdateRP.Size = new System.Drawing.Size(143, 19);
+            this.chkUpdateRP.TabIndex = 9;
+            this.chkUpdateRP.Text = "Update Rich Presence";
+            this.chkUpdateRP.UseVisualStyleBackColor = true;
+            // 
             // MultiRegionForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(784, 555);
+            this.Controls.Add(this.chkUpdateRP);
             this.Controls.Add(this.btnHelp);
             this.Controls.Add(this.tabControlRegions);
             this.Controls.Add(this.lblInstruction);
@@ -213,5 +228,6 @@
         private System.Windows.Forms.ToolStripMenuItem deleteRowToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem copyLogicToolStripMenuItem;
         private System.Windows.Forms.Button btnHelp;
+        private System.Windows.Forms.CheckBox chkUpdateRP;
     }
 }

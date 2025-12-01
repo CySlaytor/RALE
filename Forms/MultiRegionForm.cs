@@ -1,4 +1,5 @@
-﻿using RALogicEditor.Definitions;
+﻿#nullable enable
+using RALogicEditor.Definitions;
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Utilities;
@@ -17,6 +18,9 @@ namespace RALogicEditor.Forms
     {
         private List<CodeNote> _allNotes;
         private Dictionary<string, DataGridView> _regionGrids = new();
+
+        // Property exposed for MainForm to check before applying RP logic
+        public bool ShouldUpdateRichPresence => chkUpdateRP.Checked;
 
         public MultiRegionForm(List<CodeNote> notes)
         {
@@ -173,9 +177,8 @@ namespace RALogicEditor.Forms
                     {
                         simpleMappings[region][bVal.ToString("x")] = tVal.ToString("x");
 
-                        // FIX: Updated regex to allow for hyphenated sizes like "20-bytes"
-                        // Previous: @"\[.*?((?:0x)?[0-9a-fA-F]+)\s*bytes?.*?\]"
-                        // New: Adds \s*[-]?\s* to consume optional hyphens
+                        // Updated Regex to handle Hex sizes (e.g. [0x20 bytes]) or Decimal ([32 bytes])
+                        // Also handles hyphenated sizes like [20-bytes]
                         long size = 1;
                         var sizeMatch = Regex.Match(description, @"\[.*?((?:0x)?[0-9a-fA-F]+)\s*[-]?\s*bytes?.*?\]", RegexOptions.IgnoreCase);
 
@@ -280,6 +283,7 @@ namespace RALogicEditor.Forms
                 this.BackColor = Color.FromArgb(45, 45, 48);
                 this.ForeColor = Color.White;
                 StyleGrid(dgvMapping);
+                chkUpdateRP.ForeColor = Color.White;
             }
         }
 

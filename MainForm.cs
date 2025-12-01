@@ -334,8 +334,8 @@ namespace RALogicEditor
                 count++;
             }
 
-            // 5. Handle Rich Presence
-            if (_projectRepo.RichPresence != null)
+            // 5. Handle Rich Presence (Only if Checkbox is Checked)
+            if (form.ShouldUpdateRichPresence && _projectRepo.RichPresence != null)
             {
                 var newRp = _rpService.GenerateMultiRegion(_projectRepo.RichPresence, configs);
                 _projectRepo.RichPresence = newRp; // Update repo state in memory
