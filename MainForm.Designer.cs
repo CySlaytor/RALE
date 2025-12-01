@@ -22,6 +22,8 @@
             undoToolStripMenuItem = new ToolStripMenuItem();
             redoToolStripMenuItem = new ToolStripMenuItem();
             renumberLocalIDsToolStripMenuItem = new ToolStripMenuItem();
+            // New Menu Item
+            clearDataResetToolStripMenuItem = new ToolStripMenuItem();
             viewToolStripMenuItem = new ToolStripMenuItem();
             viewReviewerToolStripMenuItem = new ToolStripMenuItem();
             splitMain = new SplitContainer();
@@ -112,7 +114,7 @@
             // 
             // editToolStripMenuItem
             // 
-            editToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { undoToolStripMenuItem, redoToolStripMenuItem, new ToolStripSeparator(), renumberLocalIDsToolStripMenuItem });
+            editToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { undoToolStripMenuItem, redoToolStripMenuItem, new ToolStripSeparator(), renumberLocalIDsToolStripMenuItem, new ToolStripSeparator(), clearDataResetToolStripMenuItem });
             editToolStripMenuItem.Name = "editToolStripMenuItem";
             editToolStripMenuItem.Size = new Size(39, 20);
             editToolStripMenuItem.Text = "&Edit";
@@ -138,6 +140,12 @@
             renumberLocalIDsToolStripMenuItem.Name = "renumberLocalIDsToolStripMenuItem";
             renumberLocalIDsToolStripMenuItem.Size = new Size(180, 22);
             renumberLocalIDsToolStripMenuItem.Text = "Renumber Local IDs";
+            // 
+            // clearDataResetToolStripMenuItem
+            // 
+            clearDataResetToolStripMenuItem.Name = "clearDataResetToolStripMenuItem";
+            clearDataResetToolStripMenuItem.Size = new Size(180, 22);
+            clearDataResetToolStripMenuItem.Text = "Clear Data / Reset...";
             // 
             // viewToolStripMenuItem
             // 
@@ -482,6 +490,7 @@
         private System.Windows.Forms.ToolStripMenuItem undoToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem redoToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem renumberLocalIDsToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem clearDataResetToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem viewToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem viewReviewerToolStripMenuItem;
         private System.Windows.Forms.SplitContainer splitMain;

@@ -52,6 +52,10 @@ namespace RALogicEditor
         {
             InitializeComponent();
 
+            // Load Settings FIRST to apply layout
+            AppSettings.Load();
+            ApplySettings();
+
             // -- Wire up Trigger Editor Events --
             // When the logic text changes in the editor, update the local model
             triggerEditor.TriggerTextChanged += TriggerEditor_TriggerTextChanged;
@@ -104,10 +108,22 @@ namespace RALogicEditor
             // Initialize Category Filter (Core/Unofficial) - REMOVED "Local" per instruction
             cmbCategory.Items.Clear();
             cmbCategory.Items.AddRange(new object[] { "Core", "Unofficial" });
-            cmbCategory.SelectedIndex = 0; // Default to Core
 
-            cmbAssetType.SelectedIndex = 0; // Default to Achievements
-            cmbSource.SelectedIndex = 0;    // Default to JSON view
+            // Restore Filter States from Settings
+            if (AppSettings.Current.LastAssetTypeIndex >= 0 && AppSettings.Current.LastAssetTypeIndex < cmbAssetType.Items.Count)
+                cmbAssetType.SelectedIndex = AppSettings.Current.LastAssetTypeIndex;
+            else
+                cmbAssetType.SelectedIndex = 0; // Default to Achievements
+
+            if (AppSettings.Current.LastCategoryIndex >= 0 && AppSettings.Current.LastCategoryIndex < cmbCategory.Items.Count)
+                cmbCategory.SelectedIndex = AppSettings.Current.LastCategoryIndex;
+            else
+                cmbCategory.SelectedIndex = 0; // Default to Core
+
+            if (AppSettings.Current.LastSourceIndex >= 0 && AppSettings.Current.LastSourceIndex < cmbSource.Items.Count)
+                cmbSource.SelectedIndex = AppSettings.Current.LastSourceIndex;
+            else
+                cmbSource.SelectedIndex = 0;    // Default to JSON view
 
             // Events for filtering
             cmbAssetType.SelectedIndexChanged += (s, e) =>
@@ -131,6 +147,7 @@ namespace RALogicEditor
             moveDownAssetToolStripMenuItem.Click += MoveAssetDown_Click;
             renumberLocalIDsToolStripMenuItem.Click += RenumberLocalIDs_Click;
             renumberContextToolStripMenuItem.Click += RenumberLocalIDs_Click;
+            clearDataResetToolStripMenuItem.Click += ClearDataResetToolStripMenuItem_Click; // Wired new item
 
             // View Menu
             viewReviewerToolStripMenuItem.Click += (s, e) => ToggleReviewer();
@@ -163,8 +180,7 @@ namespace RALogicEditor
             _recentFiles.Load();
             UpdateRecentMenu();
 
-            // Load and Apply Settings
-            AppSettings.Load();
+            // Apply View State from Settings (after loading recent files)
             ToggleReviewer(AppSettings.Current.ShowLogicReviewer);
 
             // -- Undo/Redo State Management --
@@ -179,15 +195,139 @@ namespace RALogicEditor
             UpdateUndoRedoState();
         }
 
+        private void ApplySettings()
+        {
+            // Apply Window Geometry
+            if (AppSettings.Current.WindowWidth > 0 && AppSettings.Current.WindowHeight > 0)
+            {
+                this.Size = new Size(AppSettings.Current.WindowWidth, AppSettings.Current.WindowHeight);
+            }
+            if (AppSettings.Current.WindowX != -1 && AppSettings.Current.WindowY != -1)
+            {
+                this.StartPosition = FormStartPosition.Manual;
+                this.Location = new Point(AppSettings.Current.WindowX, AppSettings.Current.WindowY);
+            }
+            if (AppSettings.Current.IsMaximized)
+            {
+                this.WindowState = FormWindowState.Maximized;
+            }
+
+            // Apply Splitter Distances
+            if (AppSettings.Current.MainSplitterDistance > 0)
+                splitMain.SplitterDistance = AppSettings.Current.MainSplitterDistance;
+
+            if (AppSettings.Current.EditorSplitterDistance > 0)
+                splitEditor.SplitterDistance = AppSettings.Current.EditorSplitterDistance;
+
+            if (AppSettings.Current.VerticalSplitterDistance > 0)
+                splitMiddle.SplitterDistance = AppSettings.Current.VerticalSplitterDistance;
+
+            // Apply Editor States
+            triggerEditor.ShowDecimal = AppSettings.Current.Trigger_ShowDecimal;
+            triggerEditor.ShowAliases = AppSettings.Current.Trigger_ShowAliases;
+            triggerEditor.CollapseChains = AppSettings.Current.Trigger_CollapseChains;
+
+            codeNoteEditor.ShowLeafsOnly = AppSettings.Current.Notes_ShowLeafsOnly;
+            codeNoteEditor.IndentValues = AppSettings.Current.Notes_IndentValues;
+        }
+
+        private void SaveSettings()
+        {
+            // Window State
+            if (this.WindowState == FormWindowState.Normal)
+            {
+                AppSettings.Current.WindowX = this.Location.X;
+                AppSettings.Current.WindowY = this.Location.Y;
+                AppSettings.Current.WindowWidth = this.Size.Width;
+                AppSettings.Current.WindowHeight = this.Size.Height;
+                AppSettings.Current.IsMaximized = false;
+            }
+            else
+            {
+                AppSettings.Current.IsMaximized = (this.WindowState == FormWindowState.Maximized);
+                // Don't overwrite size/loc if minimized/maximized to preserve restore bounds
+                if (this.RestoreBounds.Width > 0)
+                {
+                    AppSettings.Current.WindowWidth = this.RestoreBounds.Width;
+                    AppSettings.Current.WindowHeight = this.RestoreBounds.Height;
+                    AppSettings.Current.WindowX = this.RestoreBounds.X;
+                    AppSettings.Current.WindowY = this.RestoreBounds.Y;
+                }
+            }
+
+            // Splitters
+            AppSettings.Current.MainSplitterDistance = splitMain.SplitterDistance;
+            AppSettings.Current.EditorSplitterDistance = splitEditor.SplitterDistance;
+            AppSettings.Current.VerticalSplitterDistance = splitMiddle.SplitterDistance;
+
+            // Filters
+            AppSettings.Current.LastAssetTypeIndex = cmbAssetType.SelectedIndex;
+            AppSettings.Current.LastCategoryIndex = cmbCategory.SelectedIndex;
+            AppSettings.Current.LastSourceIndex = cmbSource.SelectedIndex;
+
+            // Trigger Editor
+            AppSettings.Current.Trigger_ShowDecimal = triggerEditor.ShowDecimal;
+            AppSettings.Current.Trigger_ShowAliases = triggerEditor.ShowAliases;
+            AppSettings.Current.Trigger_CollapseChains = triggerEditor.CollapseChains;
+
+            // Code Notes
+            AppSettings.Current.Notes_ShowLeafsOnly = codeNoteEditor.ShowLeafsOnly;
+            AppSettings.Current.Notes_IndentValues = codeNoteEditor.IndentValues;
+
+            AppSettings.Current.ShowLogicReviewer = viewReviewerToolStripMenuItem.Checked;
+
+            AppSettings.Save();
+        }
+
+        private void ClearDataResetToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            var result = MessageBox.Show(
+                "This will delete all application configuration and cached data, including:\n" +
+                "- Settings (Window layout, checkboxes)\n" +
+                "- Recent Files List\n" +
+                "- Snippet Library\n" +
+                "- Badge Image Cache\n" +
+                "- Metadata (Group Names)\n\n" +
+                "The application will restart.\n\nAre you sure?",
+                "Clear Data / Reset",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (result == DialogResult.Yes)
+            {
+                try
+                {
+                    string appPath = Application.StartupPath;
+
+                    // Delete Files
+                    if (File.Exists(Path.Combine(appPath, "settings.json"))) File.Delete(Path.Combine(appPath, "settings.json"));
+                    if (File.Exists(Path.Combine(appPath, "recent.json"))) File.Delete(Path.Combine(appPath, "recent.json"));
+                    if (File.Exists(Path.Combine(appPath, "snippets.json"))) File.Delete(Path.Combine(appPath, "snippets.json"));
+
+                    // Delete Folders
+                    string cacheDir = Path.Combine(appPath, "Cache");
+                    if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
+
+                    string metaDir = Path.Combine(appPath, "Metadata");
+                    if (Directory.Exists(metaDir)) Directory.Delete(metaDir, true);
+
+                    MessageBox.Show("Reset complete. Application will restart.", "Done");
+                    Application.Restart();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error clearing data: {ex.Message}", "Error");
+                }
+            }
+        }
+
         private void ToggleReviewer(bool? forceState = null)
         {
             bool newState = forceState ?? !viewReviewerToolStripMenuItem.Checked;
             viewReviewerToolStripMenuItem.Checked = newState;
             splitMiddle.Panel2Collapsed = !newState;
 
-            // Save setting immediately
-            AppSettings.Current.ShowLogicReviewer = newState;
-            AppSettings.Save();
+            // Settings are saved on close now, not immediately here
         }
 
         private void UpdateUndoRedoState()
@@ -879,7 +1019,12 @@ namespace RALogicEditor
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
-            if (!ConfirmDiscardChanges()) e.Cancel = true;
+            if (!ConfirmDiscardChanges())
+            {
+                e.Cancel = true;
+                return;
+            }
+            SaveSettings();
         }
 
         // Checks if there are unsaved local changes (Assets in "Modified" or "Local" state)
@@ -1082,7 +1227,6 @@ namespace RALogicEditor
             }
 
             // -- Auto-Backup Strategy --
-            // MODIFIED: Relocated backup folder to Application.StartupPath/Backups/{GameID}
             try
             {
                 if (File.Exists(savePath))

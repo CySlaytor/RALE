@@ -62,6 +62,25 @@ namespace RALogicEditor.Controls
         public bool CanUndo => _viewModel.CanUndo;
         public bool CanRedo => _viewModel.CanRedo;
 
+        // -- Public Properties for Settings Persistence --
+        public bool ShowDecimal
+        {
+            get => _showDecimal;
+            set { chkShowDecimal.Checked = value; } // Logic handled in CheckedChanged
+        }
+
+        public bool ShowAliases
+        {
+            get => _showAliases;
+            set { chkAliasMode.Checked = value; }
+        }
+
+        public bool CollapseChains
+        {
+            get => _collapseChains;
+            set { chkCollapseChains.Checked = value; }
+        }
+
         // Public property for the Logic String (Two-way binding via ViewModel)
         [Browsable(false)]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]

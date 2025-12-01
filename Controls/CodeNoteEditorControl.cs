@@ -30,6 +30,19 @@ namespace RALogicEditor.Controls
         private bool _isInternalUpdate = false;
         private bool _hasUnsavedChanges = false; // Tracks manual modification state for status strip
 
+        // -- Public Properties for Settings Persistence --
+        public bool ShowLeafsOnly
+        {
+            get => chkShowLeafsOnly.Checked;
+            set => chkShowLeafsOnly.Checked = value;
+        }
+
+        public bool IndentValues
+        {
+            get => chkIndentValues.Checked;
+            set => chkIndentValues.Checked = value;
+        }
+
         public CodeNoteEditorControl()
         {
             InitializeComponent();
