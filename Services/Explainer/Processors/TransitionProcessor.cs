@@ -117,7 +117,22 @@ namespace RALogicEditor.Services.Explainer.Processors
                 // Format: "Value was [Op] [Prev] and is now [Op] [Curr]"
                 string prevOpText = ctx.GetOperatorText(prevCond.Operator);
                 string currOpText = ctx.GetOperatorText(currCond.Operator);
-                text = $"{name} was {prevOpText} {prevVal} and is now {currOpText} {currVal}{suffix}";
+
+                // Helper to fix grammar: remove "is " prefix so we don't get "was is..."
+                string CleanOp(string opTxt)
+                {
+                    if (opTxt == "is") return "";
+                    if (opTxt.StartsWith("is ")) return opTxt.Substring(3);
+                    return opTxt;
+                }
+
+                string prevClean = CleanOp(prevOpText);
+                string currClean = CleanOp(currOpText);
+
+                string prevPart = string.IsNullOrWhiteSpace(prevClean) ? $"was {prevVal}" : $"was {prevClean} {prevVal}";
+                string currPart = string.IsNullOrWhiteSpace(currClean) ? $"is now {currVal}" : $"is now {currClean} {currVal}";
+
+                text = $"{name} {prevPart} and {currPart}{suffix}";
             }
 
             // Determine Consumption
@@ -185,12 +200,25 @@ namespace RALogicEditor.Services.Explainer.Processors
                     condA.LeftOperand.Size == condB.LeftOperand.Size)
                 {
                     // Match found!
-                    // We no longer check RightOperand equality or specific Operator combinations.
-                    // If it's a Delta vs Mem pair on the same address, we treat it as a transition.
                     pairIndex = j;
                     return true;
                 }
             }
+            return false;
+        }
+
+        private bool IsSupportedTransition(string opA, string opB)
+        {
+            // Note: This method is kept for reference but logic has moved to generic handling in Process()
+            if (opA == "=" && opB == "=") return true;
+            if (opA == "!=" && opB == "=") return true;
+            if (opA == "=" && opB == "!=") return true;
+
+            if (opA == "<" && opB == ">=") return true;
+            if (opA == "<=" && opB == ">") return true;
+            if (opA == ">" && opB == "<=") return true;
+            if (opA == ">=" && opB == "<") return true;
+
             return false;
         }
 
