@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using Microsoft.VisualBasic.Logging;
 using RALogicEditor.Definitions;
 using RALogicEditor.Forms;
 using RALogicEditor.Helpers;
@@ -15,6 +16,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace RALogicEditor.Controls
 {
@@ -50,11 +52,15 @@ namespace RALogicEditor.Controls
         public event EventHandler<string>? AddressSelected;
         public event EventHandler<PointerChainArgs>? PointerChainSelected;
         public event EventHandler<List<ValidationIssue>>? ValidationCompleted;
+        public event EventHandler? HistoryChanged; // Fired when undo availability changes
 
         // Event to request Multi-Region Batch Processing in MainForm
         public event EventHandler<MultiRegionForm>? MultiRegionLogicRequested;
         // Event to request Logic Optimization in MainForm
         public event EventHandler? LogicOptimizationRequested;
+
+        public bool CanUndo => _viewModel.CanUndo;
+        public bool CanRedo => _viewModel.CanRedo;
 
         // Public property for the Logic String (Two-way binding via ViewModel)
         [Browsable(false)]
@@ -94,6 +100,7 @@ namespace RALogicEditor.Controls
             // Wire up ViewModel events to react to internal logic changes
             _viewModel.LogicChanged += ViewModel_LogicChanged;
             _viewModel.SegmentsChanged += ViewModel_SegmentsChanged;
+            _viewModel.HistoryChanged += (s, e) => HistoryChanged?.Invoke(this, EventArgs.Empty);
         }
 
         // Added helper method to bridge VM/Manager status to Parent Form
@@ -441,13 +448,15 @@ namespace RALogicEditor.Controls
                 if (generatedIndices.Contains(i))
                 {
                     item.ForeColor = Color.Gray;
-                    item.Font = new Font(groupsList.Font, FontStyle.Italic);
+                    // FIX: Ambiguous reference 'Font'. Fully qualified System.Drawing.Font
+                    item.Font = new System.Drawing.Font(groupsList.Font, FontStyle.Italic);
                     item.Text += " (Auto)";
                 }
                 else if (generatorRules.ContainsKey(i))
                 {
                     item.ForeColor = Color.Blue;
-                    item.Font = new Font(groupsList.Font, FontStyle.Bold);
+                    // FIX: Ambiguous reference 'Font'. Fully qualified System.Drawing.Font
+                    item.Font = new System.Drawing.Font(groupsList.Font, FontStyle.Bold);
                     item.Text += " *";
 
                     // Indicate Array mode in list

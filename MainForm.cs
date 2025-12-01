@@ -165,6 +165,17 @@ namespace RALogicEditor
             // Load and Apply Settings
             AppSettings.Load();
             ToggleReviewer(AppSettings.Current.ShowLogicReviewer);
+
+            // -- Undo/Redo State Management --
+            _mainHistory.HistoryChanged += (s, e) => UpdateUndoRedoState();
+            triggerEditor.HistoryChanged += (s, e) => UpdateUndoRedoState();
+
+            // Wire up focus events to update Undo/Redo context
+            achievementGrid.Enter += (s, e) => UpdateUndoRedoState();
+            triggerEditor.Enter += (s, e) => UpdateUndoRedoState();
+
+            // Initial State Update
+            UpdateUndoRedoState();
         }
 
         private void ToggleReviewer(bool? forceState = null)
@@ -176,6 +187,16 @@ namespace RALogicEditor
             // Save setting immediately
             AppSettings.Current.ShowLogicReviewer = newState;
             AppSettings.Save();
+        }
+
+        private void UpdateUndoRedoState()
+        {
+            // Determine active context for Undo/Redo
+            bool isTriggerContext = triggerEditor.ContainsFocus;
+
+            // Update Menu Items
+            undoToolStripMenuItem.Enabled = isTriggerContext ? triggerEditor.CanUndo : _mainHistory.CanUndo;
+            redoToolStripMenuItem.Enabled = isTriggerContext ? triggerEditor.CanRedo : _mainHistory.CanRedo;
         }
 
         // Logic Optimizer Tool Handler
@@ -1024,6 +1045,9 @@ namespace RALogicEditor
 
             // Run global validation scan - This will now respect the active asset type
             RunGlobalValidation();
+
+            // Update Undo/Redo UI state
+            UpdateUndoRedoState();
         }
 
         private void saveToolStripMenuItem_Click(object sender, EventArgs e)
@@ -1818,7 +1842,12 @@ namespace RALogicEditor
                 // Use the entry.Path for the click event
                 var item = new ToolStripMenuItem(text);
                 string path = entry.Path;
-                item.Click += (s, args) => LoadFiles(path);
+                item.Click += (s, args) =>
+                {
+                    // Check for unsaved changes before loading
+                    if (ConfirmDiscardChanges())
+                        LoadFiles(path);
+                };
                 recentToolStripMenuItem.DropDownItems.Add(item);
             }
         }

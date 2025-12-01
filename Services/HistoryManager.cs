@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -10,6 +11,11 @@ namespace RALogicEditor.Services
         private Stack<T> _redoStack = new();
 
         public bool IsUndoingRedoing { get; private set; }
+
+        public event EventHandler? HistoryChanged;
+
+        public bool CanUndo => _undoStack.Count > 0;
+        public bool CanRedo => _redoStack.Count > 0;
 
         public void PushState(T state)
         {
@@ -25,6 +31,7 @@ namespace RALogicEditor.Services
 
             _undoStack.Push(state);
             _redoStack.Clear();
+            OnHistoryChanged();
         }
 
         public T Undo(T currentState)
@@ -36,6 +43,7 @@ namespace RALogicEditor.Services
             var previousState = _undoStack.Pop();
             IsUndoingRedoing = false;
 
+            OnHistoryChanged();
             return previousState;
         }
 
@@ -48,6 +56,7 @@ namespace RALogicEditor.Services
             var nextState = _redoStack.Pop();
             IsUndoingRedoing = false;
 
+            OnHistoryChanged();
             return nextState;
         }
 
@@ -56,6 +65,12 @@ namespace RALogicEditor.Services
             _undoStack.Clear();
             _redoStack.Clear();
             IsUndoingRedoing = false;
+            OnHistoryChanged();
+        }
+
+        private void OnHistoryChanged()
+        {
+            HistoryChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

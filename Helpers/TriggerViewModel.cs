@@ -51,6 +51,11 @@ namespace RALogicEditor.Helpers
         // Events - Nullable
         public event EventHandler? LogicChanged;
         public event EventHandler? SegmentsChanged; // Fired when loading new asset
+        public event EventHandler? HistoryChanged; // Fired when undo stack changes
+
+        // History Properties
+        public bool CanUndo => _history.CanUndo;
+        public bool CanRedo => _history.CanRedo;
 
         // Constructor Injection
         public TriggerViewModel(ILogicValidator validator, ILogicGenerator generator)
@@ -59,6 +64,8 @@ namespace RALogicEditor.Helpers
             _generator = generator;
             // Default strategy
             AssetStrategy = new AchievementStrategy();
+
+            _history.HistoryChanged += (s, e) => HistoryChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public void LoadAsset(IAssetItem asset)

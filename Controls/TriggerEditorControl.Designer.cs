@@ -636,7 +636,7 @@ namespace RALogicEditor.Controls
         private System.Windows.Forms.ToolStripMenuItem explainLogicToolStripMenuItem = null!;
         private System.Windows.Forms.Button btnCopyDef = null!;
         private System.Windows.Forms.CheckBox chkCollapseChains = null!;
-        private System.Windows.Forms.ToolStripMenuItem multiRegionToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem logicOptimizerToolStripMenuItem; // Added
+        private System.Windows.Forms.ToolStripMenuItem multiRegionToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem logicOptimizerToolStripMenuItem = null!;
     }
 }
