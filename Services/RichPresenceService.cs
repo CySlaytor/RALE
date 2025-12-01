@@ -20,8 +20,28 @@ namespace RALogicEditor.Services
             }
 
             // 2. Process Display Strings
-            foreach (var ds in sourceScript.DisplayStrings)
+            for (int i = 0; i < sourceScript.DisplayStrings.Count; i++)
             {
+                var ds = sourceScript.DisplayStrings[i];
+                bool isLastLine = (i == sourceScript.DisplayStrings.Count - 1);
+
+                // Optimization: If the last line has no condition (default) and contains no lookup addresses (plain text),
+                // do NOT duplicate it with locks. Just add it once at the end.
+                // This prevents "Playing Project: Snowblind" from being turned into "?Lock?Playing..."
+                bool isPlainTextDefault = isLastLine &&
+                                          string.IsNullOrEmpty(ds.Condition) &&
+                                          !HasAddressLookups(ds.Text);
+
+                if (isPlainTextDefault)
+                {
+                    newScript.DisplayStrings.Add(new RichPresenceDisplayString
+                    {
+                        Condition = "",
+                        Text = ds.Text
+                    });
+                    continue;
+                }
+
                 foreach (var config in configs)
                 {
                     var newDs = new RichPresenceDisplayString();
@@ -49,6 +69,12 @@ namespace RALogicEditor.Services
             }
 
             return newScript;
+        }
+
+        private bool HasAddressLookups(string text)
+        {
+            // Checks for @Lookup(0x...) or just 0x...
+            return Regex.IsMatch(text, @"0x[0-9A-Fa-f]+");
         }
 
         private string BuildLockString(List<AchievementCondition> conditions)

@@ -35,6 +35,9 @@ namespace RALogicEditor
         // Rich Presence Service for Multi-Region handling
         private readonly RichPresenceService _rpService = new();
 
+        // New: Service for RP Backup/Revert
+        private readonly RichPresenceMetadataService _rpMetadata = new();
+
         // -- State Tracking --
         private IAssetItem? _selectedAsset; // The achievement/leaderboard currently being edited
         private bool _isLoading;            // Flag to suppress events during bulk updates
@@ -135,6 +138,12 @@ namespace RALogicEditor
             var viewRpDiffItem = new ToolStripMenuItem("View RP Diff");
             viewRpDiffItem.Click += ViewRpDiff_Click;
             viewToolStripMenuItem.DropDownItems.Add(viewRpDiffItem);
+
+            // Add Revert RP to Edit Menu
+            var revertRpItem = new ToolStripMenuItem("Revert Rich Presence");
+            revertRpItem.Click += RevertRichPresence_Click;
+            editToolStripMenuItem.DropDownItems.Add(new ToolStripSeparator());
+            editToolStripMenuItem.DropDownItems.Add(revertRpItem);
 
             // Add "Revert Multi-Region" to Grid Context Menu
             var revertItem = new ToolStripMenuItem("Revert Multi-Region...");
@@ -337,9 +346,12 @@ namespace RALogicEditor
             // 5. Handle Rich Presence (Only if Checkbox is Checked)
             if (form.ShouldUpdateRichPresence && _projectRepo.RichPresence != null)
             {
+                // Save Backup before modification
+                _rpMetadata.SaveBackup(_projectRepo.RichPresence.ToString());
+
                 var newRp = _rpService.GenerateMultiRegion(_projectRepo.RichPresence, configs);
                 _projectRepo.RichPresence = newRp; // Update repo state in memory
-                MessageBox.Show("Rich Presence script updated in memory. Use 'View RP Diff' to check and save via main Save.", "RP Updated");
+                MessageBox.Show("Rich Presence script updated in memory.\nA backup was saved to allow reverting.", "RP Updated");
             }
 
             MessageBox.Show($"Multi-Region logic applied to {count} assets across {configs.Count} regions.", "Batch Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -352,6 +364,28 @@ namespace RALogicEditor
             {
                 // Re-select finding the new Local object
                 SelectAssetInGrid(_selectedAsset);
+            }
+        }
+
+        private void RevertRichPresence_Click(object? sender, EventArgs e)
+        {
+            if (_rpMetadata.CurrentBackup == null)
+            {
+                MessageBox.Show("No Rich Presence backup found for this session/game.", "Revert Unavailable", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (MessageBox.Show($"Revert Rich Presence to state from {_rpMetadata.CurrentBackup.Timestamp}?", "Confirm Revert", MessageBoxButtons.YesNo) == DialogResult.Yes)
+            {
+                try
+                {
+                    _projectRepo.RichPresence = RichPresenceParser.Parse(_rpMetadata.CurrentBackup.OriginalScript);
+                    MessageBox.Show("Rich Presence reverted successfully.", "Revert Complete");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error parsing backup: {ex.Message}", "Error");
+                }
             }
         }
 
@@ -568,16 +602,52 @@ namespace RALogicEditor
             if (_projectRepo.RichPresence == null) return;
 
             // Generate current text
-            string currentText = _projectRepo.RichPresence.ToString();
+            string currentText = ExtractDisplaySection(_projectRepo.RichPresence.ToString());
 
             // Load original from disk
             string path = _projectRepo.RichPresenceFilePath;
-            string originalText = File.Exists(path) ? File.ReadAllText(path) : "";
+            string originalFullText = File.Exists(path) ? File.ReadAllText(path) : "";
+            string originalText = ExtractDisplaySection(originalFullText);
 
-            using (var form = new TextDiffForm("Rich Presence Diff", originalText, currentText))
+            using (var form = new TextDiffForm("Rich Presence Diff - Display Section", originalText, currentText))
             {
                 form.ShowDialog();
             }
+        }
+
+        private string ExtractDisplaySection(string rpScript)
+        {
+            if (string.IsNullOrEmpty(rpScript)) return "";
+
+            // Normalize line endings
+            string normalized = rpScript.Replace("\r\n", "\n").Replace("\r", "\n");
+            var lines = normalized.Split('\n');
+
+            var result = new StringBuilder();
+            bool inDisplay = false;
+
+            foreach (var line in lines)
+            {
+                string trimLine = line.Trim();
+
+                if (trimLine.StartsWith("Display:"))
+                {
+                    inDisplay = true;
+                    // We skip the "Display:" header itself to keep the view clean
+                    continue;
+                }
+
+                if (inDisplay)
+                {
+                    // Stop if we hit another section (though Display is usually last)
+                    if (trimLine.StartsWith("Lookup:") || trimLine.StartsWith("Format:"))
+                        break;
+
+                    result.AppendLine(line);
+                }
+            }
+
+            return result.ToString().Trim();
         }
 
         private string InvertOperator(string op)
@@ -934,6 +1004,9 @@ namespace RALogicEditor
             // Delegate heavy lifting to Repository
             _projectRepo.LoadFiles(primaryPath, out _currentUserFilePath);
 
+            // Load associated RP Metadata if exists
+            _rpMetadata.Load(_projectRepo.CurrentGameId);
+
             if (_projectRepo.ServerData != null)
                 this.Text = $"RA Logic Editor - {_projectRepo.CurrentTitle}";
 
@@ -1239,48 +1312,6 @@ namespace RALogicEditor
                     {
                         _projectRepo.Metadata.ApplyNamesToAsset(_selectedAsset.ID, groupList);
                     }
-
-                    // Rebuild logic string with names applied (doesn't affect serialized logic as names aren't in string)
-                    // But TriggerEditor needs object references with names.
-                    // TriggerEditor.BindAchievement parses logic string internally.
-                    // We need to inject the names into TriggerEditor AFTER binding?
-                    // Actually, TriggerEditor uses TriggerViewModel which parses string.
-                    // It loses names.
-                    // Ideally, we pass the parsed object structure to TriggerEditor?
-                    // Or we modify TriggerEditor to accept metadata override?
-                    // Simple fix: TriggerEditor exposes `SetGroupNames(List<string>)`?
-                    // Or ViewModel has `LoadAsset(IAssetItem, Metadata)`.
-
-                    // For now, let's keep it simple: TriggerEditor parses logic.
-                    // We need a way to restore names.
-                    // We can add a method to TriggerEditor: `ApplyGroupMetadata(List<string>)`.
-                    // But TriggerEditorControl is in Controls.
-                    // Let's assume TriggerEditorViewModel handles this if we modify it.
-
-                    // Actually, since TriggerEditor.BindAchievement() resets ViewModel,
-                    // we can't easily inject names unless we modify BindAchievement.
-                    // BUT, `_projectRepo.Metadata.ApplyNamesToAsset` modifies the `groups` list in place.
-                    // The `Logic` string doesn't contain names.
-                    // The ViewModel re-parses `Logic`.
-                    // So we must update ViewModel's active groups after loading.
-
-                    // Solution: After BindAchievement, we access the ViewModel (exposed?) or similar.
-                    // Since ViewModel is private in TriggerEditorControl, we have a challenge.
-                    // However, we can re-serialize the logic? No, logic string doesn't have names.
-
-                    // Modified Plan for this function:
-                    // 1. BindAchievement loads the logic.
-                    // 2. We can't apply names easily without modifying TriggerEditorControl.
-                    // 3. I will assume for this step that we just rely on standard naming for now, 
-                    //    OR we accept that names are visual only in Revert logic?
-                    //    Wait, Revert logic relies on names.
-                    //    If names aren't visible in Editor, user can't see them.
-
-                    // Ideally I should modify `TriggerEditorControl.cs` to allow injecting metadata.
-                    // Since I cannot modify TriggerEditorControl in this response (only MainForm/Repo),
-                    // I will assume the metadata persistence is primarily for the REVERT tool functionality,
-                    // which uses the metadata service directly.
-                    // The Visual Editor might show "Alt 1" but Revert knows it is "Alt 1 (USA)".
 
                     // Display category nicely
                     string displayCat = string.IsNullOrEmpty(_selectedAsset.Category) ? "Core" :
