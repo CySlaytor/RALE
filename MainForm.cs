@@ -22,68 +22,49 @@ namespace RALogicEditor
     public partial class MainForm : Form
     {
         // -- Core Services --
-        // Handles File I/O, merging logic, and data storage (Server vs Local)
         private readonly ProjectRepository _projectRepo = new();
-        // Handles Global Undo/Redo for the asset list (Add/Remove/Move assets)
         private readonly HistoryManager<UserTextParser.UserData> _mainHistory = new();
-        // Manages the Recent Files list in the File menu
         private readonly RecentFilesManager _recentFiles = new();
-
-        // Logic Validator Service (Instantiated locally for now, could be injected)
         private readonly ILogicValidator _validator = new LogicValidator();
-
-        // Rich Presence Service for Multi-Region handling
         private readonly RichPresenceService _rpService = new();
-
-        // New: Service for RP Backup/Revert
         private readonly RichPresenceMetadataService _rpMetadata = new();
 
-        // -- State Tracking --
-        private IAssetItem? _selectedAsset; // The achievement/leaderboard currently being edited
-        private bool _isLoading;            // Flag to suppress events during bulk updates
-        private string _currentFilePath = ""; // Path to the main loaded file (JSON)
-        private string _currentUserFilePath = ""; // Path to the companion User.txt
-        private List<IAssetItem> _currentDisplayList = new(); // The filtered list currently shown in the grid
+        // -- Refactored Services --
+        private readonly UserFileSerializer _fileSerializer = new();
+        private readonly MultiRegionBatchProcessor _batchProcessor;
 
-        // Store global issues for the Code Reviewer
+        // -- State Tracking --
+        private IAssetItem? _selectedAsset;
+        private bool _isLoading;
+        private string _currentFilePath = "";
+        private string _currentUserFilePath = "";
+        private List<IAssetItem> _currentDisplayList = new();
         private List<ValidationIssue> _globalIssues = new();
 
         public MainForm()
         {
             InitializeComponent();
 
-            // Load Settings FIRST to apply layout
+            _batchProcessor = new MultiRegionBatchProcessor(_projectRepo.Metadata);
+
             AppSettings.Load();
             ApplySettings();
 
-            // -- Wire up Trigger Editor Events --
-            // When the logic text changes in the editor, update the local model
+            // Event Wiring
             triggerEditor.TriggerTextChanged += TriggerEditor_TriggerTextChanged;
-            // When metadata (Points, Title) changes, update the grid row
             triggerEditor.AchievementDataChanged += TriggerEditor_AchievementDataChanged;
-            // When user clicks "Reset", revert the item to Server state
             triggerEditor.AssetResetRequested += TriggerEditor_AssetResetRequested;
-            // When user wants to inject logic from the Code Note viewer
             triggerEditor.AddFromCodeNoteRequested += TriggerEditor_AddFromCodeNoteRequested;
-
-            // -- New: Reviewer Events --
-            // Trigger Editor notifies when validation runs on the CURRENT asset. 
-            // We merge this result into the global list.
             triggerEditor.ValidationCompleted += TriggerEditor_ValidationCompleted;
 
-            // -- NEW: Multi-Region Batch Processing Request --
-            // Handles the bulk update logic from the context menu
+            // This event comes from the Editor Control, so we handle it here in the "Controller"
             triggerEditor.MultiRegionLogicRequested += TriggerEditor_MultiRegionLogicRequested;
 
-            // -- NEW: Logic Optimizer Request --
-            // Handles the request from the Trigger Editor's Tools menu
+            // This event comes from the Editor Tool Menu, but logic is in Menu partial
             triggerEditor.LogicOptimizationRequested += LogicOptimizerToolStripMenuItem_Click;
 
-            // Code Reviewer clicks: select the asset and the specific condition
             codeReviewControl.IssueSelected += CodeReviewControl_IssueSelected;
 
-            // -- Bridge: Trigger Editor -> Code Note Editor --
-            // Highlighting memory addresses in the Note Viewer when clicked in the Trigger Grid
             triggerEditor.AddressSelected += (s, addr) => codeNoteEditor.HighlightAddress(addr);
             triggerEditor.PointerChainSelected += (s, e) =>
             {
@@ -91,54 +72,39 @@ namespace RALogicEditor
                 if (e.Offsets.Count > 0) codeNoteEditor.HighlightVariable(e.Offsets);
             };
 
-            // -- Code Note Editor Events --
+            // Bridge Code Note Editor to Main Menu actions
             codeNoteEditor.ReloadRequested += Reload_Click;
-            codeNoteEditor.SaveRequested += saveToolStripMenuItem_Click; // Wire up new save button
+            codeNoteEditor.SaveRequested += saveToolStripMenuItem_Click;
 
-            // -- Main Grid Events --
             achievementGrid.CellDoubleClick += achievementGrid_CellDoubleClick;
             achievementGrid.SelectionChanged += achievementGrid_SelectionChanged;
             achievementGrid.KeyDown += achievementGrid_KeyDown;
             achievementGrid.ContextMenuStrip.Opening += AchievementContextMenu_Opening;
 
-            // -- Toolbar Setup --
+            // Filters
             cmbSource.Items.Clear();
             cmbSource.Items.AddRange(new object[] { "JSON", "Local", "New" });
-
-            // Initialize Category Filter (Core/Unofficial) - REMOVED "Local" per instruction
             cmbCategory.Items.Clear();
             cmbCategory.Items.AddRange(new object[] { "Core", "Unofficial" });
 
-            // Restore Filter States from Settings
             if (AppSettings.Current.LastAssetTypeIndex >= 0 && AppSettings.Current.LastAssetTypeIndex < cmbAssetType.Items.Count)
                 cmbAssetType.SelectedIndex = AppSettings.Current.LastAssetTypeIndex;
-            else
-                cmbAssetType.SelectedIndex = 0; // Default to Achievements
+            else cmbAssetType.SelectedIndex = 0;
 
             if (AppSettings.Current.LastCategoryIndex >= 0 && AppSettings.Current.LastCategoryIndex < cmbCategory.Items.Count)
                 cmbCategory.SelectedIndex = AppSettings.Current.LastCategoryIndex;
-            else
-                cmbCategory.SelectedIndex = 0; // Default to Core
+            else cmbCategory.SelectedIndex = 0;
 
             if (AppSettings.Current.LastSourceIndex >= 0 && AppSettings.Current.LastSourceIndex < cmbSource.Items.Count)
                 cmbSource.SelectedIndex = AppSettings.Current.LastSourceIndex;
-            else
-                cmbSource.SelectedIndex = 0;    // Default to JSON view
+            else cmbSource.SelectedIndex = 0;
 
-            // Events for filtering
-            cmbAssetType.SelectedIndexChanged += (s, e) =>
-            {
-                ReloadDataView();
-                // Re-run validation when asset type changes to filter the review list
-                RunGlobalValidation();
-            };
+            cmbAssetType.SelectedIndexChanged += (s, e) => { ReloadDataView(); RunGlobalValidation(); };
             cmbSource.SelectedIndexChanged += (s, e) => ReloadDataView();
             cmbCategory.SelectedIndexChanged += (s, e) => ReloadDataView();
-
-            // Search Box Wiring
             txtAssetSearch.TextChanged += (s, e) => ReloadDataView();
 
-            // -- Menu Item Wiring --
+            // Menu Wiring
             newAssetToolStripMenuItem.Click += NewAsset_Click;
             cloneAssetToolStripMenuItem.Click += DuplicateAsset_Click;
             deleteAssetToolStripMenuItem.Click += DeleteAsset_Click;
@@ -147,874 +113,70 @@ namespace RALogicEditor
             moveDownAssetToolStripMenuItem.Click += MoveAssetDown_Click;
             renumberLocalIDsToolStripMenuItem.Click += RenumberLocalIDs_Click;
             renumberContextToolStripMenuItem.Click += RenumberLocalIDs_Click;
-            clearDataResetToolStripMenuItem.Click += ClearDataResetToolStripMenuItem_Click; // Wired new item
-
-            // View Menu
+            clearDataResetToolStripMenuItem.Click += ClearDataResetToolStripMenuItem_Click;
             viewReviewerToolStripMenuItem.Click += (s, e) => ToggleReviewer();
 
-            // Add "View RP Diff" to View menu
+            // Dynamic Menu Items
             var viewRpDiffItem = new ToolStripMenuItem("View RP Diff");
             viewRpDiffItem.Click += ViewRpDiff_Click;
             viewToolStripMenuItem.DropDownItems.Add(viewRpDiffItem);
 
-            // Add Revert RP to Edit Menu
             var revertRpItem = new ToolStripMenuItem("Revert Rich Presence");
             revertRpItem.Click += RevertRichPresence_Click;
             editToolStripMenuItem.DropDownItems.Add(new ToolStripSeparator());
             editToolStripMenuItem.DropDownItems.Add(revertRpItem);
 
-            // Add "Revert Multi-Region" to Grid Context Menu
             var revertItem = new ToolStripMenuItem("Revert Multi-Region...");
             revertItem.Click += RevertRegion_Click;
             assetContextMenu.Items.Add(new ToolStripSeparator());
             assetContextMenu.Items.Add(revertItem);
 
-            // -- Button Wiring --
             btnAddAsset.Click += NewAsset_Click;
             btnDuplicateAsset.Click += DuplicateAsset_Click;
             btnDeleteAsset.Click += DeleteAsset_Click;
 
             this.FormClosing += MainForm_FormClosing;
 
-            // Load recent files list on startup
             _recentFiles.Load();
             UpdateRecentMenu();
-
-            // Apply View State from Settings (after loading recent files)
             ToggleReviewer(AppSettings.Current.ShowLogicReviewer);
 
-            // -- Undo/Redo State Management --
             _mainHistory.HistoryChanged += (s, e) => UpdateUndoRedoState();
             triggerEditor.HistoryChanged += (s, e) => UpdateUndoRedoState();
-
-            // Wire up focus events to update Undo/Redo context
             achievementGrid.Enter += (s, e) => UpdateUndoRedoState();
             triggerEditor.Enter += (s, e) => UpdateUndoRedoState();
-
-            // Initial State Update
             UpdateUndoRedoState();
         }
 
-        private void ApplySettings()
+        public void LoadFiles(string primaryPath)
         {
-            // Apply Window Geometry
-            if (AppSettings.Current.WindowWidth > 0 && AppSettings.Current.WindowHeight > 0)
-            {
-                this.Size = new Size(AppSettings.Current.WindowWidth, AppSettings.Current.WindowHeight);
-            }
-            if (AppSettings.Current.WindowX != -1 && AppSettings.Current.WindowY != -1)
-            {
-                this.StartPosition = FormStartPosition.Manual;
-                this.Location = new Point(AppSettings.Current.WindowX, AppSettings.Current.WindowY);
-            }
-            if (AppSettings.Current.IsMaximized)
-            {
-                this.WindowState = FormWindowState.Maximized;
-            }
+            ImageCache.Clear();
+            _recentFiles.Add(primaryPath);
+            UpdateRecentMenu();
 
-            // Apply Splitter Distances
-            if (AppSettings.Current.MainSplitterDistance > 0)
-                splitMain.SplitterDistance = AppSettings.Current.MainSplitterDistance;
+            _currentFilePath = primaryPath;
+            _selectedAsset = null;
+            achievementGrid.Rows.Clear();
+            _mainHistory.Clear();
+            triggerEditor.Clear();
 
-            if (AppSettings.Current.EditorSplitterDistance > 0)
-                splitEditor.SplitterDistance = AppSettings.Current.EditorSplitterDistance;
+            _projectRepo.LoadFiles(primaryPath, out _currentUserFilePath);
+            _rpMetadata.Load(_projectRepo.CurrentGameId);
 
-            if (AppSettings.Current.VerticalSplitterDistance > 0)
-                splitMiddle.SplitterDistance = AppSettings.Current.VerticalSplitterDistance;
+            if (_projectRepo.ServerData != null)
+                this.Text = $"RA Logic Editor - {_projectRepo.CurrentTitle}";
 
-            // Apply Editor States
-            triggerEditor.ShowDecimal = AppSettings.Current.Trigger_ShowDecimal;
-            triggerEditor.ShowAliases = AppSettings.Current.Trigger_ShowAliases;
-            triggerEditor.CollapseChains = AppSettings.Current.Trigger_CollapseChains;
+            if (cmbSource.SelectedItem?.ToString() != "JSON")
+                cmbSource.SelectedItem = "JSON";
 
-            codeNoteEditor.ShowLeafsOnly = AppSettings.Current.Notes_ShowLeafsOnly;
-            codeNoteEditor.IndentValues = AppSettings.Current.Notes_IndentValues;
-        }
-
-        private void SaveSettings()
-        {
-            // Window State
-            if (this.WindowState == FormWindowState.Normal)
-            {
-                AppSettings.Current.WindowX = this.Location.X;
-                AppSettings.Current.WindowY = this.Location.Y;
-                AppSettings.Current.WindowWidth = this.Size.Width;
-                AppSettings.Current.WindowHeight = this.Size.Height;
-                AppSettings.Current.IsMaximized = false;
-            }
-            else
-            {
-                AppSettings.Current.IsMaximized = (this.WindowState == FormWindowState.Maximized);
-                // Don't overwrite size/loc if minimized/maximized to preserve restore bounds
-                if (this.RestoreBounds.Width > 0)
-                {
-                    AppSettings.Current.WindowWidth = this.RestoreBounds.Width;
-                    AppSettings.Current.WindowHeight = this.RestoreBounds.Height;
-                    AppSettings.Current.WindowX = this.RestoreBounds.X;
-                    AppSettings.Current.WindowY = this.RestoreBounds.Y;
-                }
-            }
-
-            // Splitters
-            AppSettings.Current.MainSplitterDistance = splitMain.SplitterDistance;
-            AppSettings.Current.EditorSplitterDistance = splitEditor.SplitterDistance;
-            AppSettings.Current.VerticalSplitterDistance = splitMiddle.SplitterDistance;
-
-            // Filters
-            AppSettings.Current.LastAssetTypeIndex = cmbAssetType.SelectedIndex;
-            AppSettings.Current.LastCategoryIndex = cmbCategory.SelectedIndex;
-            AppSettings.Current.LastSourceIndex = cmbSource.SelectedIndex;
-
-            // Trigger Editor
-            AppSettings.Current.Trigger_ShowDecimal = triggerEditor.ShowDecimal;
-            AppSettings.Current.Trigger_ShowAliases = triggerEditor.ShowAliases;
-            AppSettings.Current.Trigger_CollapseChains = triggerEditor.CollapseChains;
-
-            // Code Notes
-            AppSettings.Current.Notes_ShowLeafsOnly = codeNoteEditor.ShowLeafsOnly;
-            AppSettings.Current.Notes_IndentValues = codeNoteEditor.IndentValues;
-
-            AppSettings.Current.ShowLogicReviewer = viewReviewerToolStripMenuItem.Checked;
-
-            AppSettings.Save();
-        }
-
-        private void ClearDataResetToolStripMenuItem_Click(object? sender, EventArgs e)
-        {
-            var result = MessageBox.Show(
-                "This will delete all application configuration and cached data, including:\n" +
-                "- Settings (Window layout, checkboxes)\n" +
-                "- Recent Files List\n" +
-                "- Snippet Library\n" +
-                "- Badge Image Cache\n" +
-                "- Metadata (Group Names)\n\n" +
-                "The application will restart.\n\nAre you sure?",
-                "Clear Data / Reset",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
-
-            if (result == DialogResult.Yes)
-            {
-                try
-                {
-                    string appPath = Application.StartupPath;
-
-                    // Delete Files
-                    if (File.Exists(Path.Combine(appPath, "settings.json"))) File.Delete(Path.Combine(appPath, "settings.json"));
-                    if (File.Exists(Path.Combine(appPath, "recent.json"))) File.Delete(Path.Combine(appPath, "recent.json"));
-                    if (File.Exists(Path.Combine(appPath, "snippets.json"))) File.Delete(Path.Combine(appPath, "snippets.json"));
-
-                    // Delete Folders
-                    string cacheDir = Path.Combine(appPath, "Cache");
-                    if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
-
-                    string metaDir = Path.Combine(appPath, "Metadata");
-                    if (Directory.Exists(metaDir)) Directory.Delete(metaDir, true);
-
-                    MessageBox.Show("Reset complete. Application will restart.", "Done");
-                    Application.Restart();
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Error clearing data: {ex.Message}", "Error");
-                }
-            }
-        }
-
-        private void ToggleReviewer(bool? forceState = null)
-        {
-            bool newState = forceState ?? !viewReviewerToolStripMenuItem.Checked;
-            viewReviewerToolStripMenuItem.Checked = newState;
-            splitMiddle.Panel2Collapsed = !newState;
-
-            // Settings are saved on close now, not immediately here
-        }
-
-        private void UpdateUndoRedoState()
-        {
-            // Determine active context for Undo/Redo
-            bool isTriggerContext = triggerEditor.ContainsFocus;
-
-            // Update Menu Items
-            undoToolStripMenuItem.Enabled = isTriggerContext ? triggerEditor.CanUndo : _mainHistory.CanUndo;
-            redoToolStripMenuItem.Enabled = isTriggerContext ? triggerEditor.CanRedo : _mainHistory.CanRedo;
-        }
-
-        // Logic Optimizer Tool Handler
-        private void LogicOptimizerToolStripMenuItem_Click(object? sender, EventArgs e)
-        {
-            if (_currentDisplayList.Count == 0)
-            {
-                MessageBox.Show("No assets loaded or visible in the current filter.", "Logic Optimizer", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            // Create a copy of the list to avoid enumeration issues
-            var assetsToOptimize = new List<IAssetItem>();
-
-            foreach (var original in _currentDisplayList)
-            {
-                if (original.State == AssetState.Synced)
-                {
-                    // Create a detached clone for editing
-                    IAssetItem clone;
-                    if (original.IsLeaderboard && original is RaLeaderboard lb)
-                        clone = lb.Clone(false); // false = keep ID
-                    else if (original is RaAchievement ach)
-                        clone = ach.Clone(false);
-                    else
-                        continue;
-
-                    // Ensure state matches original for the Optimizer to detect change later
-                    clone.State = AssetState.Synced;
-                    assetsToOptimize.Add(clone);
-                }
-                else
-                {
-                    // Already local/modified, edit directly
-                    assetsToOptimize.Add(original);
-                }
-            }
-
-            using (var form = new LogicOptimizerForm(assetsToOptimize))
-            {
-                form.ShowDialog();
-            }
-
-            _projectRepo.EnsureLocalDataExists();
-
-            bool anyChanges = false;
-
-            // Commit changes
-            foreach (var item in assetsToOptimize)
-            {
-                // If the item became Modified (optimized)
-                if (item.State == AssetState.Modified)
-                {
-                    // Check if this logic needs to be promoted to LocalData
-                    // 1. If it was already in LocalData (Modified/Local), it is updated by reference.
-                    // 2. If it was a Synced Clone, it is NOT in LocalData yet.
-
-                    if (!IsAssetInLocalStore(item))
-                    {
-                        // Add the modified clone to LocalData
-                        if (item.IsLeaderboard && item is RaLeaderboard lb)
-                            _projectRepo.LocalData!.Leaderboards.Add(lb);
-                        else if (item is RaAchievement ach)
-                            _projectRepo.LocalData!.Achievements.Add(ach);
-
-                        anyChanges = true;
-                    }
-                    else
-                    {
-                        // It was already local, check if logic actually changed vs what we had?
-                        // The optimizer modifies in place, so the LocalData list is already updated 
-                        // because 'item' is a reference to the object in LocalData.
-                        anyChanges = true;
-                    }
-                }
-            }
-
-            if (anyChanges)
-            {
-                ReloadDataView();
-                if (_selectedAsset != null)
-                {
-                    // Re-select finding the new Local object
-                    SelectAssetInGrid(_selectedAsset);
-                }
-            }
-        }
-
-        private bool IsAssetInLocalStore(IAssetItem item)
-        {
-            if (_projectRepo.LocalData == null) return false;
-            if (item.IsLeaderboard) return _projectRepo.LocalData.Leaderboards.Any(l => l.ID == item.ID);
-            return _projectRepo.LocalData.Achievements.Any(a => a.ID == item.ID);
-        }
-
-        // Multi-Region Batch Logic Implementation
-        private void TriggerEditor_MultiRegionLogicRequested(object? sender, MultiRegionForm form)
-        {
-            // 1. Validate State
-            var configs = form.GetConfiguredRegions();
-            if (configs.Count == 0) return;
-
-            // Find the base configuration (the one without an address map, treated as Source)
-            // Or explicitly flagged as base.
-            var baseConfig = configs.FirstOrDefault(c => c.IsBase);
-            var targetConfigs = configs.Where(c => !c.IsBase).ToList();
-
-            // Ensure local repo exists
-            _projectRepo.EnsureLocalDataExists();
-            PushMainUndo(); // Global Undo State
-
-            // 2. Prepare Lock Logic (Invert for Pause If)
-            // Helper to invert lock logic: User provides check "Is Region A". We want "Pause If NOT Region A".
-            void InvertLockLogic(List<AchievementCondition> conditions)
-            {
-                foreach (var c in conditions)
-                {
-                    c.Flag = "Pause If";
-                    // Invert operator
-                    c.Operator = InvertOperator(c.Operator);
-                }
-            }
-
-            // Invert locks for all configs
-            foreach (var cfg in configs)
-            {
-                InvertLockLogic(cfg.LockConditions);
-            }
-
-            // 3. Determine Targets: Selected Rows OR All Filtered
-            List<IAssetItem> assetsToProcess;
-            if (achievementGrid.SelectedRows.Count > 0)
-            {
-                assetsToProcess = achievementGrid.SelectedRows.Cast<DataGridViewRow>()
-                    .Select(r => r.Tag as IAssetItem)
-                    .Where(a => a != null)
-                    .Cast<IAssetItem>()
-                    .ToList();
-            }
-            else
-            {
-                assetsToProcess = new List<IAssetItem>(_currentDisplayList);
-            }
-
-            if (assetsToProcess.Count == 0) return;
-
-            // 4. Iterate selected items
-            int count = 0;
-
-            foreach (var item in assetsToProcess)
-            {
-                // Ensure item is local so we can modify it.
-                // This creates a CLONE in LocalData if it was previously Synced.
-                EnsureAssetIsLocal(item);
-
-                // Get the Local version (The Clone)
-                IAssetItem? localItem = null;
-                if (item.IsLeaderboard) localItem = _projectRepo.LocalData!.Leaderboards.FirstOrDefault(x => x.ID == item.ID);
-                else localItem = _projectRepo.LocalData!.Achievements.FirstOrDefault(x => x.ID == item.ID);
-
-                if (localItem == null) continue;
-
-                // Apply Logic using shared helper
-                ApplyMultiRegionToAsset(localItem, baseConfig, targetConfigs);
-                count++;
-            }
-
-            // 5. Handle Rich Presence (Only if Checkbox is Checked)
-            if (form.ShouldUpdateRichPresence && _projectRepo.RichPresence != null)
-            {
-                // Save Backup before modification
-                _rpMetadata.SaveBackup(_projectRepo.RichPresence.ToString());
-
-                var newRp = _rpService.GenerateMultiRegion(_projectRepo.RichPresence, configs);
-                _projectRepo.RichPresence = newRp; // Update repo state in memory
-                MessageBox.Show("Rich Presence script updated in memory.\nA backup was saved to allow reverting.", "RP Updated");
-            }
-
-            MessageBox.Show($"Multi-Region logic applied to {count} assets across {configs.Count} regions.", "Batch Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-            // Refresh UI
             ReloadDataView();
 
-            // If an asset is currently selected, reload it to show changes
-            if (_selectedAsset != null)
-            {
-                // Re-select finding the new Local object
-                SelectAssetInGrid(_selectedAsset);
-            }
-        }
-
-        private void RevertRichPresence_Click(object? sender, EventArgs e)
-        {
-            if (_rpMetadata.CurrentBackup == null)
-            {
-                MessageBox.Show("No Rich Presence backup found for this session/game.", "Revert Unavailable", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            if (MessageBox.Show($"Revert Rich Presence to state from {_rpMetadata.CurrentBackup.Timestamp}?", "Confirm Revert", MessageBoxButtons.YesNo) == DialogResult.Yes)
-            {
-                try
-                {
-                    _projectRepo.RichPresence = RichPresenceParser.Parse(_rpMetadata.CurrentBackup.OriginalScript);
-                    MessageBox.Show("Rich Presence reverted successfully.", "Revert Complete");
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Error parsing backup: {ex.Message}", "Error");
-                }
-            }
-        }
-
-        private void ApplyMultiRegionToAsset(IAssetItem localItem, RegionConfig? baseConfig, List<RegionConfig> targetConfigs)
-        {
-            // Parse Existing Logic
-            IAssetStrategy strategy = localItem.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
-            var segments = strategy.ParseLogic(localItem.Logic);
-
-            var keys = new List<string>(segments.Keys);
-
-            foreach (var segmentKey in keys)
-            {
-                var groups = segments[segmentKey];
-                if (groups.Count == 0) continue;
-
-                // Identify existing groups (Base Groups)
-                var existingGroups = new List<AchievementConditionGroup>();
-                // Deep copy existing groups to avoid reference issues
-                foreach (var g in groups)
-                {
-                    var newG = new AchievementConditionGroup { GroupName = g.GroupName };
-                    foreach (var c in g.Conditions) newG.Conditions.Add(c.Clone());
-                    existingGroups.Add(newG);
-                }
-
-                var finalGroups = new List<AchievementConditionGroup>();
-
-                // Handle Base Groups
-                if (baseConfig != null && baseConfig.LockConditions.Count > 0)
-                {
-                    foreach (var grp in existingGroups)
-                    {
-                        grp.Conditions.InsertRange(0, baseConfig.LockConditions.Select(c => c.Clone()));
-                    }
-                }
-
-                // Rename Base Groups if needed (and Metadata update)
-                // When we split Core into Alts, we lose the original Core if we don't save the new names.
-                if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core")
-                {
-                    string baseName = baseConfig?.RegionName ?? "Region A";
-                    existingGroups[0].GroupName = $"Alt 1 ({baseName})";
-                    for (int i = 1; i < existingGroups.Count; i++) existingGroups[i].GroupName = $"Alt {i + 1} ({baseName})";
-                    finalGroups.Add(new AchievementConditionGroup { GroupName = "Core" }); // Empty Core
-                }
-                else if (!localItem.IsLeaderboard && existingGroups.Count > 0 && existingGroups[0].GroupName == "Core")
-                {
-                    finalGroups.Add(existingGroups[0]);
-                    existingGroups.RemoveAt(0);
-                }
-
-                finalGroups.AddRange(existingGroups);
-
-                // Create Target Region Groups
-                foreach (var targetCfg in targetConfigs)
-                {
-                    // Clone from original logic structure (before we modified existingGroups with locks)
-                    var newRegionGroups = new List<AchievementConditionGroup>();
-                    foreach (var g in groups) // 'groups' contains the parsed objects from 'localItem.Logic'
-                    {
-                        var clone = new AchievementConditionGroup { GroupName = g.GroupName + $" ({targetCfg.RegionName})" };
-                        foreach (var c in g.Conditions) clone.Conditions.Add(c.Clone());
-                        newRegionGroups.Add(clone);
-                    }
-
-                    // Apply Address Swap
-                    foreach (var grp in newRegionGroups)
-                    {
-                        foreach (var c in grp.Conditions)
-                        {
-                            ApplyAddressSwap(c.LeftOperand, targetCfg.AddressRanges);
-                            ApplyAddressSwap(c.RightOperand, targetCfg.AddressRanges);
-                        }
-                    }
-
-                    // Apply Lock
-                    foreach (var grp in newRegionGroups)
-                    {
-                        grp.Conditions.InsertRange(0, targetCfg.LockConditions.Select(c => c.Clone()));
-                    }
-
-                    // Reassemble Alts naming
-                    int startIdx = finalGroups.Count;
-                    for (int i = 0; i < newRegionGroups.Count; i++)
-                    {
-                        if (!localItem.IsLeaderboard) newRegionGroups[i].GroupName = $"Alt {startIdx + i} ({targetCfg.RegionName})";
-                    }
-
-                    finalGroups.AddRange(newRegionGroups);
-                }
-
-                segments[segmentKey] = finalGroups;
-
-                // IMPORTANT: Update Metadata with new Group Names
-                _projectRepo.Metadata.UpdateAssetGroups(localItem.ID, finalGroups);
-            }
-
-            // Save Back
-            localItem.Logic = strategy.BuildLogic(segments);
-        }
-
-        private void RevertRegion_Click(object? sender, EventArgs e)
-        {
-            // 1. Identify available regions from selected assets
-            var regions = new HashSet<string>();
-            var selectedAssets = achievementGrid.SelectedRows.Cast<DataGridViewRow>()
-                .Select(r => r.Tag as IAssetItem)
-                .Where(a => a != null)
-                .ToList();
-
-            if (selectedAssets.Count == 0) return;
-
-            foreach (var asset in selectedAssets)
-            {
-                // Parse Logic to find Group Names "Alt X (Region)"
-                // Requires applying Metadata first to ensure names are correct!
-                IAssetStrategy strategy = asset!.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
-                var segments = strategy.ParseLogic(asset.Logic);
-
-                // Apply Metadata names to groups in memory for checking
-                foreach (var groupList in segments.Values)
-                {
-                    _projectRepo.Metadata.ApplyNamesToAsset(asset.ID, groupList);
-                    foreach (var g in groupList)
-                    {
-                        var match = Regex.Match(g.GroupName, @"\((.*?)\)");
-                        if (match.Success) regions.Add(match.Groups[1].Value);
-                    }
-                }
-            }
-
-            if (regions.Count == 0)
-            {
-                MessageBox.Show("No region-specific groups found in selection.");
-                return;
-            }
-
-            using (var form = new RevertRegionForm(regions.ToList()))
-            {
-                if (form.ShowDialog() != DialogResult.OK) return;
-                string targetRegion = form.SelectedRegion;
-
-                PushMainUndo();
-                int count = 0;
-
-                foreach (var item in selectedAssets)
-                {
-                    EnsureAssetIsLocal(item!);
-                    // Get local ref
-                    IAssetItem? localItem = item!.IsLeaderboard
-                        ? _projectRepo.LocalData!.Leaderboards.FirstOrDefault(x => x.ID == item.ID)
-                        : _projectRepo.LocalData!.Achievements.FirstOrDefault(x => x.ID == item.ID);
-
-                    if (localItem == null) continue;
-
-                    IAssetStrategy strategy = localItem.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
-                    var segments = strategy.ParseLogic(localItem.Logic);
-
-                    bool modified = false;
-                    foreach (var segKey in segments.Keys.ToList())
-                    {
-                        var groups = segments[segKey];
-
-                        // Apply Metadata Names so we can find the region
-                        _projectRepo.Metadata.ApplyNamesToAsset(localItem.ID, groups);
-
-                        // Find the group matching the target region
-                        var targetGroup = groups.FirstOrDefault(g => g.GroupName.Contains($"({targetRegion})"));
-
-                        if (targetGroup != null)
-                        {
-                            // 1. Strip Lock Logic (Assume first few PauseIfs are locks)
-                            // Heuristic: Remove all leading 'Pause If'
-                            while (targetGroup.Conditions.Count > 0 && targetGroup.Conditions[0].Flag == "Pause If")
-                            {
-                                targetGroup.Conditions.RemoveAt(0);
-                            }
-
-                            // 2. Move to Core/First Position
-                            // Clear existing Core/Alts, make this the only one (or Core)
-                            var newCore = new AchievementConditionGroup { GroupName = "Core" };
-                            newCore.Conditions = targetGroup.Conditions;
-
-                            var newGroups = new List<AchievementConditionGroup> { newCore };
-
-                            // 3. Keep original non-region alts? 
-                            // Complex. The user said "revert to support USA version".
-                            // Usually implies restoring the single-region state.
-                            // We will replace the entire list with just this group.
-                            segments[segKey] = newGroups;
-                            modified = true;
-
-                            // Update Metadata to reflect reset to Core
-                            _projectRepo.Metadata.UpdateAssetGroups(localItem.ID, newGroups);
-                        }
-                    }
-
-                    if (modified)
-                    {
-                        localItem.Logic = strategy.BuildLogic(segments);
-                        count++;
-                    }
-                }
-
-                ReloadDataView();
-                if (_selectedAsset != null) LoadSelectedAsset();
-                MessageBox.Show($"Reverted {count} assets to {targetRegion}.");
-            }
-        }
-
-        private void ViewRpDiff_Click(object? sender, EventArgs e)
-        {
-            if (_projectRepo.RichPresence == null) return;
-
-            // Generate current text
-            string currentText = ExtractDisplaySection(_projectRepo.RichPresence.ToString());
-
-            // Load original from disk
-            string path = _projectRepo.RichPresenceFilePath;
-            string originalFullText = File.Exists(path) ? File.ReadAllText(path) : "";
-            string originalText = ExtractDisplaySection(originalFullText);
-
-            using (var form = new TextDiffForm("Rich Presence Diff - Display Section", originalText, currentText))
-            {
-                form.ShowDialog();
-            }
-        }
-
-        private string ExtractDisplaySection(string rpScript)
-        {
-            if (string.IsNullOrEmpty(rpScript)) return "";
-
-            // Normalize line endings
-            string normalized = rpScript.Replace("\r\n", "\n").Replace("\r", "\n");
-            var lines = normalized.Split('\n');
-
-            var result = new StringBuilder();
-            bool inDisplay = false;
-
-            foreach (var line in lines)
-            {
-                string trimLine = line.Trim();
-
-                if (trimLine.StartsWith("Display:"))
-                {
-                    inDisplay = true;
-                    // We skip the "Display:" header itself to keep the view clean
-                    continue;
-                }
-
-                if (inDisplay)
-                {
-                    // Stop if we hit another section (though Display is usually last)
-                    if (trimLine.StartsWith("Lookup:") || trimLine.StartsWith("Format:"))
-                        break;
-
-                    result.AppendLine(line);
-                }
-            }
-
-            return result.ToString().Trim();
-        }
-
-        private string InvertOperator(string op)
-        {
-            return op switch
-            {
-                "=" => "!=",
-                "!=" => "=",
-                "<" => ">=",
-                "<=" => ">",
-                ">" => "<=",
-                ">=" => "<",
-                _ => op
-            };
-        }
-
-        private void ApplyAddressSwap(Operand op, List<AddressRangeMap> ranges)
-        {
-            if (!RaLogicSyntax.MemoryTypes.Contains(op.Type)) return;
-            string addr = op.Value.Trim();
-            if (string.IsNullOrEmpty(addr)) return;
-
-            string clean = addr.Replace("0x", "").Trim();
-            if (long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long val))
-            {
-                foreach (var range in ranges)
-                {
-                    if (range.IsInRange(val))
-                    {
-                        long newVal = range.CalculateTarget(val);
-                        op.Value = "0x" + newVal.ToString("x");
-                        return; // Swap once
-                    }
-                }
-            }
-        }
-
-        // Triggered when user clicks a row in the Code Review Control
-        private void CodeReviewControl_IssueSelected(object? sender, ValidationIssue issue)
-        {
-            if (issue.Asset == null) return;
-
-            // 1. Ensure the correct asset is loaded
-            if (_selectedAsset == null || _selectedAsset.ID != issue.Asset.ID)
-            {
-                SelectAssetInGrid(issue.Asset);
-            }
-
-            // 2. Highlight the specific condition in the editor
-            triggerEditor.SelectCondition(issue.Target);
-        }
-
-        private void SelectAssetInGrid(IAssetItem asset)
-        {
-            // 1. Ensure correct Asset Type (Achievement vs Leaderboard)
-            bool isLeaderboard = asset.IsLeaderboard;
-            int typeIndex = isLeaderboard ? 1 : 0; // 0=Ach, 1=LB
-            if (cmbAssetType.SelectedIndex != typeIndex)
-            {
-                cmbAssetType.SelectedIndex = typeIndex;
-                Application.DoEvents(); // Allow UI to process the change
-            }
-
-            // 2. Ensure correct Category (Core vs Unofficial)
-            // asset.Category is usually "core", "unofficial", "Local" (lowercase from JSON or titlecase)
-            // We need to match with ComboBox items "Core", "Unofficial"
-            string targetCat = string.IsNullOrEmpty(asset.Category) ? "Local" : asset.Category;
-            foreach (var item in cmbCategory.Items)
-            {
-                if (string.Equals(item.ToString(), targetCat, StringComparison.OrdinalIgnoreCase))
-                {
-                    cmbCategory.SelectedItem = item;
-                    Application.DoEvents();
-                    break;
-                }
-            }
-
-            // 3. Ensure correct Source View (JSON vs Local vs New) based on Asset State
-            // Items: "JSON", "Local", "New" -> Indices: 0, 1, 2
-            int sourceIndex = cmbSource.SelectedIndex;
-            switch (asset.State)
-            {
-                case AssetState.Local:
-                    sourceIndex = 2; // New
-                    break;
-                case AssetState.Modified:
-                    sourceIndex = 1; // Local
-                    break;
-                case AssetState.Synced:
-                    sourceIndex = 0; // JSON
-                    break;
-            }
-
-            // Force switch to "JSON" view if we are looking for a synced asset, even if current view is Local/New
-            // Actually, if we are in "New" view, we can't see Synced assets.
-            // If we are in "Local" view, we can't see Synced assets.
-            // So we MUST switch to "JSON" if the asset is Synced.
-            if (cmbSource.SelectedIndex != sourceIndex)
-            {
-                cmbSource.SelectedIndex = sourceIndex;
-                Application.DoEvents();
-            }
-
-            // 4. Find row in grid
-            foreach (DataGridViewRow row in achievementGrid.Rows)
-            {
-                if (row.Tag is IAssetItem item && item.ID == asset.ID)
-                {
-                    achievementGrid.ClearSelection();
-                    row.Selected = true;
-                    achievementGrid.CurrentCell = row.Cells[0];
-                    // LoadSelectedAsset is handled by SelectionChanged event usually, 
-                    // but explicitly calling it ensures TriggerEditor updates immediately
-                    LoadSelectedAsset();
-                    break;
-                }
-            }
-        }
-
-        // Runs validation on assets in the project to populate the review list
-        private void RunGlobalValidation()
-        {
-            _globalIssues.Clear();
-
-            // Only validating the currently active asset type to reduce noise and issues
-            bool validateLeaderboards = cmbAssetType.SelectedIndex == 1;
-
-            var allAssets = new List<IAssetItem>();
-
-            if (validateLeaderboards)
-            {
-                var lbs = _projectRepo.GetMergedList<RaLeaderboard>(true);
-                allAssets.AddRange(lbs);
-            }
-            else
-            {
-                var achs = _projectRepo.GetMergedList<RaAchievement>(false);
-                allAssets.AddRange(achs);
-            }
-
-            var notesLookup = new Dictionary<string, List<NoteNode>>();
-            var rangeCache = new List<(long Start, long End, NoteNode Node)>();
-            var parser = new PointerTreeParser();
-
-            if (_projectRepo.LocalData != null && _projectRepo.LocalData.Notes != null)
-            {
-                foreach (var n in _projectRepo.LocalData.Notes)
-                {
-                    string key = LogicFormatter.NormalizeAddress(n.Address);
-                    var nodes = parser.ParseNoteText(n.Note);
-                    if (!notesLookup.ContainsKey(key)) notesLookup[key] = nodes;
-
-                    if (nodes.Count > 0)
-                    {
-                        var root = nodes[0];
-                        if (root.Size > 1)
-                        {
-                            if (long.TryParse(key.Replace("0x", ""), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out long startAddr))
-                            {
-                                rangeCache.Add((startAddr, startAddr + root.Size, root));
-                            }
-                        }
-                    }
-                }
-            }
-
-            foreach (var asset in allAssets)
-            {
-                IAssetStrategy strategy = asset.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
-                var segments = strategy.ParseLogic(asset.Logic);
-                var allGroups = segments.Values.SelectMany(g => g).ToList();
-                var issues = _validator.ValidateAsset(allGroups, asset, notesLookup, rangeCache);
-                _globalIssues.AddRange(issues);
-            }
-
-            codeReviewControl.SetIssues(_globalIssues);
-        }
-
-        // Called when the Trigger Editor updates (user edits logic) -> Update global list for THAT asset
-        private void TriggerEditor_ValidationCompleted(object? sender, List<ValidationIssue> issues)
-        {
-            if (_selectedAsset == null) return;
-
-            // Remove existing issues for this specific asset ID from the backing list
-            _globalIssues.RemoveAll(i => i.Asset != null && i.Asset.ID == _selectedAsset.ID);
-
-            // Add updated issues
-            _globalIssues.AddRange(issues);
-
-            // Only update UI if not in loading state (prevents flicker/reset on navigation)
-            // The user will see the issues when they stop navigating or edit the logic.
-            if (!_isLoading)
-            {
-                codeReviewControl.SetIssues(_globalIssues);
-            }
-        }
-
-        private void achievementGrid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
-        {
-            if (e.RowIndex >= 0) LoadSelectedAsset();
-        }
-
-        private void achievementGrid_SelectionChanged(object? sender, EventArgs e)
-        {
-            UpdateSelectionUI();
+            var notes = _projectRepo.LocalData?.Notes ?? new List<CodeNote>();
+            codeNoteEditor.SetNotes(notes);
+            triggerEditor.SetNotes(notes);
+
+            RunGlobalValidation();
+            UpdateUndoRedoState();
         }
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -1027,7 +189,6 @@ namespace RALogicEditor
             SaveSettings();
         }
 
-        // Checks if there are unsaved local changes (Assets in "Modified" or "Local" state)
         private bool ConfirmDiscardChanges()
         {
             if (_projectRepo.LocalData == null) return true;
@@ -1043,566 +204,110 @@ namespace RALogicEditor
             return true;
         }
 
-        // Reloads the current file from disk, discarding unsaved changes
-        private void Reload_Click(object? sender, EventArgs e)
+        private void ApplySettings()
         {
-            if (string.IsNullOrEmpty(_currentFilePath)) return;
-            if (!ConfirmDiscardChanges()) return;
+            if (AppSettings.Current.WindowWidth > 0 && AppSettings.Current.WindowHeight > 0)
+                this.Size = new Size(AppSettings.Current.WindowWidth, AppSettings.Current.WindowHeight);
 
-            // Remember selected ID to restore after reload
-            int selectedId = -1;
-            if (achievementGrid.SelectedRows.Count > 0 && achievementGrid.SelectedRows[0].Tag is IAssetItem item)
+            if (AppSettings.Current.WindowX != -1 && AppSettings.Current.WindowY != -1)
             {
-                selectedId = item.ID;
+                this.StartPosition = FormStartPosition.Manual;
+                this.Location = new Point(AppSettings.Current.WindowX, AppSettings.Current.WindowY);
             }
+            if (AppSettings.Current.IsMaximized) this.WindowState = FormWindowState.Maximized;
 
-            LoadFiles(_currentFilePath);
+            if (AppSettings.Current.MainSplitterDistance > 0) splitMain.SplitterDistance = AppSettings.Current.MainSplitterDistance;
+            if (AppSettings.Current.EditorSplitterDistance > 0) splitEditor.SplitterDistance = AppSettings.Current.EditorSplitterDistance;
+            if (AppSettings.Current.VerticalSplitterDistance > 0) splitMiddle.SplitterDistance = AppSettings.Current.VerticalSplitterDistance;
 
-            // Restore selection
-            if (selectedId != -1)
-            {
-                foreach (DataGridViewRow row in achievementGrid.Rows)
-                {
-                    if (row.Tag is IAssetItem i && i.ID == selectedId)
-                    {
-                        row.Selected = true;
-                        achievementGrid.CurrentCell = row.Cells[0];
-                        LoadSelectedAsset();
-                        break;
-                    }
-                }
-            }
+            triggerEditor.ShowDecimal = AppSettings.Current.Trigger_ShowDecimal;
+            triggerEditor.ShowAliases = AppSettings.Current.Trigger_ShowAliases;
+            triggerEditor.CollapseChains = AppSettings.Current.Trigger_CollapseChains;
+            codeNoteEditor.ShowLeafsOnly = AppSettings.Current.Notes_ShowLeafsOnly;
+            codeNoteEditor.IndentValues = AppSettings.Current.Notes_IndentValues;
         }
 
-        // Injection Logic: Gets logic string from CodeNoteEditor and sends it to TriggerEditor
-        private void TriggerEditor_AddFromCodeNoteRequested(object? sender, EventArgs e)
+        private void SaveSettings()
         {
-            var data = codeNoteEditor.GetSelectedLogic();
-            if (!string.IsNullOrEmpty(data.Logic))
+            if (this.WindowState == FormWindowState.Normal)
             {
-                triggerEditor.AddConditionFromNote(data.Logic, data.Type, data.Size);
+                AppSettings.Current.WindowX = this.Location.X;
+                AppSettings.Current.WindowY = this.Location.Y;
+                AppSettings.Current.WindowWidth = this.Size.Width;
+                AppSettings.Current.WindowHeight = this.Size.Height;
+                AppSettings.Current.IsMaximized = false;
             }
             else
             {
-                MessageBox.Show("No valid address or variable selected in Code Notes.", "Add Note", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-        }
-
-        #region Undo/Redo (Global Asset List)
-        private void PushMainUndo()
-        {
-            // Creates a deep snapshot of the entire Local Data structure
-            var snapshot = new UserTextParser.UserData();
-            if (_projectRepo.LocalData != null)
-            {
-                foreach (var ach in _projectRepo.LocalData.Achievements) snapshot.Achievements.Add(ach.Clone(false));
-                foreach (var lb in _projectRepo.LocalData.Leaderboards) snapshot.Leaderboards.Add(lb.Clone(false));
-                foreach (var n in _projectRepo.LocalData.Notes) snapshot.Notes.Add(new CodeNote { Address = n.Address, Note = n.Note, User = n.User });
-            }
-            _mainHistory.PushState(snapshot);
-        }
-
-        private void UndoMain()
-        {
-            if (_projectRepo.LocalData == null) return;
-
-            var previousState = _mainHistory.Undo(_projectRepo.LocalData);
-            // Restore state
-            _projectRepo.LocalData.Achievements = previousState.Achievements;
-            _projectRepo.LocalData.Leaderboards = previousState.Leaderboards;
-            _projectRepo.LocalData.Notes = previousState.Notes;
-
-            ReloadDataView();
-            LoadSelectedAsset();
-        }
-
-        private void RedoMain()
-        {
-            if (_projectRepo.LocalData == null) return;
-
-            var nextState = _mainHistory.Redo(_projectRepo.LocalData);
-            _projectRepo.LocalData.Achievements = nextState.Achievements;
-            _projectRepo.LocalData.Leaderboards = nextState.Leaderboards;
-            _projectRepo.LocalData.Notes = nextState.Notes;
-
-            ReloadDataView();
-            LoadSelectedAsset();
-        }
-
-        // Routes Undo commands to either the Trigger Editor (text editing) or Main Form (asset list)
-        private void Undo_Click(object? sender, EventArgs e)
-        {
-            if (triggerEditor.ContainsFocus) triggerEditor.Undo();
-            else UndoMain();
-        }
-
-        private void Redo_Click(object? sender, EventArgs e)
-        {
-            if (triggerEditor.ContainsFocus) triggerEditor.Redo();
-            else RedoMain();
-        }
-        #endregion
-
-        private void openToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (!ConfirmDiscardChanges()) return;
-
-            using var ofd = new OpenFileDialog();
-            ofd.Filter = "JSON Files (*.json)|*.json|Text Files (*.txt)|*.txt|All Files (*.*)|*.*";
-
-            if (ofd.ShowDialog() == DialogResult.OK)
-            {
-                LoadFiles(ofd.FileName);
-            }
-        }
-
-        private void LoadFiles(string primaryPath)
-        {
-            ImageCache.Clear(); // Free up memory
-            _recentFiles.Add(primaryPath);
-            UpdateRecentMenu();
-
-            _currentFilePath = primaryPath;
-            _selectedAsset = null;
-            achievementGrid.Rows.Clear();
-            _mainHistory.Clear();
-            triggerEditor.Clear();
-
-            // Delegate heavy lifting to Repository
-            _projectRepo.LoadFiles(primaryPath, out _currentUserFilePath);
-
-            // Load associated RP Metadata if exists
-            _rpMetadata.Load(_projectRepo.CurrentGameId);
-
-            if (_projectRepo.ServerData != null)
-                this.Text = $"RA Logic Editor - {_projectRepo.CurrentTitle}";
-
-            // Default view to JSON unless specified
-            if (cmbSource.SelectedItem?.ToString() != "JSON")
-                cmbSource.SelectedItem = "JSON";
-
-            ReloadDataView();
-
-            // Ensure notes are set or cleared
-            var notes = _projectRepo.LocalData?.Notes ?? new List<CodeNote>();
-            codeNoteEditor.SetNotes(notes);
-            // Pass notes to Trigger Editor for Tooltips and Alias Mode
-            triggerEditor.SetNotes(notes);
-
-            // Run global validation scan - This will now respect the active asset type
-            RunGlobalValidation();
-
-            // Update Undo/Redo UI state
-            UpdateUndoRedoState();
-        }
-
-        private void saveToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (_projectRepo.LocalData == null && _projectRepo.ServerData == null) return;
-
-            // Ensure any pending virtual note edits are committed before saving
-            codeNoteEditor.CommitChanges();
-
-            string savePath = _currentUserFilePath;
-
-            // If path is empty, try to auto-determine based on JSON path
-            if (string.IsNullOrEmpty(savePath) && !string.IsNullOrEmpty(_currentFilePath))
-            {
-                string dir = Path.GetDirectoryName(_currentFilePath) ?? "";
-                string fileName = Path.GetFileNameWithoutExtension(_currentFilePath);
-
-                // If the loaded file was a notes file (-Notes.json), strip the suffix to find ID
-                if (fileName.EndsWith("-Notes"))
-                    fileName = fileName.Substring(0, fileName.Length - 6);
-
-                // If loading 1234.json or 1234-Notes.json, auto-save to 1234-User.txt
-                savePath = Path.Combine(dir, $"{fileName}-User.txt");
-            }
-
-            if (string.IsNullOrEmpty(savePath))
-            {
-                using var sfd = new SaveFileDialog { Filter = "Text Files (*.txt)|*.txt" };
-                if (sfd.ShowDialog() != DialogResult.OK) return;
-                savePath = sfd.FileName;
-            }
-
-            // -- Auto-Backup Strategy --
-            try
-            {
-                if (File.Exists(savePath))
+                AppSettings.Current.IsMaximized = (this.WindowState == FormWindowState.Maximized);
+                if (this.RestoreBounds.Width > 0)
                 {
-                    string fileName = Path.GetFileName(savePath);
-                    string gameIdStr = new string(fileName.TakeWhile(char.IsDigit).ToArray());
-
-                    // Base backups folder next to EXE
-                    string backupRoot = Path.Combine(Application.StartupPath, "Backups");
-
-                    // Game-specific folder
-                    string gameBackupDir = string.IsNullOrEmpty(gameIdStr)
-                        ? backupRoot
-                        : Path.Combine(backupRoot, gameIdStr);
-
-                    if (!Directory.Exists(gameBackupDir)) Directory.CreateDirectory(gameBackupDir);
-
-                    string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                    string backupPath = Path.Combine(gameBackupDir, $"{fileName}.{timestamp}.bak");
-
-                    File.Copy(savePath, backupPath, true);
+                    AppSettings.Current.WindowWidth = this.RestoreBounds.Width;
+                    AppSettings.Current.WindowHeight = this.RestoreBounds.Height;
+                    AppSettings.Current.WindowX = this.RestoreBounds.X;
+                    AppSettings.Current.WindowY = this.RestoreBounds.Y;
                 }
             }
-            catch { /* Ignore backup failures, proceed with save */ }
 
-            try
-            {
-                var sb = new StringBuilder();
-                sb.AppendLine("1.0");
-                sb.AppendLine(_projectRepo.ServerData?.Title ?? "Game Title");
+            AppSettings.Current.MainSplitterDistance = splitMain.SplitterDistance;
+            AppSettings.Current.EditorSplitterDistance = splitEditor.SplitterDistance;
+            AppSettings.Current.VerticalSplitterDistance = splitMiddle.SplitterDistance;
 
-                _projectRepo.EnsureLocalDataExists();
+            AppSettings.Current.LastAssetTypeIndex = cmbAssetType.SelectedIndex;
+            AppSettings.Current.LastCategoryIndex = cmbCategory.SelectedIndex;
+            AppSettings.Current.LastSourceIndex = cmbSource.SelectedIndex;
 
-                // Get merged lists excluding fully synced items
-                var mergedAchievements = _projectRepo.GetMergedList<RaAchievement>(false);
-                var mergedLeaderboards = _projectRepo.GetMergedList<RaLeaderboard>(true);
+            AppSettings.Current.Trigger_ShowDecimal = triggerEditor.ShowDecimal;
+            AppSettings.Current.Trigger_ShowAliases = triggerEditor.ShowAliases;
+            AppSettings.Current.Trigger_CollapseChains = triggerEditor.CollapseChains;
 
-                var lbStrategy = new LeaderboardStrategy();
+            AppSettings.Current.Notes_ShowLeafsOnly = codeNoteEditor.ShowLeafsOnly;
+            AppSettings.Current.Notes_IndentValues = codeNoteEditor.IndentValues;
+            AppSettings.Current.ShowLogicReviewer = viewReviewerToolStripMenuItem.Checked;
 
-                // --- HELPER FOR ESCAPING STRINGS (Fixes the Colon Bug) ---
-                string EscapeUserString(string input)
-                {
-                    if (string.IsNullOrEmpty(input)) return "";
-                    // If content has a colon or starts with a quote, it must be wrapped
-                    if (input.Contains(":") || input.Contains("\""))
-                    {
-                        // Standard RA escape: replace internal quotes with \" and wrap whole string in quotes
-                        return "\"" + input.Replace("\"", "\\\"") + "\"";
-                    }
-                    return input;
-                }
-
-                foreach (var a in mergedAchievements)
-                {
-                    if (a.State == AssetState.Synced) continue; // Don't save synced items to User.txt
-
-                    // APPLY ESCAPE TO TITLE AND DESCRIPTION
-                    sb.AppendLine($"{a.ID}:\"{a.Logic}\":{EscapeUserString(a.Title)}:{EscapeUserString(a.Description)}:::{a.Type}:{a.Author}:{a.Points}:::::{a.BadgeName}");
-                }
-
-                foreach (var l in mergedLeaderboards)
-                {
-                    if (l.State == AssetState.Synced) continue;
-
-                    // Use strategy to ensure we get clean segments for the file format
-                    var segments = lbStrategy.ParseLogic(l.Logic);
-
-                    string GetSeg(string key)
-                    {
-                        if (!segments.ContainsKey(key)) return "";
-                        var groups = segments[key];
-                        StringBuilder segSb = new StringBuilder();
-                        for (int i = 0; i < groups.Count; i++)
-                        {
-                            if (i > 0) segSb.Append('S');
-                            for (int c = 0; c < groups[i].Conditions.Count; c++)
-                            {
-                                if (c > 0) segSb.Append('_');
-                                segSb.Append(LogicFormatter.ConditionToString(groups[i].Conditions[c]));
-                            }
-                        }
-                        return segSb.ToString();
-                    }
-
-                    // APPLY ESCAPE TO TITLE AND DESCRIPTION
-                    sb.AppendLine($"L{l.ID}:\"{GetSeg("Start")}\":\"{GetSeg("Cancel")}\":\"{GetSeg("Submit")}\":\"{GetSeg("Value")}\":{l.Format}:{EscapeUserString(l.Title)}:{EscapeUserString(l.Description)}:{l.LowerIsBetter}");
-                }
-
-                // Save notes - Filter out notes that match the server data
-                if (_projectRepo.LocalData?.Notes != null)
-                {
-                    foreach (var n in _projectRepo.LocalData.Notes)
-                    {
-                        // Only save notes that are modified or new compared to the server JSON
-                        if (_projectRepo.IsNoteSynced(n)) continue;
-
-                        sb.AppendLine($"N0:{n.Address}:\"{n.Note.Replace("\r\n", "\\r\\n")}\"");
-                    }
-                }
-
-                File.WriteAllText(savePath, sb.ToString());
-                _currentUserFilePath = savePath;
-
-                // Save RP if it exists
-                _projectRepo.SaveRichPresence();
-                // Save Metadata
-                _projectRepo.Metadata.Save();
-
-                MessageBox.Show("Saved to " + savePath);
-            }
-            catch (Exception ex) { MessageBox.Show($"Error saving: {ex.Message}"); }
+            AppSettings.Save();
         }
 
-        // Refreshes the main grid based on filters
-        private void ReloadDataView()
+        private void ToggleReviewer(bool? forceState = null)
         {
-            int savedScroll = achievementGrid.FirstDisplayedScrollingRowIndex;
-            int savedId = -1;
-            if (achievementGrid.SelectedRows.Count > 0 && achievementGrid.SelectedRows[0].Tag is IAssetItem item)
-                savedId = item.ID;
-
-            PopulateList();
-
-            // Restore selection
-            if (savedId != -1)
-            {
-                foreach (DataGridViewRow row in achievementGrid.Rows)
-                {
-                    if (row.Tag is IAssetItem i && i.ID == savedId)
-                    {
-                        row.Selected = true;
-                        achievementGrid.CurrentCell = row.Cells[0];
-                        break;
-                    }
-                }
-            }
-            if (savedScroll >= 0 && savedScroll < achievementGrid.Rows.Count)
-                try { achievementGrid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
+            bool newState = forceState ?? !viewReviewerToolStripMenuItem.Checked;
+            viewReviewerToolStripMenuItem.Checked = newState;
+            splitMiddle.Panel2Collapsed = !newState;
         }
 
-        // Populates the grid based on Source Type (JSON, Local, New) and Asset Type
-        private void PopulateList()
+        private void UpdateUndoRedoState()
         {
-            achievementGrid.Rows.Clear();
-            _currentDisplayList.Clear();
-
-            bool showLeaderboards = cmbAssetType.SelectedIndex == 1;
-            string sourceMode = cmbSource.SelectedItem?.ToString() ?? "Local";
-            string categoryFilter = cmbCategory.SelectedItem?.ToString() ?? "Core";
-            string filterText = txtAssetSearch.Text.Trim();
-
-            // Fetch merged list (contains everything)
-            var mergedList = showLeaderboards
-                ? _projectRepo.GetMergedList<RaLeaderboard>(true).Cast<IAssetItem>()
-                : _projectRepo.GetMergedList<RaAchievement>(false).Cast<IAssetItem>();
-
-            foreach (var item in mergedList)
-            {
-                UpdateAssetState(item); // Ensure State is current (Modified/Synced/Local)
-
-                // 1. Filter by Source Mode (JSON vs Local vs New)
-                if (sourceMode == "New")
-                {
-                    if (item.State != AssetState.Local) continue;
-                }
-                else if (sourceMode == "JSON")
-                {
-                    if (item.State == AssetState.Local) continue;
-                }
-                else // "Local" view
-                {
-                    if (item.State == AssetState.Synced) continue;
-                }
-
-                // 2. Filter by Category (Core vs Unofficial)
-                // "Local" category was removed from filter, but items might still have "Local" string
-
-                // FIX: Only apply category filter if NOT in "New" mode.
-                // This ensures newly created assets (which are "Local" category) appear even if the filter is set to Core.
-                if (sourceMode != "New")
-                {
-                    string itemCat = string.IsNullOrEmpty(item.Category) ? "Local" : item.Category;
-                    if (!itemCat.Equals(categoryFilter, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-                }
-
-                // 3. Filter by Search Text
-                AddFilteredGridRow(item, filterText);
-            }
+            bool isTriggerContext = triggerEditor.ContainsFocus;
+            undoToolStripMenuItem.Enabled = isTriggerContext ? triggerEditor.CanUndo : _mainHistory.CanUndo;
+            redoToolStripMenuItem.Enabled = isTriggerContext ? triggerEditor.CanRedo : _mainHistory.CanRedo;
         }
 
-        private void AddFilteredGridRow(IAssetItem item, string filter)
+        private void ClearDataResetToolStripMenuItem_Click(object? sender, EventArgs e)
         {
-            // Apply text filter
-            if (!string.IsNullOrEmpty(filter))
+            var result = MessageBox.Show(
+                "This will delete all application configuration and cached data. The application will restart.\n\nAre you sure?",
+                "Clear Data / Reset", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+            if (result == DialogResult.Yes)
             {
-                bool matchesId = item.ID.ToString().Contains(filter);
-                bool matchesTitle = item.Title.Contains(filter, StringComparison.OrdinalIgnoreCase);
-                if (!matchesId && !matchesTitle) return;
-            }
-
-            AddGridRow(item);
-        }
-
-        private void AddGridRow(IAssetItem item)
-        {
-            // Only prefix 'L' for Leaderboards that are effectively "Local" (High ID range)
-            // Standard server IDs (e.g. 42948) should appear as raw numbers.
-            string displayId = item.ID.ToString();
-            if (item.IsLeaderboard && item.ID >= 111000001)
-            {
-                displayId = $"L{item.ID}";
-            }
-
-            int idx = achievementGrid.Rows.Add(displayId, item.Title);
-            var row = achievementGrid.Rows[idx];
-            row.Tag = item;
-            UpdateRowColor(row, item);
-            _currentDisplayList.Add(item);
-        }
-
-        private void UpdateRowColor(DataGridViewRow row, IAssetItem item)
-        {
-            if (item.State == AssetState.Modified) row.DefaultCellStyle.ForeColor = Color.Orange;
-            else if (item.State == AssetState.Local) row.DefaultCellStyle.ForeColor = Color.Green;
-            else row.DefaultCellStyle.ForeColor = Color.Empty;
-        }
-
-        // Loads the asset into the Trigger Editor
-        private void LoadSelectedAsset()
-        {
-            if (achievementGrid.SelectedRows.Count > 0)
-            {
-                var row = achievementGrid.SelectedRows[0];
-                if (row.Tag is IAssetItem asset)
+                try
                 {
-                    _isLoading = true;
-                    // Create a detached clone if it's synced, so we don't edit the server data directly
-                    // until we decide to save (which promotes it to Modified)
-                    if (asset.State == AssetState.Synced)
-                    {
-                        IAssetItem clone;
-                        if (asset is RaAchievement ra) clone = ra.Clone(false);
-                        else if (asset is RaLeaderboard rl) clone = rl.Clone(false);
-                        else return;
-                        _selectedAsset = clone;
-                        row.Tag = clone;
-                    }
-                    else
-                    {
-                        _selectedAsset = asset;
-                    }
+                    string appPath = Application.StartupPath;
+                    if (File.Exists(Path.Combine(appPath, "settings.json"))) File.Delete(Path.Combine(appPath, "settings.json"));
+                    if (File.Exists(Path.Combine(appPath, "recent.json"))) File.Delete(Path.Combine(appPath, "recent.json"));
+                    if (File.Exists(Path.Combine(appPath, "snippets.json"))) File.Delete(Path.Combine(appPath, "snippets.json"));
+                    string cacheDir = Path.Combine(appPath, "Cache");
+                    if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
+                    string metaDir = Path.Combine(appPath, "Metadata");
+                    if (Directory.Exists(metaDir)) Directory.Delete(metaDir, true);
 
-                    // Parse the logic to setup the ViewModel state
-                    // We must apply Metadata here to ensure the ViewModel sees the correct group names
-                    IAssetStrategy strategy = _selectedAsset.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
-                    var segments = strategy.ParseLogic(_selectedAsset.Logic);
-
-                    foreach (var groupList in segments.Values)
-                    {
-                        _projectRepo.Metadata.ApplyNamesToAsset(_selectedAsset.ID, groupList);
-                    }
-
-                    // Display category nicely
-                    string displayCat = string.IsNullOrEmpty(_selectedAsset.Category) ? "Core" :
-                        char.ToUpper(_selectedAsset.Category[0]) + _selectedAsset.Category.Substring(1);
-
-                    triggerEditor.BindAchievement(_selectedAsset, displayCat);
-                    _isLoading = false;
+                    Application.Restart();
                 }
-            }
-            UpdateSelectionUI();
-        }
-
-        // Compares item against server data to determine Sync state (Synced, Modified, Local)
-        private void UpdateAssetState(IAssetItem item)
-        {
-            if (_projectRepo.ServerData == null) { item.State = AssetState.Local; return; }
-
-            var serverSet = _projectRepo.ServerData.Sets;
-            IAssetItem? serverItem = null;
-
-            foreach (var s in serverSet)
-            {
-                if (item.IsLeaderboard) serverItem = s.Leaderboards.FirstOrDefault(x => x.ID == item.ID);
-                else serverItem = s.Achievements.FirstOrDefault(x => x.ID == item.ID);
-                if (serverItem != null) break;
-            }
-
-            if (serverItem == null) item.State = AssetState.Local;
-            else
-            {
-                bool equal = item.Logic == serverItem.Logic && item.Title == serverItem.Title && item.Description == serverItem.Description;
-                if (item is RaAchievement a && serverItem is RaAchievement b)
-                {
-                    if (a.Points != b.Points || a.Type != b.Type) equal = false;
-                }
-                item.State = equal ? AssetState.Synced : AssetState.Modified;
-            }
-
-            foreach (DataGridViewRow row in achievementGrid.Rows)
-            {
-                if (row.Tag == item) { UpdateRowColor(row, item); break; }
+                catch (Exception ex) { MessageBox.Show($"Error: {ex.Message}"); }
             }
         }
 
-        // Callback from Trigger Editor: Logic string changed
-        private void TriggerEditor_TriggerTextChanged(object? sender, EventArgs e)
-        {
-            if (_isLoading || _selectedAsset == null) return;
-            _projectRepo.EnsureLocalDataExists();
-            EnsureAssetIsLocal();
-
-            // The BoundAsset Logic property is updated by the ViewModel inside TriggerEditorControl
-            // We just need to refresh the state tracking
-            UpdateAssetState(_selectedAsset);
-        }
-
-        // Callback from Trigger Editor: Metadata (Title, Desc) changed
-        private void TriggerEditor_AchievementDataChanged(object? sender, EventArgs e)
-        {
-            if (_isLoading || _selectedAsset == null) return;
-            _projectRepo.EnsureLocalDataExists();
-
-            // Bulk Edit Logic
-            if (achievementGrid.SelectedRows.Count > 1)
-            {
-                ApplyBulkEdit(_selectedAsset);
-            }
-            else
-            {
-                EnsureAssetIsLocal();
-                UpdateAssetState(_selectedAsset);
-            }
-
-            // Visual update
-            foreach (DataGridViewRow row in achievementGrid.Rows)
-            {
-                if (row.Tag is IAssetItem asset && asset.ID == _selectedAsset.ID)
-                {
-                    row.Cells[1].Value = _selectedAsset.Title;
-                    UpdateRowColor(row, asset);
-                    break;
-                }
-            }
-        }
-
-        private void ApplyBulkEdit(IAssetItem sourceTemplate)
-        {
-            // Propagate metadata changes to all selected rows
-            // We do NOT propagate Logic or Description usually, just Type/Author/Points as those are common batch ops
-            // But since this event fires for ANY change in TriggerEditor including Title/Desc, we need to be careful.
-
-            // For now, let's strictly limit bulk edit to Points, Author, and Type.
-            // Detecting exactly which field changed is hard without more complex event args.
-            // As a safe approach, we apply Points/Type/Author from the source.
-
-            if (sourceTemplate is not RaAchievement srcAch) return;
-
-            foreach (DataGridViewRow row in achievementGrid.SelectedRows)
-            {
-                if (row.Tag is RaAchievement target && target != sourceTemplate)
-                {
-                    EnsureAssetIsLocal(target);
-                    target.Points = srcAch.Points;
-                    target.Type = srcAch.Type;
-                    // target.Author = srcAch.Author; // Author isn't editable in UI currently for existing assets easily, but if added later:
-
-                    UpdateAssetState(target);
-                }
-            }
-        }
-
-        // Overload to force a specific asset to local
+        // Shared Logic Helpers
         private void EnsureAssetIsLocal(IAssetItem asset)
         {
             if (asset == null || _projectRepo.LocalData == null) return;
@@ -1612,7 +317,6 @@ namespace RALogicEditor
             {
                 if (!_projectRepo.LocalData.Achievements.Any(a => a.ID == ra.ID))
                 {
-                    // Clone server asset before adding to local to prevent reference issues
                     var clone = ra.Clone(false);
                     _projectRepo.LocalData.Achievements.Add(clone);
                 }
@@ -1627,13 +331,121 @@ namespace RALogicEditor
             }
         }
 
-        // Adds the asset to LocalData list if it isn't there already (promotes from Synced to Modified)
-        private void EnsureAssetIsLocal()
+        private void EnsureAssetIsLocal() => EnsureAssetIsLocal(_selectedAsset!);
+
+        private void TriggerEditor_MultiRegionLogicRequested(object? sender, MultiRegionForm form)
         {
-            EnsureAssetIsLocal(_selectedAsset!);
+            var configs = form.GetConfiguredRegions();
+            if (configs.Count == 0) return;
+
+            var baseConfig = configs.FirstOrDefault(c => c.IsBase);
+            var targetConfigs = configs.Where(c => !c.IsBase).ToList();
+
+            _projectRepo.EnsureLocalDataExists();
+            PushMainUndo();
+
+            void InvertLockLogic(List<AchievementCondition> conditions)
+            {
+                foreach (var c in conditions)
+                {
+                    c.Flag = "Pause If";
+                    c.Operator = InvertOperator(c.Operator);
+                }
+            }
+
+            foreach (var cfg in configs) InvertLockLogic(cfg.LockConditions);
+
+            List<IAssetItem> assetsToProcess;
+            if (achievementGrid.SelectedRows.Count > 0)
+            {
+                assetsToProcess = achievementGrid.SelectedRows.Cast<DataGridViewRow>()
+                    .Select(r => r.Tag as IAssetItem).Where(a => a != null).Cast<IAssetItem>().ToList();
+            }
+            else
+            {
+                assetsToProcess = new List<IAssetItem>(_currentDisplayList);
+            }
+
+            if (assetsToProcess.Count == 0) return;
+
+            int count = 0;
+            foreach (var item in assetsToProcess)
+            {
+                EnsureAssetIsLocal(item);
+                IAssetItem? localItem = null;
+                if (item.IsLeaderboard) localItem = _projectRepo.LocalData!.Leaderboards.FirstOrDefault(x => x.ID == item.ID);
+                else localItem = _projectRepo.LocalData!.Achievements.FirstOrDefault(x => x.ID == item.ID);
+
+                if (localItem == null) continue;
+
+                _batchProcessor.ApplyMultiRegionToAsset(localItem, baseConfig, targetConfigs);
+                count++;
+            }
+
+            if (form.ShouldUpdateRichPresence && _projectRepo.RichPresence != null)
+            {
+                _rpMetadata.SaveBackup(_projectRepo.RichPresence.ToString());
+                var newRp = _rpService.GenerateMultiRegion(_projectRepo.RichPresence, configs);
+                _projectRepo.RichPresence = newRp;
+                MessageBox.Show("Rich Presence script updated in memory.", "RP Updated");
+            }
+
+            MessageBox.Show($"Multi-Region logic applied to {count} assets.", "Batch Complete");
+            ReloadDataView();
+            if (_selectedAsset != null) SelectAssetInGrid(_selectedAsset);
         }
 
-        // Resets a Modified asset back to Synced state (removes from LocalData)
+        private string InvertOperator(string op)
+        {
+            return op switch { "=" => "!=", "!=" => "=", "<" => ">=", "<=" => ">", ">" => "<=", ">=" => "<", _ => op };
+        }
+
+        private void TriggerEditor_TriggerTextChanged(object? sender, EventArgs e)
+        {
+            if (_isLoading || _selectedAsset == null) return;
+            _projectRepo.EnsureLocalDataExists();
+            EnsureAssetIsLocal();
+            UpdateAssetState(_selectedAsset);
+        }
+
+        private void TriggerEditor_AchievementDataChanged(object? sender, EventArgs e)
+        {
+            if (_isLoading || _selectedAsset == null) return;
+            _projectRepo.EnsureLocalDataExists();
+
+            if (achievementGrid.SelectedRows.Count > 1) ApplyBulkEdit(_selectedAsset);
+            else
+            {
+                EnsureAssetIsLocal();
+                UpdateAssetState(_selectedAsset);
+            }
+
+            foreach (DataGridViewRow row in achievementGrid.Rows)
+            {
+                if (row.Tag is IAssetItem asset && asset.ID == _selectedAsset.ID)
+                {
+                    row.Cells[1].Value = _selectedAsset.Title;
+                    UpdateRowColor(row, asset);
+                    break;
+                }
+            }
+        }
+
+        private void ApplyBulkEdit(IAssetItem sourceTemplate)
+        {
+            if (sourceTemplate is not RaAchievement srcAch) return;
+            foreach (DataGridViewRow row in achievementGrid.SelectedRows)
+            {
+                if (row.Tag is RaAchievement target && target != sourceTemplate)
+                {
+                    EnsureAssetIsLocal(target);
+                    target.Points = srcAch.Points;
+                    target.Type = srcAch.Type;
+                    UpdateAssetState(target);
+                }
+            }
+        }
+
         private void TriggerEditor_AssetResetRequested(object? sender, EventArgs e)
         {
             if (_selectedAsset == null || _projectRepo.LocalData == null) return;
@@ -1654,384 +466,100 @@ namespace RALogicEditor
             LoadSelectedAsset();
         }
 
-        // Action: Create New Asset
-        private void NewAsset_Click(object? sender, EventArgs e)
+        private void TriggerEditor_ValidationCompleted(object? sender, List<ValidationIssue> issues)
         {
-            _projectRepo.EnsureLocalDataExists();
-            PushMainUndo();
-
-            // Generate ID starting at 111000001
-            int newId = 111000001;
-            var allIds = _currentDisplayList.Select(x => x.ID).ToList();
-            if (allIds.Any())
-            {
-                int max = allIds.Max();
-                newId = (max < 111000000) ? 111000001 : max + 1;
-            }
-
-            bool leaderboard = cmbAssetType.SelectedIndex == 1;
-            if (leaderboard)
-            {
-                var lb = new RaLeaderboard { ID = newId, Title = "New Leaderboard", State = AssetState.Local, Category = "Local" };
-                _projectRepo.LocalData!.Leaderboards.Add(lb);
-            }
-            else
-            {
-                var ach = new RaAchievement { ID = newId, Title = "New Achievement", State = AssetState.Local, Category = "Local" };
-                _projectRepo.LocalData!.Achievements.Add(ach);
-            }
-
-            // Automatically switch to "New" view and "Local" Category
-            if (cmbSource.SelectedItem?.ToString() != "New")
-                cmbSource.SelectedItem = "New";
-
-            // Local Category was removed from UI filter, so this part is implicit now.
-            // Items are found via "New" source view.
-
-            ReloadDataView();
-
-            // Select new item
-            foreach (DataGridViewRow row in achievementGrid.Rows)
-            {
-                // Use Tag to verify ID safely, as display value might be a string (e.g. "L111...")
-                if (row.Tag is IAssetItem item && item.ID == newId)
-                {
-                    row.Selected = true;
-                    LoadSelectedAsset();
-                    break;
-                }
-            }
+            if (_selectedAsset == null) return;
+            _globalIssues.RemoveAll(i => i.Asset != null && i.Asset.ID == _selectedAsset.ID);
+            _globalIssues.AddRange(issues);
+            if (!_isLoading) codeReviewControl.SetIssues(_globalIssues);
         }
 
-        // Action: Duplicate selected assets
-        private void DuplicateAsset_Click(object? sender, EventArgs e)
+        private void CodeReviewControl_IssueSelected(object? sender, ValidationIssue issue)
         {
-            if (achievementGrid.SelectedRows.Count == 0) return;
-            _projectRepo.EnsureLocalDataExists();
-            PushMainUndo();
-
-            var selectedRows = achievementGrid.SelectedRows.Cast<DataGridViewRow>().Where(r => r.Tag is IAssetItem).OrderBy(r => r.Index).ToList();
-            int nextId = 111000001;
-            var allIds = _currentDisplayList.Select(x => x.ID).ToList();
-            if (allIds.Any()) { int max = allIds.Max(); nextId = (max >= 111000000) ? max + 1 : 111000001; }
-
-            List<int> newIds = new List<int>();
-            foreach (var row in selectedRows)
-            {
-                if (row.Tag is IAssetItem source)
-                {
-                    if (source is RaAchievement ra)
-                    {
-                        var c = ra.Clone(); c.Title += " (Copy)"; c.ID = nextId++; c.State = AssetState.Local; c.Category = "Local";
-                        _projectRepo.LocalData!.Achievements.Add(c); newIds.Add(c.ID);
-                    }
-                    else if (source is RaLeaderboard rl)
-                    {
-                        var c = rl.Clone(); c.Title += " (Copy)"; c.ID = nextId++; c.State = AssetState.Local; c.Category = "Local";
-                        _projectRepo.LocalData!.Leaderboards.Add(c); newIds.Add(c.ID);
-                    }
-                }
-            }
-
-            // Switch to "New" view so we can see the duplicated items
-            cmbSource.SelectedItem = "New";
-            ReloadDataView();
-
-            // --- Restore Selection & Focus Logic ---
-            // 1. Clear Selection
-            achievementGrid.ClearSelection();
-
-            // 2. Identify indices of new items
-            List<int> indicesToSelect = new List<int>();
-            foreach (DataGridViewRow row in achievementGrid.Rows)
-            {
-                if (row.Tag is IAssetItem item && newIds.Contains(item.ID))
-                {
-                    indicesToSelect.Add(row.Index);
-                }
-            }
-
-            if (indicesToSelect.Count > 0)
-            {
-                int firstIdx = indicesToSelect.Min();
-                // 3. Set CurrentCell to force grid focus and scroll
-                achievementGrid.CurrentCell = achievementGrid.Rows[firstIdx].Cells[0];
-
-                // 4. Select all duplicated rows
-                foreach (int idx in indicesToSelect)
-                {
-                    achievementGrid.Rows[idx].Selected = true;
-                }
-            }
+            if (issue.Asset == null) return;
+            if (_selectedAsset == null || _selectedAsset.ID != issue.Asset.ID) SelectAssetInGrid(issue.Asset);
+            triggerEditor.SelectCondition(issue.Target);
         }
 
-        // Action: Delete local assets
-        private void DeleteAsset_Click(object? sender, EventArgs e)
+        private void RunGlobalValidation()
         {
-            if (achievementGrid.SelectedRows.Count == 0 || _projectRepo.LocalData == null) return;
-            PushMainUndo();
-            foreach (DataGridViewRow row in achievementGrid.SelectedRows)
+            _globalIssues.Clear();
+            bool validateLeaderboards = cmbAssetType.SelectedIndex == 1;
+            var allAssets = new List<IAssetItem>();
+
+            if (validateLeaderboards) allAssets.AddRange(_projectRepo.GetMergedList<RaLeaderboard>(true));
+            else allAssets.AddRange(_projectRepo.GetMergedList<RaAchievement>(false));
+
+            var notesLookup = new Dictionary<string, List<NoteNode>>();
+            var rangeCache = new List<(long Start, long End, NoteNode Node)>();
+            var parser = new PointerTreeParser();
+
+            if (_projectRepo.LocalData != null && _projectRepo.LocalData.Notes != null)
             {
-                if (row.Tag is IAssetItem item && item.State == AssetState.Local)
+                foreach (var n in _projectRepo.LocalData.Notes)
                 {
-                    if (item is RaAchievement ra) _projectRepo.LocalData.Achievements.Remove(ra);
-                    else if (item is RaLeaderboard rl) _projectRepo.LocalData.Leaderboards.Remove(rl);
+                    string key = LogicFormatter.NormalizeAddress(n.Address);
+                    var nodes = parser.ParseNoteText(n.Note);
+                    if (!notesLookup.ContainsKey(key)) notesLookup[key] = nodes;
+                    if (nodes.Count > 0 && nodes[0].Size > 1)
+                    {
+                        if (long.TryParse(key.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long startAddr))
+                            rangeCache.Add((startAddr, startAddr + nodes[0].Size, nodes[0]));
+                    }
                 }
             }
-            ReloadDataView();
+
+            foreach (var asset in allAssets)
+            {
+                IAssetStrategy strategy = asset.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
+                var segments = strategy.ParseLogic(asset.Logic);
+                var allGroups = segments.Values.SelectMany(g => g).ToList();
+                var issues = _validator.ValidateAsset(allGroups, asset, notesLookup, rangeCache);
+                _globalIssues.AddRange(issues);
+            }
+            codeReviewControl.SetIssues(_globalIssues);
         }
 
-        // Action: Reset modified assets
-        private void ResetAsset_Click(object? sender, EventArgs e)
+        private void TriggerEditor_AddFromCodeNoteRequested(object? sender, EventArgs e)
         {
-            if (achievementGrid.SelectedRows.Count == 0 || _projectRepo.LocalData == null) return;
-            PushMainUndo();
+            var data = codeNoteEditor.GetSelectedLogic();
+            if (!string.IsNullOrEmpty(data.Logic)) triggerEditor.AddConditionFromNote(data.Logic, data.Type, data.Size);
+            else MessageBox.Show("No valid address selected.", "Add Note");
+        }
 
-            foreach (DataGridViewRow row in achievementGrid.SelectedRows)
+        // Global Undo (Helper methods used by Menu.cs)
+        private void PushMainUndo()
+        {
+            var snapshot = new UserTextParser.UserData();
+            if (_projectRepo.LocalData != null)
             {
-                if (row.Tag is IAssetItem item && item.State == AssetState.Modified)
-                {
-                    if (item is RaAchievement ra)
-                    {
-                        var loc = _projectRepo.LocalData.Achievements.FirstOrDefault(x => x.ID == ra.ID);
-                        if (loc != null) _projectRepo.LocalData.Achievements.Remove(loc);
-                    }
-                    else if (item is RaLeaderboard rl)
-                    {
-                        var loc = _projectRepo.LocalData.Leaderboards.FirstOrDefault(x => x.ID == rl.ID);
-                        if (loc != null) _projectRepo.LocalData.Leaderboards.Remove(loc);
-                    }
-                }
+                foreach (var ach in _projectRepo.LocalData.Achievements) snapshot.Achievements.Add(ach.Clone(false));
+                foreach (var lb in _projectRepo.LocalData.Leaderboards) snapshot.Leaderboards.Add(lb.Clone(false));
+                foreach (var n in _projectRepo.LocalData.Notes) snapshot.Notes.Add(new CodeNote { Address = n.Address, Note = n.Note, User = n.User });
             }
+            _mainHistory.PushState(snapshot);
+        }
+
+        private void UndoMain()
+        {
+            if (_projectRepo.LocalData == null) return;
+            var previousState = _mainHistory.Undo(_projectRepo.LocalData);
+            _projectRepo.LocalData.Achievements = previousState.Achievements;
+            _projectRepo.LocalData.Leaderboards = previousState.Leaderboards;
+            _projectRepo.LocalData.Notes = previousState.Notes;
             ReloadDataView();
             LoadSelectedAsset();
         }
 
-        private void MoveAssetUp_Click(object? sender, EventArgs e) => MoveAsset(-1);
-        private void MoveAssetDown_Click(object? sender, EventArgs e) => MoveAsset(1);
-
-        // Action: Reorder local assets
-        private void MoveAsset(int direction)
-        {
-            if (achievementGrid.SelectedRows.Count == 0 || _projectRepo.LocalData == null) return;
-
-            var selectedRows = achievementGrid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index).ToList();
-            if (direction > 0) selectedRows.Reverse();
-
-            if (direction < 0 && selectedRows.Min(r => r.Index) == 0) return;
-            if (direction > 0 && selectedRows.Max(r => r.Index) >= achievementGrid.Rows.Count - 1) return;
-
-            PushMainUndo();
-            bool changed = false;
-            List<int> movedIds = new(); // Track IDs to restore selection
-
-            foreach (var row in selectedRows)
-            {
-                if (row.Tag is IAssetItem item && item.State == AssetState.Local)
-                {
-                    int currentIdx = row.Index;
-                    int targetIdx = currentIdx + direction;
-
-                    if (targetIdx < 0 || targetIdx >= achievementGrid.Rows.Count) continue;
-
-                    var targetRow = achievementGrid.Rows[targetIdx];
-                    if (targetRow.Tag is IAssetItem targetItem && targetItem.State == AssetState.Local)
-                    {
-                        // Swap position in data list
-                        if (item.IsLeaderboard) SwapInList(_projectRepo.LocalData.Leaderboards, item.ID, targetItem.ID);
-                        else SwapInList(_projectRepo.LocalData.Achievements, item.ID, targetItem.ID);
-
-                        // Swap IDs to maintain sequence
-                        int tempId = item.ID; item.ID = targetItem.ID; targetItem.ID = tempId;
-                        changed = true;
-                        movedIds.Add(item.ID);
-                    }
-                }
-            }
-
-            if (changed)
-            {
-                int savedScroll = achievementGrid.FirstDisplayedScrollingRowIndex;
-                ReloadDataView();
-
-                // --- Restore Selection Logic ---
-                achievementGrid.ClearSelection();
-                List<int> indicesToSelect = new List<int>();
-
-                foreach (DataGridViewRow row in achievementGrid.Rows)
-                {
-                    if (row.Tag is IAssetItem item && movedIds.Contains(item.ID))
-                    {
-                        indicesToSelect.Add(row.Index);
-                    }
-                }
-
-                if (indicesToSelect.Count > 0)
-                {
-                    int firstIdx = indicesToSelect.Min();
-                    achievementGrid.CurrentCell = achievementGrid.Rows[firstIdx].Cells[0];
-                    foreach (int idx in indicesToSelect) achievementGrid.Rows[idx].Selected = true;
-                }
-
-                if (savedScroll >= 0 && savedScroll < achievementGrid.Rows.Count)
-                    try { achievementGrid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
-            }
-        }
-
-        // Action: Renumber all local assets sequentially
-        private void RenumberLocalIDs_Click(object? sender, EventArgs e)
+        private void RedoMain()
         {
             if (_projectRepo.LocalData == null) return;
-
-            bool hasLocal = _projectRepo.LocalData.Achievements.Any() || _projectRepo.LocalData.Leaderboards.Any();
-            if (!hasLocal) return;
-
-            PushMainUndo();
-
-            int currentId = 111000001;
-
-            // Achievements first
-            foreach (var ach in _projectRepo.LocalData.Achievements)
-            {
-                ach.ID = currentId++;
-            }
-
-            // Leaderboards follow
-            foreach (var lb in _projectRepo.LocalData.Leaderboards)
-            {
-                lb.ID = currentId++;
-            }
-
+            var nextState = _mainHistory.Redo(_projectRepo.LocalData);
+            _projectRepo.LocalData.Achievements = nextState.Achievements;
+            _projectRepo.LocalData.Leaderboards = nextState.Leaderboards;
+            _projectRepo.LocalData.Notes = nextState.Notes;
             ReloadDataView();
-        }
-
-        private void SwapInList<T>(List<T> list, int idA, int idB) where T : IAssetItem
-        {
-            var indexA = list.FindIndex(x => x.ID == idA);
-            var indexB = list.FindIndex(x => x.ID == idB);
-            if (indexA != -1 && indexB != -1)
-            {
-                var temp = list[indexA];
-                list[indexA] = list[indexB];
-                list[indexB] = temp;
-            }
-        }
-
-        private void achievementGrid_KeyDown(object? sender, KeyEventArgs e)
-        {
-            if (e.KeyCode == Keys.Enter)
-            {
-                LoadSelectedAsset();
-                e.Handled = true;
-            }
-            else if (e.Alt && e.KeyCode == Keys.Up)
-            {
-                MoveAsset(-1);
-                e.Handled = true;
-            }
-            else if (e.Alt && e.KeyCode == Keys.Down)
-            {
-                MoveAsset(1);
-                e.Handled = true;
-            }
-            else if (e.KeyCode == Keys.Delete)
-            {
-                DeleteAsset_Click(sender, e);
-                e.Handled = true;
-            }
-            else if (e.Control && e.KeyCode == Keys.D)
-            {
-                DuplicateAsset_Click(sender, e);
-                e.Handled = true;
-            }
-        }
-
-        private void AchievementContextMenu_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
-        {
-            UpdateSelectionUI();
-            bool hasSelection = achievementGrid.SelectedRows.Count > 0;
-            bool allLocal = true;
-            bool anyModified = false;
-
-            foreach (DataGridViewRow row in achievementGrid.SelectedRows)
-            {
-                if (row.Tag is IAssetItem asset)
-                {
-                    if (asset.State != AssetState.Local) allLocal = false;
-                    if (asset.State == AssetState.Modified) anyModified = true;
-                }
-            }
-
-            cloneAssetToolStripMenuItem.Enabled = hasSelection;
-            deleteAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
-            resetAssetToolStripMenuItem.Enabled = hasSelection && anyModified;
-            moveUpAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
-            moveDownAssetToolStripMenuItem.Enabled = hasSelection && allLocal;
-
-            // Diff is only valid for Modified assets (1 item selected)
-            viewDiffToolStripMenuItem.Enabled = achievementGrid.SelectedRows.Count == 1 && anyModified;
-
-            bool hasAnyLocal = _projectRepo.LocalData != null &&
-                              (_projectRepo.LocalData.Achievements.Count > 0 || _projectRepo.LocalData.Leaderboards.Count > 0);
-            renumberContextToolStripMenuItem.Enabled = hasAnyLocal;
-        }
-
-        private void UpdateSelectionUI()
-        {
-            bool hasSelection = achievementGrid.SelectedRows.Count > 0;
-            bool allLocal = true;
-            foreach (DataGridViewRow row in achievementGrid.SelectedRows)
-            {
-                if (row.Tag is IAssetItem asset && asset.State != AssetState.Local) allLocal = false;
-            }
-            btnDuplicateAsset.Enabled = hasSelection;
-            btnDeleteAsset.Enabled = hasSelection && allLocal;
-        }
-
-        private void UpdateRecentMenu()
-        {
-            recentToolStripMenuItem.DropDownItems.Clear();
-            foreach (var entry in _recentFiles.Files)
-            {
-                string text = string.IsNullOrEmpty(entry.GameTitle) ? entry.Path : $"{entry.GameTitle} | {entry.Path}";
-                // Use the entry.Path for the click event
-                var item = new ToolStripMenuItem(text);
-                string path = entry.Path;
-                item.Click += (s, args) =>
-                {
-                    // Check for unsaved changes before loading
-                    if (ConfirmDiscardChanges())
-                        LoadFiles(path);
-                };
-                recentToolStripMenuItem.DropDownItems.Add(item);
-            }
-        }
-
-        private void viewDiffToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (achievementGrid.SelectedRows.Count != 1) return;
-            var row = achievementGrid.SelectedRows[0];
-            if (row.Tag is IAssetItem localItem && localItem.State == AssetState.Modified)
-            {
-                // Find server equivalent
-                if (_projectRepo.ServerData == null) return;
-
-                IAssetItem? serverItem = null;
-                foreach (var s in _projectRepo.ServerData.Sets)
-                {
-                    if (localItem.IsLeaderboard) serverItem = s.Leaderboards.FirstOrDefault(x => x.ID == localItem.ID);
-                    else serverItem = s.Achievements.FirstOrDefault(x => x.ID == localItem.ID);
-                    if (serverItem != null) break;
-                }
-
-                if (serverItem != null)
-                {
-                    using (var diff = new AssetDiffForm(serverItem, localItem))
-                    {
-                        diff.ShowDialog();
-                    }
-                }
-            }
+            LoadSelectedAsset();
         }
     }
 }
