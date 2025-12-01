@@ -107,8 +107,10 @@ namespace RALogicEditor.Controls
 
                 case "AndNext":
                 case "OrNext":
-                case "ResetNextIf":
                     return Color.DeepSkyBlue; // Logic Chains
+
+                case "ResetNextIf":
+                    return Color.DarkRed; // Distinction for ResetNextIf
 
                 case "Add Hits":
                 case "Sub Hits":
