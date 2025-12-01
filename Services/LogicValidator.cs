@@ -281,10 +281,6 @@ namespace RALogicEditor.Services
             Dictionary<string, List<NoteNode>> notesLookup,
             List<(long Start, long End, NoteNode Node)>? rangeCache)
         {
-            // Internal flag to enable detailed logging. Set to true to debug pointer issues.
-            bool enableTrace = false;
-            StringBuilder? debugLog = enableTrace ? new StringBuilder() : null;
-
             long ParseHex(string s)
             {
                 if (string.IsNullOrWhiteSpace(s)) return -1;
@@ -316,9 +312,6 @@ namespace RALogicEditor.Services
 
                     if (string.IsNullOrWhiteSpace(alias))
                     {
-                        debugLog?.AppendLine($"Validating Operand: {op.Value} (Index: {i})");
-                        debugLog?.AppendLine("--------------------------------------------------");
-
                         string msg = $"Address {op.Value} has no Code Note.";
 
                         // Improved Detection: Check if this is a failure in a Pointer Chain where the Base IS documented
@@ -335,7 +328,6 @@ namespace RALogicEditor.Services
 
                             if (chain.Count > 0)
                             {
-                                debugLog?.AppendLine($"Pointer Chain Detected: {string.Join(" -> ", chain)} -> {op.Value}");
                                 string baseStr = chain[0];
                                 string normBase = LogicFormatter.NormalizeAddress(baseStr);
 
@@ -346,7 +338,6 @@ namespace RALogicEditor.Services
                                 if (notesLookup.TryGetValue(normBase, out var lookupNodes))
                                 {
                                     currentNodes = lookupNodes;
-                                    debugLog?.AppendLine($"Base {baseStr} found in NotesLookup.");
                                 }
                                 // Try Range Cache Lookup
                                 else if (rangeCache != null)
@@ -359,7 +350,6 @@ namespace RALogicEditor.Services
                                         {
                                             currentNodes = new List<NoteNode> { match.Node };
                                             contextMsg = " (Base found in Struct Range)";
-                                            debugLog?.AppendLine($"Base {baseStr} found in RangeCache (Struct).");
                                         }
                                     }
                                 }
@@ -377,7 +367,6 @@ namespace RALogicEditor.Services
 
                                         if (content.Contains("refer to", System.StringComparison.OrdinalIgnoreCase))
                                         {
-                                            debugLog?.AppendLine($"Redirect detected: '{root.Description}'\n{content.Trim()}");
                                             var match = Regex.Match(content, @"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
                                             if (match.Success)
                                             {
@@ -388,14 +377,12 @@ namespace RALogicEditor.Services
                                                 {
                                                     currentNodes = targetNodes;
                                                     contextMsg = $" (Base Linked to 0x{targetAddr}, resolved)";
-                                                    debugLog?.AppendLine($"Redirect resolved to {targetAddr}.");
                                                     redirects++;
                                                     continue;
                                                 }
                                                 else
                                                 {
                                                     contextMsg = $" (Base Linked to 0x{targetAddr} but target missing)";
-                                                    debugLog?.AppendLine($"Redirect target {targetAddr} MISSING from NotesLookup.");
                                                     break;
                                                 }
                                             }
@@ -407,13 +394,10 @@ namespace RALogicEditor.Services
                                     string brokenOffset = "";
                                     var levelNodes = currentNodes.Where(n => n.IndentLevel != -2 && (n.Parent == null || n.Parent.IndentLevel == -1)).ToList();
 
-                                    debugLog?.AppendLine($"Tracing offsets starting with {levelNodes.Count} root nodes.");
-
                                     // Iterate intermediate offsets
                                     for (int k = 1; k < chain.Count; k++)
                                     {
                                         long offVal = ParseHex(chain[k]);
-                                        debugLog?.AppendLine($"Looking for offset +{chain[k]} (0x{offVal:X})...");
                                         NoteNode? next = null;
                                         foreach (var n in levelNodes)
                                         {
@@ -424,19 +408,16 @@ namespace RALogicEditor.Services
                                             if (offVal >= nOff && offVal < nOff + n.Size)
                                             {
                                                 next = n;
-                                                debugLog?.AppendLine($"  Matched Node: {n.Offset} ({n.Description})");
                                                 break;
                                             }
                                         }
 
                                         if (next == null)
                                         {
-                                            debugLog?.AppendLine($"  FAILED to find match for +{chain[k]}");
                                             brokenOffset = chain[k];
                                             break;
                                         }
                                         levelNodes = next.Children;
-                                        debugLog?.AppendLine($"  Stepped into node. Children count: {levelNodes.Count}");
                                     }
 
                                     if (!string.IsNullOrEmpty(brokenOffset))
@@ -447,7 +428,6 @@ namespace RALogicEditor.Services
                                     {
                                         // Chain OK, check Leaf (op.Value)
                                         long leafVal = ParseHex(op.Value);
-                                        debugLog?.AppendLine($"Checking Leaf: +{op.Value} (0x{leafVal:X})...");
 
                                         bool leafFound = false;
                                         foreach (var n in levelNodes)
@@ -457,7 +437,6 @@ namespace RALogicEditor.Services
 
                                             if (leafVal >= nOff && leafVal < nOff + n.Size)
                                             {
-                                                debugLog?.AppendLine($"  Matched Leaf: {n.Offset} ({n.Description})");
                                                 leafFound = true;
                                                 break;
                                             }
@@ -465,20 +444,17 @@ namespace RALogicEditor.Services
 
                                         if (!leafFound)
                                         {
-                                            debugLog?.AppendLine("  FAILED to find leaf node.");
                                             msg = $"Pointer leaf (+{op.Value}) not found in resolved structure of Base {baseStr}.{contextMsg}";
                                         }
                                         else
                                         {
                                             msg = $"ConditionFormatter.ResolveAlias failed but Validator trace succeeded. Base: {baseStr}{contextMsg}";
-                                            debugLog?.AppendLine("SUCCESS: Validator found the note. CodeReview logic discrepancy detected.");
                                         }
                                     }
                                 }
                                 else
                                 {
                                     msg = $"Pointer Base {baseStr} is undocumented. Cannot resolve chain.";
-                                    debugLog?.AppendLine($"Base {baseStr} NOT found in NotesLookup or RangeCache.");
                                 }
                             }
                         }
@@ -494,7 +470,6 @@ namespace RALogicEditor.Services
                             asset
                         );
 
-                        if (enableTrace) issue.DebugLog = debugLog?.ToString() ?? "";
                         issues.Add(issue);
                     }
                 }

@@ -14,11 +14,4 @@ namespace RALogicEditor.Models
             Offsets = offsets;
         }
     }
-
-    public class AddressTooltipEventArgs : EventArgs
-    {
-        public string Address { get; }
-        public string TooltipText { get; set; } = "";
-        public AddressTooltipEventArgs(string address) { Address = address; }
-    }
 }

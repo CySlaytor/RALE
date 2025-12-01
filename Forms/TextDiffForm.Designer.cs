@@ -48,7 +48,7 @@
             splitContainer1.Panel2.Controls.Add(lblRight);
             splitContainer1.Panel2.Padding = new Padding(5);
             splitContainer1.Size = new Size(900, 475);
-            splitContainer1.SplitterDistance = 447;
+            splitContainer1.SplitterDistance = 446;
             splitContainer1.TabIndex = 0;
             // 
             // rtbLeft
@@ -59,7 +59,7 @@
             rtbLeft.Location = new Point(5, 20);
             rtbLeft.Name = "rtbLeft";
             rtbLeft.ReadOnly = true;
-            rtbLeft.Size = new Size(437, 450);
+            rtbLeft.Size = new Size(436, 450);
             rtbLeft.TabIndex = 1;
             rtbLeft.Text = "";
             rtbLeft.WordWrap = false;
@@ -83,7 +83,7 @@
             rtbRight.Location = new Point(5, 20);
             rtbRight.Name = "rtbRight";
             rtbRight.ReadOnly = true;
-            rtbRight.Size = new Size(439, 450);
+            rtbRight.Size = new Size(440, 450);
             rtbRight.TabIndex = 1;
             rtbRight.Text = "";
             rtbRight.WordWrap = false;
