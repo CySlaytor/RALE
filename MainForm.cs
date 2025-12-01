@@ -13,58 +13,63 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace RALogicEditor
 {
     public partial class MainForm : Form
     {
-        // -- Core Services --
+        #region Services & Dependencies
+        // Handles File I/O and merging Server vs Local data
         private readonly ProjectRepository _projectRepo = new();
+        // Manages global Undo/Redo for the asset list
         private readonly HistoryManager<UserTextParser.UserData> _mainHistory = new();
+        // Tracks recently opened files
         private readonly RecentFilesManager _recentFiles = new();
+        // Validates logic rules (PauseLocks, Stale Pointers, etc.)
         private readonly ILogicValidator _validator = new LogicValidator();
+        // Handles Rich Presence script generation
         private readonly RichPresenceService _rpService = new();
+        // Manages RP backups for reversion
         private readonly RichPresenceMetadataService _rpMetadata = new();
 
-        // -- Refactored Services --
+        // Extracted Logic Services
         private readonly UserFileSerializer _fileSerializer = new();
         private readonly MultiRegionBatchProcessor _batchProcessor;
+        #endregion
 
-        // -- State Tracking --
-        private IAssetItem? _selectedAsset;
-        private bool _isLoading;
-        private string _currentFilePath = "";
-        private string _currentUserFilePath = "";
-        private List<IAssetItem> _currentDisplayList = new();
-        private List<ValidationIssue> _globalIssues = new();
+        #region State
+        private IAssetItem? _selectedAsset;   // Currently edited item
+        private bool _isLoading;              // Suppress events during batch updates
+        private string _currentFilePath = ""; // Path to source JSON
+        private string _currentUserFilePath = ""; // Path to local User.txt
+        private List<IAssetItem> _currentDisplayList = new(); // Items currently visible in grid
+        private List<ValidationIssue> _globalIssues = new(); // Code Review violations
+        #endregion
 
         public MainForm()
         {
             InitializeComponent();
 
+            // Initialize services that require dependencies
             _batchProcessor = new MultiRegionBatchProcessor(_projectRepo.Metadata);
 
+            // Load UI settings (Window size, splitters)
             AppSettings.Load();
             ApplySettings();
 
-            // Event Wiring
+            // --- Event Wiring ---
+
+            // Trigger Editor (Logic)
             triggerEditor.TriggerTextChanged += TriggerEditor_TriggerTextChanged;
             triggerEditor.AchievementDataChanged += TriggerEditor_AchievementDataChanged;
             triggerEditor.AssetResetRequested += TriggerEditor_AssetResetRequested;
             triggerEditor.AddFromCodeNoteRequested += TriggerEditor_AddFromCodeNoteRequested;
             triggerEditor.ValidationCompleted += TriggerEditor_ValidationCompleted;
-
-            // This event comes from the Editor Control, so we handle it here in the "Controller"
             triggerEditor.MultiRegionLogicRequested += TriggerEditor_MultiRegionLogicRequested;
-
-            // This event comes from the Editor Tool Menu, but logic is in Menu partial
             triggerEditor.LogicOptimizationRequested += LogicOptimizerToolStripMenuItem_Click;
 
-            codeReviewControl.IssueSelected += CodeReviewControl_IssueSelected;
-
+            // Bridge Trigger Editor -> Code Note Editor (Highlighting)
             triggerEditor.AddressSelected += (s, addr) => codeNoteEditor.HighlightAddress(addr);
             triggerEditor.PointerChainSelected += (s, e) =>
             {
@@ -72,39 +77,67 @@ namespace RALogicEditor
                 if (e.Offsets.Count > 0) codeNoteEditor.HighlightVariable(e.Offsets);
             };
 
-            // Bridge Code Note Editor to Main Menu actions
+            // Code Reviewer
+            codeReviewControl.IssueSelected += CodeReviewControl_IssueSelected;
+
+            // Code Note Editor actions
             codeNoteEditor.ReloadRequested += Reload_Click;
             codeNoteEditor.SaveRequested += saveToolStripMenuItem_Click;
 
+            // Main Grid
             achievementGrid.CellDoubleClick += achievementGrid_CellDoubleClick;
             achievementGrid.SelectionChanged += achievementGrid_SelectionChanged;
             achievementGrid.KeyDown += achievementGrid_KeyDown;
             achievementGrid.ContextMenuStrip.Opening += AchievementContextMenu_Opening;
 
-            // Filters
+            // Filters & Toolbar
+            InitializeFilters();
+
+            // Main Menu
+            InitializeMainMenu();
+
+            // Global Events
+            this.FormClosing += MainForm_FormClosing;
+
+            // Undo/Redo State Listeners
+            _mainHistory.HistoryChanged += (s, e) => UpdateUndoRedoState();
+            triggerEditor.HistoryChanged += (s, e) => UpdateUndoRedoState();
+            achievementGrid.Enter += (s, e) => UpdateUndoRedoState();
+            triggerEditor.Enter += (s, e) => UpdateUndoRedoState();
+
+            // Initial Load
+            _recentFiles.Load();
+            UpdateRecentMenu();
+            ToggleReviewer(AppSettings.Current.ShowLogicReviewer);
+            UpdateUndoRedoState();
+        }
+
+        private void InitializeFilters()
+        {
             cmbSource.Items.Clear();
             cmbSource.Items.AddRange(new object[] { "JSON", "Local", "New" });
             cmbCategory.Items.Clear();
             cmbCategory.Items.AddRange(new object[] { "Core", "Unofficial" });
 
-            if (AppSettings.Current.LastAssetTypeIndex >= 0 && AppSettings.Current.LastAssetTypeIndex < cmbAssetType.Items.Count)
-                cmbAssetType.SelectedIndex = AppSettings.Current.LastAssetTypeIndex;
-            else cmbAssetType.SelectedIndex = 0;
+            // Restore previous filter state
+            cmbAssetType.SelectedIndex = (AppSettings.Current.LastAssetTypeIndex >= 0 && AppSettings.Current.LastAssetTypeIndex < cmbAssetType.Items.Count)
+                ? AppSettings.Current.LastAssetTypeIndex : 0;
 
-            if (AppSettings.Current.LastCategoryIndex >= 0 && AppSettings.Current.LastCategoryIndex < cmbCategory.Items.Count)
-                cmbCategory.SelectedIndex = AppSettings.Current.LastCategoryIndex;
-            else cmbCategory.SelectedIndex = 0;
+            cmbCategory.SelectedIndex = (AppSettings.Current.LastCategoryIndex >= 0 && AppSettings.Current.LastCategoryIndex < cmbCategory.Items.Count)
+                ? AppSettings.Current.LastCategoryIndex : 0;
 
-            if (AppSettings.Current.LastSourceIndex >= 0 && AppSettings.Current.LastSourceIndex < cmbSource.Items.Count)
-                cmbSource.SelectedIndex = AppSettings.Current.LastSourceIndex;
-            else cmbSource.SelectedIndex = 0;
+            cmbSource.SelectedIndex = (AppSettings.Current.LastSourceIndex >= 0 && AppSettings.Current.LastSourceIndex < cmbSource.Items.Count)
+                ? AppSettings.Current.LastSourceIndex : 0;
 
+            // Wiring
             cmbAssetType.SelectedIndexChanged += (s, e) => { ReloadDataView(); RunGlobalValidation(); };
             cmbSource.SelectedIndexChanged += (s, e) => ReloadDataView();
             cmbCategory.SelectedIndexChanged += (s, e) => ReloadDataView();
             txtAssetSearch.TextChanged += (s, e) => ReloadDataView();
+        }
 
-            // Menu Wiring
+        private void InitializeMainMenu()
+        {
             newAssetToolStripMenuItem.Click += NewAsset_Click;
             cloneAssetToolStripMenuItem.Click += DuplicateAsset_Click;
             deleteAssetToolStripMenuItem.Click += DeleteAsset_Click;
@@ -116,7 +149,7 @@ namespace RALogicEditor
             clearDataResetToolStripMenuItem.Click += ClearDataResetToolStripMenuItem_Click;
             viewReviewerToolStripMenuItem.Click += (s, e) => ToggleReviewer();
 
-            // Dynamic Menu Items
+            // Dynamic Menu Construction
             var viewRpDiffItem = new ToolStripMenuItem("View RP Diff");
             viewRpDiffItem.Click += ViewRpDiff_Click;
             viewToolStripMenuItem.DropDownItems.Add(viewRpDiffItem);
@@ -134,23 +167,12 @@ namespace RALogicEditor
             btnAddAsset.Click += NewAsset_Click;
             btnDuplicateAsset.Click += DuplicateAsset_Click;
             btnDeleteAsset.Click += DeleteAsset_Click;
-
-            this.FormClosing += MainForm_FormClosing;
-
-            _recentFiles.Load();
-            UpdateRecentMenu();
-            ToggleReviewer(AppSettings.Current.ShowLogicReviewer);
-
-            _mainHistory.HistoryChanged += (s, e) => UpdateUndoRedoState();
-            triggerEditor.HistoryChanged += (s, e) => UpdateUndoRedoState();
-            achievementGrid.Enter += (s, e) => UpdateUndoRedoState();
-            triggerEditor.Enter += (s, e) => UpdateUndoRedoState();
-            UpdateUndoRedoState();
         }
 
+        // Full Project Load Logic
         public void LoadFiles(string primaryPath)
         {
-            ImageCache.Clear();
+            ImageCache.Clear(); // Free memory
             _recentFiles.Add(primaryPath);
             UpdateRecentMenu();
 
@@ -160,17 +182,20 @@ namespace RALogicEditor
             _mainHistory.Clear();
             triggerEditor.Clear();
 
+            // Repository loads JSON + User.txt + Notes + RP
             _projectRepo.LoadFiles(primaryPath, out _currentUserFilePath);
             _rpMetadata.Load(_projectRepo.CurrentGameId);
 
             if (_projectRepo.ServerData != null)
                 this.Text = $"RA Logic Editor - {_projectRepo.CurrentTitle}";
 
+            // Default view to JSON to show server data initially
             if (cmbSource.SelectedItem?.ToString() != "JSON")
                 cmbSource.SelectedItem = "JSON";
 
             ReloadDataView();
 
+            // Push notes to sub-editors
             var notes = _projectRepo.LocalData?.Notes ?? new List<CodeNote>();
             codeNoteEditor.SetNotes(notes);
             triggerEditor.SetNotes(notes);
@@ -189,6 +214,7 @@ namespace RALogicEditor
             SaveSettings();
         }
 
+        // Prompts user if there are unsaved local changes
         private bool ConfirmDiscardChanges()
         {
             if (_projectRepo.LocalData == null) return true;
@@ -203,6 +229,8 @@ namespace RALogicEditor
             }
             return true;
         }
+
+        #region State & Settings Management
 
         private void ApplySettings()
         {
@@ -240,6 +268,7 @@ namespace RALogicEditor
             else
             {
                 AppSettings.Current.IsMaximized = (this.WindowState == FormWindowState.Maximized);
+                // Don't overwrite coords if minimized
                 if (this.RestoreBounds.Width > 0)
                 {
                     AppSettings.Current.WindowWidth = this.RestoreBounds.Width;
@@ -293,9 +322,12 @@ namespace RALogicEditor
                 try
                 {
                     string appPath = Application.StartupPath;
+                    // Delete settings files
                     if (File.Exists(Path.Combine(appPath, "settings.json"))) File.Delete(Path.Combine(appPath, "settings.json"));
                     if (File.Exists(Path.Combine(appPath, "recent.json"))) File.Delete(Path.Combine(appPath, "recent.json"));
                     if (File.Exists(Path.Combine(appPath, "snippets.json"))) File.Delete(Path.Combine(appPath, "snippets.json"));
+
+                    // Delete cache directories
                     string cacheDir = Path.Combine(appPath, "Cache");
                     if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
                     string metaDir = Path.Combine(appPath, "Metadata");
@@ -306,8 +338,11 @@ namespace RALogicEditor
                 catch (Exception ex) { MessageBox.Show($"Error: {ex.Message}"); }
             }
         }
+        #endregion
 
-        // Shared Logic Helpers
+        #region Shared Logic Helpers (Used by Partials)
+
+        // Ensures an asset exists in the Local Data list (Clone if Synced)
         private void EnsureAssetIsLocal(IAssetItem asset)
         {
             if (asset == null || _projectRepo.LocalData == null) return;
@@ -333,6 +368,15 @@ namespace RALogicEditor
 
         private void EnsureAssetIsLocal() => EnsureAssetIsLocal(_selectedAsset!);
 
+        private string InvertOperator(string op)
+        {
+            return op switch { "=" => "!=", "!=" => "=", "<" => ">=", "<=" => ">", ">" => "<=", ">=" => "<", _ => op };
+        }
+
+        #endregion
+
+        #region Logic & Trigger Editor Events
+
         private void TriggerEditor_MultiRegionLogicRequested(object? sender, MultiRegionForm form)
         {
             var configs = form.GetConfiguredRegions();
@@ -355,6 +399,7 @@ namespace RALogicEditor
 
             foreach (var cfg in configs) InvertLockLogic(cfg.LockConditions);
 
+            // Determine targets: Selected or All Filtered
             List<IAssetItem> assetsToProcess;
             if (achievementGrid.SelectedRows.Count > 0)
             {
@@ -378,6 +423,7 @@ namespace RALogicEditor
 
                 if (localItem == null) continue;
 
+                // DELEGATE TO BATCH PROCESSOR
                 _batchProcessor.ApplyMultiRegionToAsset(localItem, baseConfig, targetConfigs);
                 count++;
             }
@@ -393,11 +439,6 @@ namespace RALogicEditor
             MessageBox.Show($"Multi-Region logic applied to {count} assets.", "Batch Complete");
             ReloadDataView();
             if (_selectedAsset != null) SelectAssetInGrid(_selectedAsset);
-        }
-
-        private string InvertOperator(string op)
-        {
-            return op switch { "=" => "!=", "!=" => "=", "<" => ">=", "<=" => ">", ">" => "<=", ">=" => "<", _ => op };
         }
 
         private void TriggerEditor_TriggerTextChanged(object? sender, EventArgs e)
@@ -420,6 +461,7 @@ namespace RALogicEditor
                 UpdateAssetState(_selectedAsset);
             }
 
+            // Update visible grid row
             foreach (DataGridViewRow row in achievementGrid.Rows)
             {
                 if (row.Tag is IAssetItem asset && asset.ID == _selectedAsset.ID)
@@ -464,6 +506,13 @@ namespace RALogicEditor
 
             ReloadDataView();
             LoadSelectedAsset();
+        }
+
+        private void TriggerEditor_AddFromCodeNoteRequested(object? sender, EventArgs e)
+        {
+            var data = codeNoteEditor.GetSelectedLogic();
+            if (!string.IsNullOrEmpty(data.Logic)) triggerEditor.AddConditionFromNote(data.Logic, data.Type, data.Size);
+            else MessageBox.Show("No valid address selected.", "Add Note");
         }
 
         private void TriggerEditor_ValidationCompleted(object? sender, List<ValidationIssue> issues)
@@ -519,15 +568,9 @@ namespace RALogicEditor
             }
             codeReviewControl.SetIssues(_globalIssues);
         }
+        #endregion
 
-        private void TriggerEditor_AddFromCodeNoteRequested(object? sender, EventArgs e)
-        {
-            var data = codeNoteEditor.GetSelectedLogic();
-            if (!string.IsNullOrEmpty(data.Logic)) triggerEditor.AddConditionFromNote(data.Logic, data.Type, data.Size);
-            else MessageBox.Show("No valid address selected.", "Add Note");
-        }
-
-        // Global Undo (Helper methods used by Menu.cs)
+        #region Undo/Redo System
         private void PushMainUndo()
         {
             var snapshot = new UserTextParser.UserData();
@@ -561,5 +604,6 @@ namespace RALogicEditor
             ReloadDataView();
             LoadSelectedAsset();
         }
+        #endregion
     }
 }

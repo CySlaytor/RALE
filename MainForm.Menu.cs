@@ -16,8 +16,7 @@ namespace RALogicEditor
 {
     public partial class MainForm
     {
-        // -- File Menu --
-
+        #region File Menu
         private void openToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (!ConfirmDiscardChanges()) return;
@@ -30,6 +29,7 @@ namespace RALogicEditor
             if (_projectRepo.LocalData == null && _projectRepo.ServerData == null) return;
             codeNoteEditor.CommitChanges();
 
+            // Determine Path
             string savePath = _currentUserFilePath;
             if (string.IsNullOrEmpty(savePath) && !string.IsNullOrEmpty(_currentFilePath))
             {
@@ -46,7 +46,7 @@ namespace RALogicEditor
                 savePath = sfd.FileName;
             }
 
-            // Backup
+            // Create Auto-Backup (.bak)
             try
             {
                 if (File.Exists(savePath))
@@ -62,7 +62,7 @@ namespace RALogicEditor
             }
             catch { }
 
-            // Save
+            // Save via Serializer
             try
             {
                 _projectRepo.EnsureLocalDataExists();
@@ -95,14 +95,15 @@ namespace RALogicEditor
                 recentToolStripMenuItem.DropDownItems.Add(item);
             }
         }
+        #endregion
 
-        // -- Asset Actions --
-
+        #region Asset Actions (New, Clone, Delete, Move)
         private void NewAsset_Click(object? sender, EventArgs e)
         {
             _projectRepo.EnsureLocalDataExists();
             PushMainUndo();
 
+            // Auto-increment ID based on highest existing ID
             int newId = 111000001;
             var allIds = _currentDisplayList.Select(x => x.ID).ToList();
             if (allIds.Any()) { int max = allIds.Max(); newId = (max < 111000000) ? 111000001 : max + 1; }
@@ -120,6 +121,7 @@ namespace RALogicEditor
             if (cmbSource.SelectedItem?.ToString() != "New") cmbSource.SelectedItem = "New";
             ReloadDataView();
 
+            // Select the newly created item
             foreach (DataGridViewRow row in achievementGrid.Rows)
             {
                 if (row.Tag is IAssetItem item && item.ID == newId)
@@ -221,21 +223,18 @@ namespace RALogicEditor
         {
             if (achievementGrid.SelectedRows.Count == 0 || _projectRepo.LocalData == null) return;
 
-            // Get all visible rows as items
             var allRows = achievementGrid.Rows.Cast<DataGridViewRow>().OrderBy(r => r.Index).ToList();
             if (allRows.Count == 0) return;
 
-            // Identify indices to move
             var selectedIndices = achievementGrid.SelectedRows.Cast<DataGridViewRow>()
                                                  .Select(r => r.Index)
                                                  .OrderBy(i => i)
                                                  .ToList();
 
-            // Bounds check
             if (direction < 0 && selectedIndices.Min() == 0) return;
             if (direction > 0 && selectedIndices.Max() >= allRows.Count - 1) return;
 
-            // Check if all selected items are Local (Can't move Synced)
+            // Only local items can be reordered
             foreach (int idx in selectedIndices)
             {
                 if (allRows[idx].Tag is IAssetItem item && item.State != AssetState.Local) return;
@@ -243,11 +242,10 @@ namespace RALogicEditor
 
             PushMainUndo();
 
-            // Extract the backing list of assets from the grid (preserving grid order)
-            // This assumes the Grid is the source of truth for the current visual order
+            // Extract items in current visual order
             var workingList = allRows.Select(r => r.Tag as IAssetItem).ToList();
 
-            // Perform the move logic on the list
+            // Move logic on the list directly
             if (direction < 0) // Up
             {
                 foreach (int idx in selectedIndices)
@@ -259,7 +257,6 @@ namespace RALogicEditor
             }
             else // Down
             {
-                // Iterate reverse for down move
                 for (int i = selectedIndices.Count - 1; i >= 0; i--)
                 {
                     int idx = selectedIndices[i];
@@ -269,30 +266,14 @@ namespace RALogicEditor
                 }
             }
 
-            // Re-assign IDs sequentially to ONLY the local items, based on their new visual order
-            // We preserve Synced items' IDs but we assume they aren't mixed in `workingList` if we are in "Local" view.
-            // If we are in "All" view, moving local items around synced items implies renumbering locals only?
-            // Usually moving is done in "Local" view.
-            // Safe approach: Reconstruct the LocalData lists from the workingList order.
-
-            var newAchievements = new List<RaAchievement>();
-            var newLeaderboards = new List<RaLeaderboard>();
-            int currentId = 111000001;
-
-            // First, preserve any local items NOT in the view (shouldn't happen if view filters correctly, but safety)
-            // Actually, simpler: Just clear LocalData and rebuild from workingList IF workingList contains all locals.
-            // If the grid is filtered, this is dangerous.
-
-            // Safer logic: Just swap IDs of the moved items? No, that causes the previous bug.
-            // Logic: Filter out all Local items from the working list, renumber them, and push back to Repo.
-
+            // Reconstruct LocalData lists sequentially based on the new visual order
+            // This renumbers all local IDs to ensure they stay sorted in the file
             var localItemsInOrder = workingList.Where(x => x != null && x.State == AssetState.Local).ToList();
 
-            // Clear repo local lists
             _projectRepo.LocalData.Achievements.Clear();
             _projectRepo.LocalData.Leaderboards.Clear();
 
-            // Re-add in new order with new IDs
+            int currentId = 111000001;
             foreach (var item in localItemsInOrder)
             {
                 if (item == null) continue;
@@ -306,21 +287,8 @@ namespace RALogicEditor
 
             ReloadDataView();
 
-            // Restore Selection (Tracking by object reference, since IDs changed)
+            // Restore Selection (based on Object Reference, not ID)
             achievementGrid.ClearSelection();
-
-            // We need to find where our moved items ended up
-            var selectedObjects = new HashSet<IAssetItem>();
-            foreach (int idx in selectedIndices)
-            {
-                // Determine 'original' object reference that was at this index before reload?
-                // No, workingList has the new order.
-                // We need to select the items that were moved.
-                // We can't rely on indices because reload might shift things (though shouldn't if filtered).
-            }
-
-            // Re-find rows by Object Reference (Tag)
-            // Identify objects that were selected
             var objectsToSelect = new HashSet<IAssetItem>();
             foreach (int idx in selectedIndices)
             {
@@ -355,7 +323,9 @@ namespace RALogicEditor
             foreach (var lb in _projectRepo.LocalData.Leaderboards) lb.ID = currentId++;
             ReloadDataView();
         }
+        #endregion
 
+        #region Tools & View Options
         private void viewDiffToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (achievementGrid.SelectedRows.Count != 1) return;
@@ -534,9 +504,9 @@ namespace RALogicEditor
             if (item.IsLeaderboard) return _projectRepo.LocalData.Leaderboards.Any(l => l.ID == item.ID);
             return _projectRepo.LocalData.Achievements.Any(a => a.ID == item.ID);
         }
+        #endregion
 
-        // -- Global Actions --
-
+        #region Global Commands (Undo/Redo/Reload)
         private void Undo_Click(object? sender, EventArgs e)
         {
             if (triggerEditor.ContainsFocus) triggerEditor.Undo();
@@ -574,5 +544,6 @@ namespace RALogicEditor
                 }
             }
         }
+        #endregion
     }
 }

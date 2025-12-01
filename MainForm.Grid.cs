@@ -11,6 +11,7 @@ namespace RALogicEditor
 {
     public partial class MainForm
     {
+        // Refreshes the grid view while preserving scroll/selection state
         private void ReloadDataView()
         {
             int savedScroll = achievementGrid.FirstDisplayedScrollingRowIndex;
@@ -36,6 +37,7 @@ namespace RALogicEditor
                 try { achievementGrid.FirstDisplayedScrollingRowIndex = savedScroll; } catch { }
         }
 
+        // Fills the grid based on current filters (Source, Category, Search)
         private void PopulateList()
         {
             achievementGrid.Rows.Clear();
@@ -54,10 +56,12 @@ namespace RALogicEditor
             {
                 UpdateAssetState(item);
 
+                // Filter by Source (JSON vs Local)
                 if (sourceMode == "New") { if (item.State != AssetState.Local) continue; }
                 else if (sourceMode == "JSON") { if (item.State == AssetState.Local) continue; }
                 else { if (item.State == AssetState.Synced) continue; }
 
+                // Filter by Category (Core vs Unofficial) - ignored for "New" mode
                 if (sourceMode != "New")
                 {
                     string itemCat = string.IsNullOrEmpty(item.Category) ? "Local" : item.Category;
@@ -82,6 +86,7 @@ namespace RALogicEditor
         private void AddGridRow(IAssetItem item)
         {
             string displayId = item.ID.ToString();
+            // Prefix large IDs with L for Leaderboards if they are local logic
             if (item.IsLeaderboard && item.ID >= 111000001) displayId = $"L{item.ID}";
 
             int idx = achievementGrid.Rows.Add(displayId, item.Title);
@@ -98,6 +103,7 @@ namespace RALogicEditor
             else row.DefaultCellStyle.ForeColor = Color.Empty;
         }
 
+        // Loads the Asset into the Trigger Editor Logic
         private void LoadSelectedAsset()
         {
             if (achievementGrid.SelectedRows.Count > 0)
@@ -106,6 +112,7 @@ namespace RALogicEditor
                 if (row.Tag is IAssetItem asset)
                 {
                     _isLoading = true;
+                    // If Synced, clone it before editing so we don't dirty the server data object directly
                     if (asset.State == AssetState.Synced)
                     {
                         IAssetItem clone = asset.IsLeaderboard ? ((RaLeaderboard)asset).Clone(false) : ((RaAchievement)asset).Clone(false);
@@ -117,6 +124,7 @@ namespace RALogicEditor
                         _selectedAsset = asset;
                     }
 
+                    // Parse logic and apply metadata
                     IAssetStrategy strategy = _selectedAsset.IsLeaderboard ? new LeaderboardStrategy() : new AchievementStrategy();
                     var segments = strategy.ParseLogic(_selectedAsset.Logic);
                     foreach (var groupList in segments.Values) _projectRepo.Metadata.ApplyNamesToAsset(_selectedAsset.ID, groupList);
@@ -129,6 +137,7 @@ namespace RALogicEditor
             UpdateSelectionUI();
         }
 
+        // Checks asset against Server Data to set Synced/Modified state
         private void UpdateAssetState(IAssetItem item)
         {
             if (_projectRepo.ServerData == null) { item.State = AssetState.Local; return; }
