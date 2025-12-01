@@ -220,6 +220,31 @@ namespace RALogicEditor.Services
                 return false;
             }
 
+            // Helper: Is this group PURELY for resetting?
+            // A group is a Reset Group if every condition chain terminates in a ResetIf or PauseIf.
+            // If it contains ANY condition that can trigger the achievement (Empty Flag or Trigger), it is NOT a Reset Group.
+            // Exception: If the triggering condition is part of a chain leading to ResetIf (e.g. AddSource... ResetIf).
+            bool IsResetGroup(AchievementConditionGroup g)
+            {
+                // Iterate backwards to identify chain terminators
+                for (int i = g.Conditions.Count - 1; i >= 0; i--)
+                {
+                    var cond = g.Conditions[i];
+
+                    // Skip non-terminating flags (AddSource, AddHits, etc.)
+                    // These are just parts of a chain. We care about what the chain DOES.
+                    if (IsChainFlag(cond.Flag)) continue;
+
+                    // If we find a terminator, check its type.
+                    // If it is NOT ResetIf or PauseIf, then this group is trying to do something other than reset/pause.
+                    if (cond.Flag != "Reset If" && cond.Flag != "Pause If")
+                    {
+                        return false; // Found a trigger condition!
+                    }
+                }
+                return true; // All chains ended in ResetIf or PauseIf
+            }
+
             // Helper: Does group have a Delta?
             bool GroupHasDelta(AchievementConditionGroup g)
             {
@@ -251,9 +276,11 @@ namespace RALogicEditor.Services
             bool allAltsHaveDelta = true;
             for (int i = 1; i < groups.Count; i++)
             {
-                if (IsGroupAlwaysFalse(groups[i])) continue;
+                var grp = groups[i];
+                if (IsGroupAlwaysFalse(grp)) continue;
+                if (IsResetGroup(grp)) continue; // Skip Reset/Pause groups
 
-                if (!GroupHasDelta(groups[i]))
+                if (!GroupHasDelta(grp))
                 {
                     allAltsHaveDelta = false;
                     break;
@@ -271,6 +298,14 @@ namespace RALogicEditor.Services
                     asset
                 ));
             }
+        }
+
+        private bool IsChainFlag(string flag)
+        {
+            return flag == "Add Source" || flag == "Sub Source" ||
+                   flag == "Add Hits" || flag == "Sub Hits" ||
+                   flag == "Add Address" ||
+                   flag == "AndNext" || flag == "OrNext" || flag == "ResetNextIf";
         }
 
         // Check for undocumented memory addresses (Missing Code Notes)
