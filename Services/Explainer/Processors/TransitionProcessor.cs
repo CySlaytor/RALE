@@ -67,7 +67,11 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             // Check for Measured logic on the current condition
             string suffix = "";
-            if (currCond.Flag.StartsWith("Measured"))
+            if (currCond.Flag == "Measured%")
+            {
+                suffix = ". This condition also acts as a Measured% indicator";
+            }
+            else if (currCond.Flag.StartsWith("Measured"))
             {
                 string limitText = (currCond.Operator == "=" || currCond.Operator == ">=") ? $", measuring up to {currVal}" : "";
                 suffix = $". This condition will also display a Measured Indicator{limitText}";
@@ -84,6 +88,26 @@ namespace RALogicEditor.Services.Explainer.Processors
             else if (prevCond.Operator == "!=" && currCond.Operator == "=" && prevVal == currVal)
             {
                 text = $"{name} becomes {currVal}{suffix}";
+            }
+            // Logic: Prev < X AND Curr >= X -> "Increases to at least X" (Threshold Up)
+            else if (prevCond.Operator == "<" && currCond.Operator == ">=" && prevVal == currVal)
+            {
+                text = $"{name} increases to at least {currVal}{suffix}";
+            }
+            // Logic: Prev <= X AND Curr > X -> "Increases to more than X" (Threshold Up)
+            else if (prevCond.Operator == "<=" && currCond.Operator == ">" && prevVal == currVal)
+            {
+                text = $"{name} increases to more than {currVal}{suffix}";
+            }
+            // Logic: Prev > X AND Curr <= X -> "Decreases to at most X" (Threshold Down)
+            else if (prevCond.Operator == ">" && currCond.Operator == "<=" && prevVal == currVal)
+            {
+                text = $"{name} decreases to at most {currVal}{suffix}";
+            }
+            // Logic: Prev >= X AND Curr < X -> "Decreases to less than X" (Threshold Down)
+            else if (prevCond.Operator == ">=" && currCond.Operator == "<" && prevVal == currVal)
+            {
+                text = $"{name} decreases to less than {currVal}{suffix}";
             }
             else
             {
@@ -155,14 +179,40 @@ namespace RALogicEditor.Services.Explainer.Processors
                 if (aIsDelta && bIsDelta) continue;
                 if (aIsMem && bIsMem) continue;
 
-                // Check if they refer to the same address/value
+                // Check if they refer to the same address/value (Left Operand)
                 if (AreSameAddress(condA.LeftOperand.Value, condB.LeftOperand.Value) &&
                     condA.LeftOperand.Size == condB.LeftOperand.Size)
                 {
-                    pairIndex = j;
-                    return true;
+                    // FIX: Ensure Right Operands match
+                    if (!AreSameAddress(condA.RightOperand.Value, condB.RightOperand.Value)) continue;
+
+                    // FIX: Ensure Operators form a valid transition
+                    var prevCond = aIsDelta ? condA : condB;
+                    var currCond = !aIsDelta ? condA : condB;
+
+                    if (IsSupportedTransition(prevCond.Operator, currCond.Operator))
+                    {
+                        pairIndex = j;
+                        return true;
+                    }
                 }
             }
+            return false;
+        }
+
+        private bool IsSupportedTransition(string opA, string opB)
+        {
+            // Change
+            if (opA == "=" && opB == "=") return true;
+            // Become
+            if (opA == "!=" && opB == "=") return true;
+            // Crossing Threshold (Up)
+            if (opA == "<" && opB == ">=") return true;
+            if (opA == "<=" && opB == ">") return true;
+            // Crossing Threshold (Down)
+            if (opA == ">" && opB == "<=") return true;
+            if (opA == ">=" && opB == "<") return true;
+
             return false;
         }
 
@@ -200,6 +250,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     condA.LeftOperand.Size == condB.LeftOperand.Size)
                 {
                     // Check if condA actually targets condB (Forward check from A)
+                    // This implicitly checks operator validity via FindPairIndex now
                     if (FindPairIndex(conditions, j, out int verifyIndex) && verifyIndex == currentIndex)
                     {
                         headIndex = j;
