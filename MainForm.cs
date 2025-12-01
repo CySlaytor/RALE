@@ -1082,16 +1082,26 @@ namespace RALogicEditor
             }
 
             // -- Auto-Backup Strategy --
+            // MODIFIED: Relocated backup folder to Application.StartupPath/Backups/{GameID}
             try
             {
                 if (File.Exists(savePath))
                 {
-                    string backupDir = Path.Combine(Path.GetDirectoryName(savePath) ?? "", "Backups");
-                    if (!Directory.Exists(backupDir)) Directory.CreateDirectory(backupDir);
+                    string fileName = Path.GetFileName(savePath);
+                    string gameIdStr = new string(fileName.TakeWhile(char.IsDigit).ToArray());
+
+                    // Base backups folder next to EXE
+                    string backupRoot = Path.Combine(Application.StartupPath, "Backups");
+
+                    // Game-specific folder
+                    string gameBackupDir = string.IsNullOrEmpty(gameIdStr)
+                        ? backupRoot
+                        : Path.Combine(backupRoot, gameIdStr);
+
+                    if (!Directory.Exists(gameBackupDir)) Directory.CreateDirectory(gameBackupDir);
 
                     string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                    string fileName = Path.GetFileName(savePath);
-                    string backupPath = Path.Combine(backupDir, $"{fileName}.{timestamp}.bak");
+                    string backupPath = Path.Combine(gameBackupDir, $"{fileName}.{timestamp}.bak");
 
                     File.Copy(savePath, backupPath, true);
                 }
