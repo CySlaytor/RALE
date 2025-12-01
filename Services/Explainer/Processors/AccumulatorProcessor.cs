@@ -505,10 +505,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                                     if (showVal)
                                     {
                                         if (hasRecallContext)
-                                            // FIX 4: Removed duplicate "decreasing" here since recallContext usually includes direction
                                             chainText = $"{prefix}{recallContext} occurs at least {valText} times: {expandToken}";
                                         else
-                                            chainText = $"{prefix}at least {valText} of the following occur: {expandToken}";
+                                            chainText = $"{prefix}at least {valText} hits of the following occur: {expandToken}";
                                     }
                                     else
                                     {
@@ -699,7 +698,9 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
 
                 int index = ctx.Group.Conditions.IndexOf(leaf);
-                string signature = ctx.GetName(leaf.LeftOperand, index, false);
+                string name = ctx.GetName(leaf.LeftOperand, index, false);
+                // Include operator and right operand in signature to distinguish different checks on same address
+                string signature = $"{name} {leaf.Operator} {leaf.RightOperand.Value}";
 
                 if (seenSignatures.Add(signature))
                 {
