@@ -48,8 +48,10 @@ namespace RALogicEditor.Parsers
                 // Group 1: Indentation (e.g., "+", ".+", "..", "++")
                 // Group 2: Sign (+ or -). Optional capture.
                 // Group 3: Hex value (0x...).
-                // Group 4: Description/Remainder.
-                var offsetRegex = new Regex(@"^([.\+\s]*)([-+]?)(0x[0-9A-Fa-f]+)\s*(?:[|=:]\s*)?(.*)$");
+                // Group 4: Separator (|, =, :). Optional capture.
+                // Group 5: Description/Remainder.
+                // UPDATED: Now captures the separator in Group 4 to distinguish between Pointer Nodes (|) and Value Definitions (=).
+                var offsetRegex = new Regex(@"^([.\+\s]*)([-+]?)(0x[0-9A-Fa-f]+)\s*([|=:])?\s*(.*)$");
 
                 // Helper regex to strip indentation characters from description lines.
                 var prefixStripRegex = new Regex(@"^([.\+\s]+)");
@@ -66,16 +68,12 @@ namespace RALogicEditor.Parsers
                     {
                         string indentStr = match.Groups[1].Value;
                         string sign = match.Groups[2].Value;
+                        string separator = match.Groups[4].Value;
 
                         // Heuristic Logic to distinguish a "Pointer Offset" from a "Value Enumeration".
-                        // 
-                        // 1. If it has an explicit sign (+ or -), it is definitely an offset (e.g., +0x10).
-                        // 2. If it has indentation containing '+', it implies an offset chain (e.g., ++0x10).
-                        // 3. If it has indentation AND a separator (| or :), it is likely a struct offset (e.g., ..0x10 | Health).
 
-                        bool hasSign = !string.IsNullOrEmpty(sign);
+                        bool hasSign = !string.IsNullOrEmpty(sign); // e.g. +0x10 is definitely an offset
                         bool hasIndent = indentStr.Contains(".") || indentStr.Contains("+");
-                        bool hasSeparator = line.Contains("|") || line.Contains(":");
 
                         if (hasSign)
                         {
@@ -87,12 +85,21 @@ namespace RALogicEditor.Parsers
                             // Example: "+0x10" -> G1="+" G2="" G3="0x10".
                             isNode = true;
                         }
-                        else if (hasIndent && hasSeparator)
+                        else if (hasIndent)
                         {
-                            // Indented, no sign, but has separator -> Treat as Node.
-                            isNode = true;
+                            // Indented with dots only, no sign (e.g. "..0x04").
+                            // This is ambiguous: Could be a struct offset or a value definition.
+
+                            // If separator is '|', it is a description -> Node.
+                            if (separator == "|")
+                            {
+                                isNode = true;
+                            }
+                            // If separator is '=' or ':', it is a value definition -> Content.
+                            // (e.g. "...0x04 = Level 02: Operation Phone")
+
+                            // If no separator, default to Content (Value) for unsigned dot-indentation.
                         }
-                        // Else: It remains false (Value Enum).
                     }
 
                     if (isNode)
@@ -124,10 +131,9 @@ namespace RALogicEditor.Parsers
 
                         string sign = match.Groups[2].Value;
                         string hex = match.Groups[3].Value;
-                        string desc = match.Groups[4].Value;
+                        string desc = match.Groups[5].Value; // Updated index
 
-                        // Strip leading separators (- : =) from the description
-                        // Loop to handle cases where multiple separators might exist or just whitespace
+                        // Strip leading separators (- : =) from the description just in case regex didn't catch weird spacing
                         while (desc.Length > 0 && (desc[0] == '-' || desc[0] == ':' || desc[0] == '=' || char.IsWhiteSpace(desc[0])))
                         {
                             desc = desc.Substring(1);
