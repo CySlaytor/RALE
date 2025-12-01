@@ -29,24 +29,18 @@ namespace RALogicEditor.Services.Explainer.Processors
         public ProcessorResult Process(ExplanationContext ctx, List<AchievementCondition> conditions, int currentIndex)
         {
             // CASE 1: This is a "Tail" (The second part of a split transition)
-            // If we are here, it means we were not consumed by the Head (because it was split).
-            // We should hide this line to avoid redundancy, as the Head already explained the transition.
             if (FindHeadIndex(conditions, currentIndex, out int headIndex))
             {
-                // Verify interruption to be safe (though if we are being processed individually, it implies interruption or logic flow issues)
                 if (IsInterrupted(conditions, headIndex, currentIndex))
                 {
                     return new ProcessorResult { Text = "", Category = ExplanationCategory.Transition, ConditionsConsumed = 1 };
                 }
-
-                // If not interrupted, we should have been consumed. Fallback to empty to be safe.
                 return new ProcessorResult { Text = "", Category = ExplanationCategory.Transition, ConditionsConsumed = 1 };
             }
 
             // CASE 2: This is a "Head"
             if (!FindPairIndex(conditions, currentIndex, out int pairIndex))
             {
-                // Should not happen given CanProcess, but fallback just in case
                 return new StandardConditionProcessor().Process(ctx, conditions, currentIndex);
             }
 
@@ -78,52 +72,55 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
 
             string text = "";
+            bool valuesMatch = prevVal == currVal;
+
+            // --- Specific Templates ---
 
             // Logic: Prev=X AND Curr=Y -> "Changes from X to Y"
             if (prevCond.Operator == "=" && currCond.Operator == "=")
             {
                 text = $"{name} changes from {prevVal} to {currVal}{suffix}";
             }
-            // Logic: Prev!=X AND Curr=X -> "Becomes X"
-            else if (prevCond.Operator == "!=" && currCond.Operator == "=" && prevVal == currVal)
+            // Logic: Prev!=X AND Curr=X -> "Becomes X" (Values match)
+            else if (prevCond.Operator == "!=" && currCond.Operator == "=" && valuesMatch)
             {
                 text = $"{name} becomes {currVal}{suffix}";
             }
-            // Logic: Prev=X AND Curr!=X -> "Changed from X" (Value was X, now is NOT X)
-            else if (prevCond.Operator == "=" && currCond.Operator == "!=" && prevVal == currVal)
+            // Logic: Prev=X AND Curr!=X -> "Changed from X" (Values match)
+            else if (prevCond.Operator == "=" && currCond.Operator == "!=" && valuesMatch)
             {
                 text = $"{name} changed from {prevVal}{suffix}";
             }
             // Logic: Prev < X AND Curr >= X -> "Increases to at least X" (Threshold Up)
-            else if (prevCond.Operator == "<" && currCond.Operator == ">=" && prevVal == currVal)
+            else if (prevCond.Operator == "<" && currCond.Operator == ">=" && valuesMatch)
             {
                 text = $"{name} increases to at least {currVal}{suffix}";
             }
             // Logic: Prev <= X AND Curr > X -> "Increases to more than X" (Threshold Up)
-            else if (prevCond.Operator == "<=" && currCond.Operator == ">" && prevVal == currVal)
+            else if (prevCond.Operator == "<=" && currCond.Operator == ">" && valuesMatch)
             {
                 text = $"{name} increases to more than {currVal}{suffix}";
             }
             // Logic: Prev > X AND Curr <= X -> "Decreases to at most X" (Threshold Down)
-            else if (prevCond.Operator == ">" && currCond.Operator == "<=" && prevVal == currVal)
+            else if (prevCond.Operator == ">" && currCond.Operator == "<=" && valuesMatch)
             {
                 text = $"{name} decreases to at most {currVal}{suffix}";
             }
             // Logic: Prev >= X AND Curr < X -> "Decreases to less than X" (Threshold Down)
-            else if (prevCond.Operator == ">=" && currCond.Operator == "<" && prevVal == currVal)
+            else if (prevCond.Operator == ">=" && currCond.Operator == "<" && valuesMatch)
             {
                 text = $"{name} decreases to less than {currVal}{suffix}";
             }
+            // --- Generic Fallback ---
             else
             {
-                // Fallback for weird operator combinations
-                return new StandardConditionProcessor().Process(ctx, conditions, currentIndex);
+                // Format: "Value was [Op] [Prev] and is now [Op] [Curr]"
+                string prevOpText = ctx.GetOperatorText(prevCond.Operator);
+                string currOpText = ctx.GetOperatorText(currCond.Operator);
+                text = $"{name} was {prevOpText} {prevVal} and is now {currOpText} {currVal}{suffix}";
             }
 
             // Determine Consumption
-            // If there are unrelated conditions between Head and Tail, we cannot consume the block.
-            // We consume ONLY the Head (1), and let the iterator proceed to the intermediate conditions.
-            // The Tail will be silenced when the iterator eventually reaches it (Case 1 above).
             if (IsInterrupted(conditions, currentIndex, pairIndex))
             {
                 return new ProcessorResult
@@ -135,7 +132,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
             else
             {
-                // Contiguous block (adjacent or only AddAddress in between) -> Consume everything
                 return new ProcessorResult
                 {
                     Text = text,
@@ -188,54 +184,13 @@ namespace RALogicEditor.Services.Explainer.Processors
                 if (AreSameAddress(condA.LeftOperand.Value, condB.LeftOperand.Value) &&
                     condA.LeftOperand.Size == condB.LeftOperand.Size)
                 {
-                    // FIX: Ensure Right Operands match
-                    if (!AreSameAddress(condA.RightOperand.Value, condB.RightOperand.Value)) continue;
-
-                    // FIX: Ensure Operators form a valid transition
-                    var prevCond = aIsDelta ? condA : condB;
-                    var currCond = !aIsDelta ? condA : condB;
-
-                    if (IsSupportedTransition(prevCond.Operator, currCond.Operator))
-                    {
-                        pairIndex = j;
-                        return true;
-                    }
+                    // Match found!
+                    // We no longer check RightOperand equality or specific Operator combinations.
+                    // If it's a Delta vs Mem pair on the same address, we treat it as a transition.
+                    pairIndex = j;
+                    return true;
                 }
             }
-            return false;
-        }
-
-        private bool IsSupportedTransition(string opA, string opB)
-        {
-            // Change (Prev = X, Curr = X) - Note: This usually implies "Change to X" if context allows, but formally it's weird.
-            // Actually usually "Change" is "Prev != Curr" (Implicit) or "Prev = X, Curr = Y".
-            // But here we check same value on right.
-            // If right values match:
-
-            // Prev=X, Curr=X -> Changes from X to X? No.
-            // Ah, the logic in Process checks "if prevVal == currVal".
-            // If they are equal, then:
-            // = and = => "Changes from X to X" ??
-            // Actually, `Prev = X` and `Curr = X` means value stayed X. Not a transition.
-            // Wait, existing code: `if (prevCond.Operator == "=" && currCond.Operator == "=")`
-            // This is "Remained X".
-
-            // Re-reading logic in Process:
-            // It assumes specific pairs.
-
-            // Let's stick to what was requested: "Changed from X" (Prev=X, Curr!=X)
-
-            if (opA == "=" && opB == "=") return true; // Existing
-            if (opA == "!=" && opB == "=") return true; // Become X
-            if (opA == "=" && opB == "!=") return true; // Changed from X (New)
-
-            // Crossing Threshold (Up)
-            if (opA == "<" && opB == ">=") return true;
-            if (opA == "<=" && opB == ">") return true;
-            // Crossing Threshold (Down)
-            if (opA == ">" && opB == "<=") return true;
-            if (opA == ">=" && opB == "<") return true;
-
             return false;
         }
 
@@ -273,7 +228,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                     condA.LeftOperand.Size == condB.LeftOperand.Size)
                 {
                     // Check if condA actually targets condB (Forward check from A)
-                    // This implicitly checks operator validity via FindPairIndex now
                     if (FindPairIndex(conditions, j, out int verifyIndex) && verifyIndex == currentIndex)
                     {
                         headIndex = j;
