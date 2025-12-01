@@ -29,6 +29,15 @@ namespace RALogicEditor.Services.Explainer.Processors
                 var cond = conditions[ptr];
                 string f = cond.Flag;
 
+                // FIX: Skip Add Address lines so they don't break the chain detection
+                // Add Address is a prefix for the NEXT line, so we effectively ignore it here
+                // and let the next iteration (or target resolution) handle the actual condition.
+                if (f == "Add Address")
+                {
+                    ptr++;
+                    continue;
+                }
+
                 if (f != "AndNext" && f != "OrNext" && f != "ResetNextIf") break;
 
                 // Process the gate condition
