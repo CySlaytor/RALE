@@ -89,6 +89,11 @@ namespace RALogicEditor.Services.Explainer.Processors
             {
                 text = $"{name} becomes {currVal}{suffix}";
             }
+            // Logic: Prev=X AND Curr!=X -> "Changed from X" (Value was X, now is NOT X)
+            else if (prevCond.Operator == "=" && currCond.Operator == "!=" && prevVal == currVal)
+            {
+                text = $"{name} changed from {prevVal}{suffix}";
+            }
             // Logic: Prev < X AND Curr >= X -> "Increases to at least X" (Threshold Up)
             else if (prevCond.Operator == "<" && currCond.Operator == ">=" && prevVal == currVal)
             {
@@ -202,10 +207,28 @@ namespace RALogicEditor.Services.Explainer.Processors
 
         private bool IsSupportedTransition(string opA, string opB)
         {
-            // Change
-            if (opA == "=" && opB == "=") return true;
-            // Become
-            if (opA == "!=" && opB == "=") return true;
+            // Change (Prev = X, Curr = X) - Note: This usually implies "Change to X" if context allows, but formally it's weird.
+            // Actually usually "Change" is "Prev != Curr" (Implicit) or "Prev = X, Curr = Y".
+            // But here we check same value on right.
+            // If right values match:
+
+            // Prev=X, Curr=X -> Changes from X to X? No.
+            // Ah, the logic in Process checks "if prevVal == currVal".
+            // If they are equal, then:
+            // = and = => "Changes from X to X" ??
+            // Actually, `Prev = X` and `Curr = X` means value stayed X. Not a transition.
+            // Wait, existing code: `if (prevCond.Operator == "=" && currCond.Operator == "=")`
+            // This is "Remained X".
+
+            // Re-reading logic in Process:
+            // It assumes specific pairs.
+
+            // Let's stick to what was requested: "Changed from X" (Prev=X, Curr!=X)
+
+            if (opA == "=" && opB == "=") return true; // Existing
+            if (opA == "!=" && opB == "=") return true; // Become X
+            if (opA == "=" && opB == "!=") return true; // Changed from X (New)
+
             // Crossing Threshold (Up)
             if (opA == "<" && opB == ">=") return true;
             if (opA == "<=" && opB == ">") return true;
