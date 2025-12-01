@@ -1,6 +1,7 @@
 ﻿#nullable enable
 using RALogicEditor.Definitions;
 using RALogicEditor.Helpers;
+using RALogicEditor.Logic; // Added for CodeNoteLogic
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Utilities;
@@ -19,6 +20,7 @@ namespace RALogicEditor.Controls
     public partial class CodeNoteEditorControl : UserControl
     {
         public event EventHandler? ReloadRequested;
+        public event EventHandler? SaveRequested; // New Event for Save button
 
         // The ViewModel handles the heavy logic (Moved out of View)
         private readonly CodeNoteViewModel _viewModel;
@@ -26,6 +28,7 @@ namespace RALogicEditor.Controls
         // UI State for filtering
         private List<CodeNote> _filteredNotes = new();
         private bool _isInternalUpdate = false;
+        private bool _hasUnsavedChanges = false; // Tracks manual modification state for status strip
 
         public CodeNoteEditorControl()
         {
@@ -48,6 +51,36 @@ namespace RALogicEditor.Controls
         private void btnReload_Click(object sender, EventArgs e)
         {
             ReloadRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void btnSave_Click(object sender, EventArgs e)
+        {
+            // Trigger save action in Main Form
+            SaveRequested?.Invoke(this, EventArgs.Empty);
+
+            // Mark as saved
+            _hasUnsavedChanges = false;
+            UpdateStatusDisplay("Notes saved.");
+        }
+
+        private void btnFixHierarchy_Click(object sender, EventArgs e)
+        {
+            if (txtNoteBody.ReadOnly) return;
+
+            string currentText = txtNoteBody.Text;
+            if (string.IsNullOrWhiteSpace(currentText)) return;
+
+            // Use the Logic helper to fix indentation, sort, and merge
+            // Pass the indentation preference from the checkbox
+            string fixedText = CodeNoteLogic.FixHierarchy(currentText, chkIndentValues.Checked);
+
+            // Update text box (will trigger TextChanged -> ViewModel buffering)
+            if (txtNoteBody.Text != fixedText)
+            {
+                txtNoteBody.Text = fixedText;
+                _hasUnsavedChanges = true;
+                UpdateStatusDisplay("Hierarchy fixed.");
+            }
         }
 
         // Exposed method for MainForm to call on Save
@@ -127,7 +160,7 @@ namespace RALogicEditor.Controls
             {
                 txtNoteBody.Text = "";
                 cmbVariables.DataSource = null;
-                UpdateStatusStrip(null);
+                UpdateStatusDisplay(null);
             }
         }
 
@@ -157,8 +190,9 @@ namespace RALogicEditor.Controls
 
                     // Lock if redirected
                     txtNoteBody.ReadOnly = _viewModel.IsRedirected;
-                    if (_viewModel.IsRedirected)
-                        lblOffsetChain.Text = $"[Virtual: Linked to {_viewModel.RedirectTargetAddress}]";
+
+                    // Reset unsaved status on load
+                    _hasUnsavedChanges = false;
                 }
 
                 // 2. Refresh Tree Dropdown
@@ -168,7 +202,7 @@ namespace RALogicEditor.Controls
                 if (cmbVariables.Items.Count > 0) cmbVariables.SelectedIndex = 0;
                 else cmbVariables.SelectedIndex = -1;
 
-                UpdateStatusStrip(null);
+                UpdateStatusDisplay(null);
             }
             finally
             {
@@ -218,8 +252,8 @@ namespace RALogicEditor.Controls
                 if (state.IsVirtual)
                 {
                     // Virtual Mode (Creating new node)
-                    string status = state.IsDirty ? " (Modified - Save to Commit)" : "";
-                    lblOffsetChain.Text = state.Description + " (Unsaved Virtual Note)" + status;
+                    // Implicitly dirty/unsaved if creating a new note
+                    _hasUnsavedChanges = true;
 
                     cmbVariables.Enabled = false;
                     cmbVariables.BackColor = SystemColors.Control;
@@ -231,9 +265,6 @@ namespace RALogicEditor.Controls
                 else if (state.TargetNode != null)
                 {
                     // Real Node Editing Mode
-                    string status = state.IsDirty ? " (Modified)" : "";
-                    lblOffsetChain.Text = state.Description + status;
-
                     cmbVariables.Enabled = true;
                     cmbVariables.BackColor = SystemColors.Window;
 
@@ -245,11 +276,15 @@ namespace RALogicEditor.Controls
                 else
                 {
                     // Root / Default
-                    if (!_viewModel.IsRedirected) lblOffsetChain.Text = "Ready";
                     cmbVariables.Enabled = true;
                     cmbVariables.BackColor = SystemColors.Window;
                     txtNoteBody.ReadOnly = _viewModel.IsRedirected;
                 }
+
+                // Disable fix hierarchy if readonly
+                btnFixHierarchy.Enabled = !txtNoteBody.ReadOnly;
+
+                UpdateStatusDisplay(null);
             }
             finally
             {
@@ -320,12 +355,50 @@ namespace RALogicEditor.Controls
             // This prevents live overwrites of the file and allows cancelling/undo if needed (future feature).
             _viewModel.UpdateBufferedText(txtNoteBody.Text);
 
-            // Update status label to show dirty state without full refresh
-            if (_viewModel.EditState.IsDirty)
+            // Mark as having unsaved changes whenever text is manually edited
+            _hasUnsavedChanges = true;
+            UpdateStatusDisplay(null);
+        }
+
+        // Centralized Status Update Logic
+        private void UpdateStatusDisplay(string? overrideMsg)
+        {
+            if (overrideMsg != null)
             {
-                if (!lblOffsetChain.Text.Contains("(Modified"))
-                    lblOffsetChain.Text += " (Modified)";
+                lblOffsetChain.Text = overrideMsg;
+                return;
             }
+
+            var state = _viewModel.EditState;
+            string status = "";
+
+            if (state.IsVirtual)
+            {
+                status = $"{state.Description} (New Note)";
+            }
+            else if (state.TargetNode != null)
+            {
+                status = state.Description;
+            }
+            else
+            {
+                // Fallback / Root
+                if (_viewModel.IsRedirected)
+                    status = $"[Virtual: Linked to {_viewModel.RedirectTargetAddress}]";
+                else
+                    status = "Ready";
+            }
+
+            // Append persistent modified state
+            // Logic: IsDirty is ephemeral (cleared on commit), _hasUnsavedChanges is persistent (cleared on Save)
+            // We want to show "Modified" if either the current buffer is dirty OR we have unsaved commits.
+            if (_hasUnsavedChanges || state.IsDirty)
+            {
+                if (!status.Contains("(Modified"))
+                    status += " (Modified)";
+            }
+
+            lblOffsetChain.Text = status;
         }
 
         // Public Bridge Methods calling VM
@@ -374,23 +447,6 @@ namespace RALogicEditor.Controls
         {
             var selectedNode = cmbVariables.SelectedItem as NoteNode;
             return _viewModel.GetSelectedLogic(selectedNode);
-        }
-
-        private void UpdateStatusStrip(NoteNode? node)
-        {
-            // Fallback status update, mostly handled by EditStateChanged now
-            if (_viewModel.EditState.IsVirtual) return;
-
-            if (node == null)
-            {
-                if (_viewModel.IsRedirected) lblOffsetChain.Text = $"[Virtual: Linked to {_viewModel.RedirectTargetAddress}]";
-                else lblOffsetChain.Text = "Ready";
-                return;
-            }
-            var chain = new List<string>();
-            var current = node;
-            while (current != null && current.IndentLevel != -1) { chain.Insert(0, current.Offset); current = current.Parent; }
-            if (chain.Count > 0) lblOffsetChain.Text = $"[Indirect Note {string.Join(" ", chain)}]"; else lblOffsetChain.Text = "Direct Variable";
         }
 
         private void cmbNotes_Format(object sender, ListControlConvertEventArgs e)

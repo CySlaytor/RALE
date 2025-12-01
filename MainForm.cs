@@ -89,6 +89,7 @@ namespace RALogicEditor
 
             // -- Code Note Editor Events --
             codeNoteEditor.ReloadRequested += Reload_Click;
+            codeNoteEditor.SaveRequested += saveToolStripMenuItem_Click; // Wire up new save button
 
             // -- Main Grid Events --
             achievementGrid.CellDoubleClick += achievementGrid_CellDoubleClick;

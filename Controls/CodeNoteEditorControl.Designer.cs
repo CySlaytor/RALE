@@ -38,6 +38,9 @@
             statusStripBottom = new StatusStrip();
             lblOffsetChain = new ToolStripStatusLabel();
             panelBottom = new Panel();
+            chkIndentValues = new CheckBox();
+            btnFixHierarchy = new Button();
+            btnSave = new Button();
             btnCopyAll = new Button();
             panelTop.SuspendLayout();
             panelRowVariable.SuspendLayout();
@@ -259,6 +262,9 @@
             // 
             // panelBottom
             // 
+            panelBottom.Controls.Add(chkIndentValues);
+            panelBottom.Controls.Add(btnFixHierarchy);
+            panelBottom.Controls.Add(btnSave);
             panelBottom.Controls.Add(btnCopyAll);
             panelBottom.Dock = DockStyle.Bottom;
             panelBottom.Location = new Point(0, 349);
@@ -266,6 +272,42 @@
             panelBottom.Padding = new Padding(2);
             panelBottom.Size = new Size(300, 29);
             panelBottom.TabIndex = 3;
+            // 
+            // chkIndentValues
+            // 
+            chkIndentValues.AutoSize = true;
+            chkIndentValues.Checked = true;
+            chkIndentValues.CheckState = CheckState.Checked;
+            chkIndentValues.Dock = DockStyle.Left;
+            chkIndentValues.Location = new Point(152, 2);
+            chkIndentValues.Name = "chkIndentValues";
+            chkIndentValues.Padding = new Padding(5, 0, 0, 0);
+            chkIndentValues.Size = new Size(72, 25);
+            chkIndentValues.TabIndex = 3;
+            chkIndentValues.Text = "Indent";
+            chkIndentValues.UseVisualStyleBackColor = true;
+            // 
+            // btnFixHierarchy
+            // 
+            btnFixHierarchy.Dock = DockStyle.Left;
+            btnFixHierarchy.Location = new Point(57, 2);
+            btnFixHierarchy.Name = "btnFixHierarchy";
+            btnFixHierarchy.Size = new Size(95, 25);
+            btnFixHierarchy.TabIndex = 2;
+            btnFixHierarchy.Text = "Fix Hierarchy";
+            btnFixHierarchy.UseVisualStyleBackColor = true;
+            btnFixHierarchy.Click += btnFixHierarchy_Click;
+            // 
+            // btnSave
+            // 
+            btnSave.Dock = DockStyle.Left;
+            btnSave.Location = new Point(2, 2);
+            btnSave.Name = "btnSave";
+            btnSave.Size = new Size(55, 25);
+            btnSave.TabIndex = 1;
+            btnSave.Text = "Save";
+            btnSave.UseVisualStyleBackColor = true;
+            btnSave.Click += btnSave_Click;
             // 
             // btnCopyAll
             // 
@@ -299,6 +341,7 @@
             statusStripBottom.ResumeLayout(false);
             statusStripBottom.PerformLayout();
             panelBottom.ResumeLayout(false);
+            panelBottom.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
 
@@ -321,6 +364,9 @@
         private System.Windows.Forms.CheckBox chkShowLeafsOnly;
         private System.Windows.Forms.Panel panelBottom;
         private System.Windows.Forms.Button btnCopyAll;
+        private System.Windows.Forms.Button btnFixHierarchy;
+        private System.Windows.Forms.Button btnSave;
+        private System.Windows.Forms.CheckBox chkIndentValues;
         private System.Windows.Forms.ContextMenuStrip cmsNoteContext;
         private System.Windows.Forms.ToolStripMenuItem cutToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem copyToolStripMenuItem;
