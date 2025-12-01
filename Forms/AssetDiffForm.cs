@@ -177,8 +177,10 @@ namespace RALogicEditor.Forms
                     // Mismatch. Look ahead.
                     // Does sLine appear in local later?
                     int idxInLocal = (sLine != null) ? local.IndexOf(sLine, j) : -1;
+
                     // Does lLine appear in server later?
-                    int idxInServer = (lLine != null) ? server.IndexOf(lLine!, i) : -1;
+                    // FIX: Added bounds check (i < server.Count) to prevent ArgumentOutOfRangeException when server list is exhausted
+                    int idxInServer = (lLine != null && i < server.Count) ? server.IndexOf(lLine!, i) : -1;
 
                     if (idxInLocal != -1 && (idxInServer == -1 || idxInLocal - j < idxInServer - i))
                     {

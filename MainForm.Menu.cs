@@ -220,51 +220,126 @@ namespace RALogicEditor
         private void MoveAsset(int direction)
         {
             if (achievementGrid.SelectedRows.Count == 0 || _projectRepo.LocalData == null) return;
-            var selectedRows = achievementGrid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index).ToList();
-            if (direction > 0) selectedRows.Reverse();
 
-            if (direction < 0 && selectedRows.Min(r => r.Index) == 0) return;
-            if (direction > 0 && selectedRows.Max(r => r.Index) >= achievementGrid.Rows.Count - 1) return;
+            // Get all visible rows as items
+            var allRows = achievementGrid.Rows.Cast<DataGridViewRow>().OrderBy(r => r.Index).ToList();
+            if (allRows.Count == 0) return;
+
+            // Identify indices to move
+            var selectedIndices = achievementGrid.SelectedRows.Cast<DataGridViewRow>()
+                                                 .Select(r => r.Index)
+                                                 .OrderBy(i => i)
+                                                 .ToList();
+
+            // Bounds check
+            if (direction < 0 && selectedIndices.Min() == 0) return;
+            if (direction > 0 && selectedIndices.Max() >= allRows.Count - 1) return;
+
+            // Check if all selected items are Local (Can't move Synced)
+            foreach (int idx in selectedIndices)
+            {
+                if (allRows[idx].Tag is IAssetItem item && item.State != AssetState.Local) return;
+            }
 
             PushMainUndo();
-            bool changed = false;
-            List<int> movedIds = new();
 
-            foreach (var row in selectedRows)
+            // Extract the backing list of assets from the grid (preserving grid order)
+            // This assumes the Grid is the source of truth for the current visual order
+            var workingList = allRows.Select(r => r.Tag as IAssetItem).ToList();
+
+            // Perform the move logic on the list
+            if (direction < 0) // Up
             {
-                if (row.Tag is IAssetItem item && item.State == AssetState.Local)
+                foreach (int idx in selectedIndices)
                 {
-                    int currentIdx = row.Index;
-                    int targetIdx = currentIdx + direction;
-                    if (targetIdx < 0 || targetIdx >= achievementGrid.Rows.Count) continue;
-
-                    var targetRow = achievementGrid.Rows[targetIdx];
-                    if (targetRow.Tag is IAssetItem targetItem && targetItem.State == AssetState.Local)
-                    {
-                        if (item.IsLeaderboard) SwapInList(_projectRepo.LocalData.Leaderboards, item.ID, targetItem.ID);
-                        else SwapInList(_projectRepo.LocalData.Achievements, item.ID, targetItem.ID);
-
-                        int tempId = item.ID; item.ID = targetItem.ID; targetItem.ID = tempId;
-                        changed = true;
-                        movedIds.Add(item.ID);
-                    }
+                    var item = workingList[idx];
+                    workingList.RemoveAt(idx);
+                    workingList.Insert(idx - 1, item);
+                }
+            }
+            else // Down
+            {
+                // Iterate reverse for down move
+                for (int i = selectedIndices.Count - 1; i >= 0; i--)
+                {
+                    int idx = selectedIndices[i];
+                    var item = workingList[idx];
+                    workingList.RemoveAt(idx);
+                    workingList.Insert(idx + 1, item);
                 }
             }
 
-            if (changed)
+            // Re-assign IDs sequentially to ONLY the local items, based on their new visual order
+            // We preserve Synced items' IDs but we assume they aren't mixed in `workingList` if we are in "Local" view.
+            // If we are in "All" view, moving local items around synced items implies renumbering locals only?
+            // Usually moving is done in "Local" view.
+            // Safe approach: Reconstruct the LocalData lists from the workingList order.
+
+            var newAchievements = new List<RaAchievement>();
+            var newLeaderboards = new List<RaLeaderboard>();
+            int currentId = 111000001;
+
+            // First, preserve any local items NOT in the view (shouldn't happen if view filters correctly, but safety)
+            // Actually, simpler: Just clear LocalData and rebuild from workingList IF workingList contains all locals.
+            // If the grid is filtered, this is dangerous.
+
+            // Safer logic: Just swap IDs of the moved items? No, that causes the previous bug.
+            // Logic: Filter out all Local items from the working list, renumber them, and push back to Repo.
+
+            var localItemsInOrder = workingList.Where(x => x != null && x.State == AssetState.Local).ToList();
+
+            // Clear repo local lists
+            _projectRepo.LocalData.Achievements.Clear();
+            _projectRepo.LocalData.Leaderboards.Clear();
+
+            // Re-add in new order with new IDs
+            foreach (var item in localItemsInOrder)
             {
-                ReloadDataView();
-                achievementGrid.ClearSelection();
-                List<int> indicesToSelect = new List<int>();
-                foreach (DataGridViewRow row in achievementGrid.Rows)
+                if (item == null) continue;
+                item.ID = currentId++;
+
+                if (item.IsLeaderboard && item is RaLeaderboard lb)
+                    _projectRepo.LocalData.Leaderboards.Add(lb);
+                else if (item is RaAchievement ach)
+                    _projectRepo.LocalData.Achievements.Add(ach);
+            }
+
+            ReloadDataView();
+
+            // Restore Selection (Tracking by object reference, since IDs changed)
+            achievementGrid.ClearSelection();
+
+            // We need to find where our moved items ended up
+            var selectedObjects = new HashSet<IAssetItem>();
+            foreach (int idx in selectedIndices)
+            {
+                // Determine 'original' object reference that was at this index before reload?
+                // No, workingList has the new order.
+                // We need to select the items that were moved.
+                // We can't rely on indices because reload might shift things (though shouldn't if filtered).
+            }
+
+            // Re-find rows by Object Reference (Tag)
+            // Identify objects that were selected
+            var objectsToSelect = new HashSet<IAssetItem>();
+            foreach (int idx in selectedIndices)
+            {
+                if (allRows[idx].Tag is IAssetItem it) objectsToSelect.Add(it);
+            }
+
+            List<int> newIndices = new List<int>();
+            foreach (DataGridViewRow row in achievementGrid.Rows)
+            {
+                if (row.Tag is IAssetItem item && objectsToSelect.Contains(item))
                 {
-                    if (row.Tag is IAssetItem item && movedIds.Contains(item.ID)) indicesToSelect.Add(row.Index);
+                    newIndices.Add(row.Index);
                 }
-                if (indicesToSelect.Count > 0)
-                {
-                    achievementGrid.CurrentCell = achievementGrid.Rows[indicesToSelect.Min()].Cells[0];
-                    foreach (int idx in indicesToSelect) achievementGrid.Rows[idx].Selected = true;
-                }
+            }
+
+            if (newIndices.Count > 0)
+            {
+                achievementGrid.CurrentCell = achievementGrid.Rows[newIndices.Min()].Cells[0];
+                foreach (int idx in newIndices) achievementGrid.Rows[idx].Selected = true;
             }
         }
 
