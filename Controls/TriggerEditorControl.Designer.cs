@@ -1,5 +1,4 @@
-﻿#nullable enable
-namespace RALogicEditor.Controls
+﻿namespace RALogicEditor.Controls
 {
     partial class TriggerEditorControl
     {
@@ -32,7 +31,7 @@ namespace RALogicEditor.Controls
             createGeneratorToolStripMenuItem = new ToolStripMenuItem();
             commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
             multiRegionToolStripMenuItem = new ToolStripMenuItem();
-            logicOptimizerToolStripMenuItem = new ToolStripMenuItem(); // Added
+            logicOptimizerToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator5 = new ToolStripSeparator();
             explainLogicToolStripMenuItem = new ToolStripMenuItem();
             splitGroups = new SplitContainer();
@@ -55,9 +54,13 @@ namespace RALogicEditor.Controls
             duplicateToolStripMenuItem = new ToolStripMenuItem();
             deleteToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator2 = new ToolStripSeparator();
+
+            // New / Reordered Logic Items
+            cutToolStripMenuItem = new ToolStripMenuItem();
             copyLogicToolStripMenuItem = new ToolStripMenuItem();
             copyRowToolStripMenuItem = new ToolStripMenuItem();
             pasteToolStripMenuItem = new ToolStripMenuItem();
+
             toolStripSeparator3 = new ToolStripSeparator();
             saveAsSnippetToolStripMenuItem = new ToolStripMenuItem();
             insertSnippetToolStripMenuItem = new ToolStripMenuItem();
@@ -406,9 +409,9 @@ namespace RALogicEditor.Controls
             // 
             // gridContextMenu
             // 
-            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
+            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, cutToolStripMenuItem, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
             gridContextMenu.Name = "gridContextMenu";
-            gridContextMenu.Size = new Size(209, 248);
+            gridContextMenu.Size = new Size(209, 270);
             // 
             // moveUpToolStripMenuItem
             // 
@@ -459,10 +462,18 @@ namespace RALogicEditor.Controls
             toolStripSeparator2.Name = "toolStripSeparator2";
             toolStripSeparator2.Size = new Size(205, 6);
             // 
+            // cutToolStripMenuItem
+            // 
+            cutToolStripMenuItem.Name = "cutToolStripMenuItem";
+            cutToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.X;
+            cutToolStripMenuItem.Size = new Size(208, 22);
+            cutToolStripMenuItem.Text = "Cut Logic";
+            cutToolStripMenuItem.Click += cutToolStripMenuItem_Click;
+            // 
             // copyLogicToolStripMenuItem
             // 
             copyLogicToolStripMenuItem.Name = "copyLogicToolStripMenuItem";
-            copyLogicToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Shift | Keys.C;
+            copyLogicToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.C;
             copyLogicToolStripMenuItem.Size = new Size(208, 22);
             copyLogicToolStripMenuItem.Text = "Copy Logic";
             copyLogicToolStripMenuItem.Click += copyLogicToolStripMenuItem_Click;
@@ -470,7 +481,7 @@ namespace RALogicEditor.Controls
             // copyRowToolStripMenuItem
             // 
             copyRowToolStripMenuItem.Name = "copyRowToolStripMenuItem";
-            copyRowToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.C;
+            copyRowToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Shift | Keys.C;
             copyRowToolStripMenuItem.Size = new Size(208, 22);
             copyRowToolStripMenuItem.Text = "Copy Row";
             copyRowToolStripMenuItem.Click += copyRowToolStripMenuItem_Click;
@@ -608,6 +619,7 @@ namespace RALogicEditor.Controls
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2 = null!;
         private System.Windows.Forms.ToolStripMenuItem copyLogicToolStripMenuItem = null!;
         private System.Windows.Forms.ToolStripMenuItem copyRowToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem cutToolStripMenuItem = null!; // New
         private System.Windows.Forms.ToolStripMenuItem pasteToolStripMenuItem = null!;
         private System.Windows.Forms.ContextMenuStrip groupsContextMenu = null!;
         private System.Windows.Forms.ToolStripMenuItem addGroupToolStripMenuItem = null!;

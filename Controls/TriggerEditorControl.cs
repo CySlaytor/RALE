@@ -633,6 +633,7 @@ namespace RALogicEditor.Controls
             duplicateToolStripMenuItem.Enabled = any;
             copyRowToolStripMenuItem.Enabled = any;
             copyLogicToolStripMenuItem.Enabled = any;
+            cutToolStripMenuItem.Enabled = any; // Enabled logic for Cut
             pasteToolStripMenuItem.Enabled = Clipboard.ContainsText();
             saveAsSnippetToolStripMenuItem.Enabled = any;
         }
@@ -661,6 +662,7 @@ namespace RALogicEditor.Controls
 
         private void copyRowToolStripMenuItem_Click(object? sender, EventArgs e) => _gridManager.CopySelectedRows();
         private void copyLogicToolStripMenuItem_Click(object? sender, EventArgs e) => _gridManager.CopySelectedLogic();
+        private void cutToolStripMenuItem_Click(object? sender, EventArgs e) { _viewModel.PushUndoState(); _gridManager.CutSelected(); } // New Action
         private void pasteToolStripMenuItem_Click(object? sender, EventArgs e) { if (Clipboard.ContainsText()) GridManager_PasteRequested(sender, Clipboard.GetText()); }
 
         private void addGroupToolStripMenuItem_Click(object? sender, EventArgs e) => _viewModel.AddGroup();

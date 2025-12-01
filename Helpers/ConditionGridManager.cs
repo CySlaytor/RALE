@@ -127,10 +127,25 @@ namespace RALogicEditor.Helpers
             }
 
             // Prevent modification in ReadOnly mode, but allow Copy
-            if (_grid.ReadOnly && e.KeyCode != Keys.C) { if (e.KeyCode == Keys.Delete || e.KeyCode == Keys.V) { e.Handled = true; return; } }
+            if (_grid.ReadOnly && e.KeyCode != Keys.C) { if (e.KeyCode == Keys.Delete || e.KeyCode == Keys.V || e.KeyCode == Keys.X) { e.Handled = true; return; } }
 
-            if (e.Control && e.KeyCode == Keys.C) { CopySelectedRows(); e.Handled = true; }
-            else if (e.Control && e.Shift && e.KeyCode == Keys.C) { CopySelectedLogic(); e.Handled = true; }
+            // MODIFIED: Swapped Copy Shortcuts
+            if (e.Control && e.KeyCode == Keys.C && !e.Shift)
+            {
+                CopySelectedLogic();
+                e.Handled = true;
+            }
+            else if (e.Control && e.Shift && e.KeyCode == Keys.C)
+            {
+                CopySelectedRows();
+                e.Handled = true;
+            }
+            // NEW: Cut support (Ctrl+X)
+            else if (e.Control && e.KeyCode == Keys.X)
+            {
+                CutSelected();
+                e.Handled = true;
+            }
             else if (e.Control && e.KeyCode == Keys.V)
             {
                 if (Clipboard.ContainsText())
@@ -455,19 +470,46 @@ namespace RALogicEditor.Helpers
             return expanded;
         }
 
-        // Copies selected rows as TSV (Text) to Clipboard
-        // Note: This remains WYSIWYG (Visible rows only) for Excel/Spreadsheet pasting.
+        // Copies selected rows with Fixed-Width spacing to ensure visual alignment in text editors
+        // Replaces simple TSV to satisfy QoL request for "pure line up"
         public void CopySelectedRows()
         {
             if (_grid.SelectedRows.Count == 0) return;
-            var sb = new StringBuilder();
-            foreach (DataGridViewRow row in _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index))
+
+            // Get rows in visual order
+            var rows = _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index).ToList();
+            int colCount = _grid.Columns.Count;
+
+            // Calculate max width for each column to align them
+            int[] colWidths = new int[colCount];
+            for (int c = 0; c < colCount; c++)
             {
-                var cells = row.Cells.Cast<DataGridViewCell>().Select(c => c.FormattedValue?.ToString() ?? "");
-                sb.AppendLine(string.Join("\t", cells));
+                int max = 0;
+                foreach (var row in rows)
+                {
+                    string txt = row.Cells[c].FormattedValue?.ToString() ?? "";
+                    if (txt.Length > max) max = txt.Length;
+                }
+                colWidths[c] = max;
             }
+
+            var sb = new StringBuilder();
+            foreach (var row in rows)
+            {
+                for (int c = 0; c < colCount; c++)
+                {
+                    string txt = row.Cells[c].FormattedValue?.ToString() ?? "";
+                    // Add padding (2 spaces buffer) to align columns, except the last one
+                    if (c < colCount - 1)
+                        sb.Append(txt.PadRight(colWidths[c] + 2));
+                    else
+                        sb.Append(txt);
+                }
+                sb.AppendLine();
+            }
+
             Clipboard.SetText(sb.ToString());
-            StatusUpdateRequested?.Invoke(this, "Rows copied to clipboard.");
+            StatusUpdateRequested?.Invoke(this, "Rows copied to clipboard (aligned).");
         }
 
         // Copies logic as RA Logic String (e.g. 0x123=1) to Clipboard
@@ -485,6 +527,14 @@ namespace RALogicEditor.Helpers
             }
             Clipboard.SetText(sb.ToString());
             StatusUpdateRequested?.Invoke(this, "Logic string copied to clipboard.");
+        }
+
+        // Cuts selected logic (Copy Logic + Delete Rows)
+        public void CutSelected()
+        {
+            CopySelectedLogic();
+            DeleteSelected();
+            StatusUpdateRequested?.Invoke(this, "Logic cut to clipboard.");
         }
 
         // Restores selection based on Model Tags
