@@ -1,5 +1,4 @@
-﻿#nullable enable
-using RALogicEditor.Definitions;
+﻿using RALogicEditor.Definitions;
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Utilities;
@@ -174,9 +173,11 @@ namespace RALogicEditor.Forms
                     {
                         simpleMappings[region][bVal.ToString("x")] = tVal.ToString("x");
 
-                        // Updated Regex to handle Hex sizes (e.g. [0x20 bytes]) or Decimal ([32 bytes])
+                        // FIX: Updated regex to allow for hyphenated sizes like "20-bytes"
+                        // Previous: @"\[.*?((?:0x)?[0-9a-fA-F]+)\s*bytes?.*?\]"
+                        // New: Adds \s*[-]?\s* to consume optional hyphens
                         long size = 1;
-                        var sizeMatch = Regex.Match(description, @"\[.*?((?:0x)?[0-9a-fA-F]+)\s*bytes?.*?\]", RegexOptions.IgnoreCase);
+                        var sizeMatch = Regex.Match(description, @"\[.*?((?:0x)?[0-9a-fA-F]+)\s*[-]?\s*bytes?.*?\]", RegexOptions.IgnoreCase);
 
                         if (sizeMatch.Success)
                         {
