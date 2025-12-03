@@ -622,12 +622,16 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 else if (c.Flag == "AndNext" || c.Flag == "OrNext" || c.Flag == "ResetNextIf")
                 {
-                    // FIX: Previously this line existed:
-                    // if (hasAccumulator) break; 
+                    // REFINED FIX: 
+                    // Case 1: "OrNext" inside an accumulator chain usually signifies the end of a check (e.g. Sum=X OR Sum=Y).
+                    // We must break here to treat it as a terminal.
+                    // Case 2: "AndNext" / "ResetNextIf" are binding gates that apply to the NEXT condition (e.g. AndNext -> AddHits).
+                    // These should remain part of the chain.
+                    if (hasAccumulator && c.Flag == "OrNext")
+                    {
+                        break;
+                    }
 
-                    // We REMOVE that check. 
-                    // This allows AndNext/OrNext to exist BETWEEN AddHits/SubSource lines, 
-                    // treating them as part of the same calculation block.
                     buffer.Add(c);
                 }
                 else if (c.Flag.Contains("Add") || c.Flag.Contains("Sub"))
@@ -646,6 +650,13 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 ptr++;
             }
+
+            if (!hasAccumulator && chain.Count == 0)
+            {
+                endPtr = start;
+                return new List<AchievementCondition>();
+            }
+
             chain.AddRange(buffer);
             endPtr = ptr;
             return chain;
