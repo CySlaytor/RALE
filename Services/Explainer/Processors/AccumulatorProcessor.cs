@@ -622,18 +622,26 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 else if (c.Flag == "AndNext" || c.Flag == "OrNext" || c.Flag == "ResetNextIf")
                 {
-                    if (hasAccumulator) break;
+                    // FIX: Previously this line existed:
+                    // if (hasAccumulator) break; 
+
+                    // We REMOVE that check. 
+                    // This allows AndNext/OrNext to exist BETWEEN AddHits/SubSource lines, 
+                    // treating them as part of the same calculation block.
                     buffer.Add(c);
                 }
                 else if (c.Flag.Contains("Add") || c.Flag.Contains("Sub"))
                 {
                     hasAccumulator = true;
+                    // Flush buffer (which might contain AndNext/AddAddress from previous lines) into the chain
                     chain.AddRange(buffer);
                     buffer.Clear();
                     chain.Add(c);
                 }
                 else
                 {
+                    // This is a terminal (ResetIf, PauseIf, Measured, or Empty/Trigger)
+                    // Stop processing the chain here.
                     break;
                 }
                 ptr++;
