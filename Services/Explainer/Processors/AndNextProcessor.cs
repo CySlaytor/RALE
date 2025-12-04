@@ -1,6 +1,5 @@
 ﻿using RALogicEditor.Definitions;
 using RALogicEditor.Models;
-using RALogicEditor.Services.Explainer; // Added missing reference
 using System.Collections.Generic;
 using System.Text;
 
@@ -29,9 +28,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                 var cond = conditions[ptr];
                 string f = cond.Flag;
 
-                // FIX: Skip Add Address lines so they don't break the chain detection
-                // Add Address is a prefix for the NEXT line, so we effectively ignore it here
-                // and let the next iteration (or target resolution) handle the actual condition.
+                // Skip Add Address lines so they don't break the chain detection
                 if (f == "Add Address")
                 {
                     ptr++;
@@ -69,89 +66,78 @@ namespace RALogicEditor.Services.Explainer.Processors
             if (ptr < conditions.Count)
             {
                 // 3. Resolve Target Text
-                // We delegate the processing of the target to the full processor list (manually checking priority)
-                // to ensure that if the target is a Transition, Accumulator, Pause, or Reset, it gets formatted correctly.
-
+                // DELEGATION: We must check ALL high-level processors to handle complex targets
                 ProcessorResult targetRes;
+
+                // Instantiate processors (in order of priority)
                 var transProc = new TransitionProcessor();
+                var asciiProc = new AsciiStringProcessor(); // Added
+                var accumProc = new AccumulatorProcessor(); // <--- CRITICAL ADDITION
                 var measuredProc = new MeasuredTriggerProcessor();
                 var resetProc = new ResetProcessor();
                 var pauseProc = new PauseProcessor();
+                var mathProc = new MathChainProcessor();
                 var standardProc = new StandardConditionProcessor();
 
-                // Priority Check: Transition -> Measured -> Reset -> Pause -> Standard
-                if (transProc.CanProcess(conditions, ptr))
-                {
-                    targetRes = transProc.Process(ctx, conditions, ptr);
-                }
-                else if (measuredProc.CanProcess(conditions, ptr))
-                {
-                    targetRes = measuredProc.Process(ctx, conditions, ptr);
-                }
-                else if (resetProc.CanProcess(conditions, ptr))
-                {
-                    targetRes = resetProc.Process(ctx, conditions, ptr);
-                }
-                else if (pauseProc.CanProcess(conditions, ptr))
-                {
-                    targetRes = pauseProc.Process(ctx, conditions, ptr);
-                }
-                else
-                {
-                    targetRes = standardProc.Process(ctx, conditions, ptr);
-                }
+                // Priority Check: Ensure complex logic is caught before standard fallbacks
+                if (transProc.CanProcess(conditions, ptr)) targetRes = transProc.Process(ctx, conditions, ptr);
+                else if (asciiProc.CanProcess(conditions, ptr)) targetRes = asciiProc.Process(ctx, conditions, ptr);
+                else if (accumProc.CanProcess(conditions, ptr)) targetRes = accumProc.Process(ctx, conditions, ptr); // <--- DELEGATE TO ACCUMULATOR
+                else if (measuredProc.CanProcess(conditions, ptr)) targetRes = measuredProc.Process(ctx, conditions, ptr);
+                else if (resetProc.CanProcess(conditions, ptr)) targetRes = resetProc.Process(ctx, conditions, ptr);
+                else if (pauseProc.CanProcess(conditions, ptr)) targetRes = pauseProc.Process(ctx, conditions, ptr);
+                else if (mathProc.CanProcess(conditions, ptr)) targetRes = mathProc.Process(ctx, conditions, ptr);
+                else targetRes = standardProc.Process(ctx, conditions, ptr);
 
-                consumed += targetRes.ConditionsConsumed; // Add the target's consumption count
-                category = targetRes.Category; // Adopt the category of the target (e.g. Transition, Reset, Pause)
+                consumed += targetRes.ConditionsConsumed;
+                category = targetRes.Category;
 
                 // 4. Build Final Logic String
-                // Format: "(ChainItem1 [AND/OR] ChainItem2 [AND/OR] Target)"
                 var sb = new StringBuilder();
 
                 if (chainItems.Count > 0)
                 {
-                    // Unwrap the target text if it is a complex sentence (like MeasuredIf, Reset, Pause)
-                    // so we can place the logic chain inside the condition, not outside the sentence.
                     string targetText = targetRes.Text;
                     string prefixWrapper = "";
                     string suffixWrapper = "";
 
+                    // Unwrap complex sentences (e.g., "The Measured condition will work if...") 
+                    // so we can place the AND/OR logic inside the sentence structure.
                     if (category == ExplanationCategory.MeasuredIf)
                     {
                         string p = "The Measured condition will work if ";
                         string s = " (MeasuredIf)";
                         if (targetText.StartsWith(p) && targetText.EndsWith(s))
                         {
-                            prefixWrapper = p;
-                            suffixWrapper = s;
+                            prefixWrapper = p; suffixWrapper = s;
                             targetText = targetText.Substring(p.Length, targetText.Length - p.Length - s.Length);
                         }
                     }
                     else if (category == ExplanationCategory.Reset)
                     {
-                        string p = "If ";
-                        string s = ", reset the achievement.";
+                        string p = "If "; string s = ", reset the achievement.";
                         if (targetText.StartsWith(p) && targetText.EndsWith(s))
                         {
-                            prefixWrapper = p;
-                            suffixWrapper = s;
+                            prefixWrapper = p; suffixWrapper = s;
                             targetText = targetText.Substring(p.Length, targetText.Length - p.Length - s.Length);
                         }
                     }
                     else if (category == ExplanationCategory.Pause)
                     {
                         string p = "If ";
-                        // Pause suffix varies slightly
                         if (targetText.StartsWith(p))
                         {
                             int lastComma = targetText.LastIndexOf(',');
                             if (lastComma > p.Length)
                             {
-                                prefixWrapper = p;
-                                suffixWrapper = targetText.Substring(lastComma); // includes .
+                                prefixWrapper = p; suffixWrapper = targetText.Substring(lastComma);
                                 targetText = targetText.Substring(p.Length, lastComma - p.Length);
                             }
                         }
+                    }
+                    else if (targetText.StartsWith("Calculate: "))
+                    {
+                        targetText = targetText.Substring(11);
                     }
 
                     sb.Append(prefixWrapper);
@@ -181,7 +167,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
             else
             {
-                // Incomplete chain
                 var sb = new StringBuilder();
                 foreach (var item in chainItems) sb.Append($"{item.Text} {item.Connector} ");
                 resultText = $"{sb} (Incomplete Chain)";

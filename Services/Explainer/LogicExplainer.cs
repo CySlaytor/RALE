@@ -25,6 +25,7 @@ namespace RALogicEditor.Services
             new SequenceProcessor(),       // Handles sequential increments (0->1, 1->2...)
             new AndNextProcessor(),        // Handles AndNext chains explicitly (e.g. "will operate once")
             new TransitionProcessor(),     // Handles Delta transitions (A > Delta A)
+            new MathChainProcessor(),      // Handles Math chains (Add/Sub Next)
             new ResetProcessor(),          // Handles Reset If
             new PauseProcessor(),          // Handles Pause If / PauseLock
             new MeasuredTriggerProcessor(),// Handles Measured / Trigger (excluding MeasuredIf)
