@@ -142,7 +142,7 @@ namespace RALogicEditor.Services.Explainer
         // Added contextSize to pass down to FormatValue
         public string GetOperandText(Operand op, int index, bool isRight = false, string contextAddress = "", string contextSize = "", bool suppressPointers = false)
         {
-            if (op.Type == "Recall") return "{recall}";
+            if (op.Type == "Recall") return "the stored value"; // FIXED: Was "{recall}"
 
             if (op.Type == "Value" || op.Type == "Float")
                 return FormatValue(op, index, contextAddress, contextSize);
