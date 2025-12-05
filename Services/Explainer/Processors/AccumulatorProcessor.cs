@@ -144,12 +144,17 @@ namespace RALogicEditor.Services.Explainer.Processors
                     bool skippedLines = currentPtr > (prev.EndIndex + 1);
 
                     // If previous chain demanded a connection but we skipped lines, this grouping is invalid.
-                    // However, `OrNext` usually binds the accumulator result. `Acc1 OR Acc2`.
-                    // If we have `Acc1 OrNext` ... `Mem=1` ... `Acc2`, logic is `(Acc1 OR Acc2) AND Mem=1`? 
-                    // No, RA parses strictly sequentially. `Acc1` evaluation includes `OrNext`.
-                    // The `Mem=1` breaks the `OrNext` binding.
-                    // So if `prevConnected` is true, we CANNOT have skipped lines.
                     if (prevConnected && skippedLines)
+                    {
+                        break;
+                    }
+
+                    // FIX: Stop grouping if we transition from a Measured chain to a MeasuredIf chain.
+                    // This ensures MeasuredIf is treated as a conditional ("once...") rather than merged into the measurement string.
+                    bool lastIsMeasured = prev.Terminal != null && prev.Terminal.Flag.StartsWith("Measured") && prev.Terminal.Flag != "MeasuredIf";
+                    bool currentIsMeasuredIf = termCond != null && termCond.Flag == "MeasuredIf";
+
+                    if (lastIsMeasured && currentIsMeasuredIf)
                     {
                         break;
                     }
@@ -231,23 +236,16 @@ namespace RALogicEditor.Services.Explainer.Processors
                     bool leftIsMem = remCond.LeftOperand.Type == "Mem";
                     bool rightIsDelta = remCond.RightOperand.Type == "Delta";
                     bool rightIsMem = remCond.RightOperand.Type == "Mem";
+                    bool sameAddr = remCond.LeftOperand.Value == remCond.RightOperand.Value;
 
-                    Operand? targetOp = null;
-                    string direction = "";
-
-                    if (remCond.Operator == "-")
+                    if (remCond.Operator == "-" && sameAddr)
                     {
-                        if (leftIsDelta && rightIsMem) { targetOp = remCond.RightOperand; direction = "decreasing"; }
-                        else if (leftIsMem && rightIsDelta) { targetOp = remCond.LeftOperand; direction = "increasing"; }
+                        string varName = ctx.GetName(remCond.LeftOperand, index - 1, true);
+                        if (leftIsDelta && rightIsMem) { recallContext = $"{varName} decreasing"; hasRecallContext = true; }
+                        else if (remCond.LeftOperand.Type == "Mem" && remCond.RightOperand.Type == "Delta") { recallContext = $"{varName} increasing"; hasRecallContext = true; }
                     }
 
-                    if (targetOp != null)
-                    {
-                        string varName = ctx.GetName(targetOp, index - 1, true);
-                        recallContext = $"{varName} {direction}";
-                        hasRecallContext = true;
-                    }
-                    else
+                    if (!hasRecallContext)
                     {
                         recallContext = "stored value";
                     }
@@ -270,9 +268,6 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (isTransition)
             {
-                var fromConditions = deltaChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
-                var toConditions = memChains.Select(c => FormatTerminalCondition(c.Terminal, ctx, conditions)).ToList();
-
                 string fromText = BuildCondensedChainString(deltaChains, ctx, conditions);
                 string toText = BuildCondensedChainString(memChains, ctx, conditions);
 
@@ -301,8 +296,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                 bool isMeasuredContext = false;
                 string measuredHeader = "";
 
-                // If we grouped non-contiguous chains, we need to verify if the FINAL chain is Measured.
-                // Or if there is a Measured condition immediately following the last chain (External Trigger).
                 // Check if the condition AFTER the last chain is Measured
                 int lastChainEnd = chains.Last().EndIndex;
                 if (lastChainEnd + 1 < conditions.Count)
@@ -314,9 +307,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                     {
                         finalTerminal = nextCond;
                         isMeasuredContext = true;
-                        // We mark this extra condition as consumed in the context, but we don't include it in 'chains' list logic
-                        // We adjust 'conditionsConsumed' calculation at the end.
-                        // Actually, better to treat it as part of the last chain's terminal logic display
                     }
                 }
 
@@ -347,8 +337,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                 {
                     var chainTemplate = chains[i];
 
-                    // --- FIX 1: Check if THIS SPECIFIC chain uses Recall ---
-                    // This prevents chains that don't use Recall (e.g. AddSource) from inheriting the "decreasing" label
+                    // Check if THIS SPECIFIC chain uses Recall
                     bool currentChainUsesRecall = chainTemplate.Conditions.Any(c => c.LeftOperand.Type == "Recall" || c.RightOperand.Type == "Recall");
 
                     bool chainHasHits = chainTemplate.Conditions.Any(c => c.Flag.Contains("Hits"));
@@ -371,7 +360,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                         var lastChain = chains[rangeEnd];
                         var terminal = lastChain.Terminal;
 
-                        // FIX 2: Apply Recall Context only if current chain actually uses it
                         string noun = (hasRecallContext && currentChainUsesRecall) ? recallContext : "logic groups";
 
                         bool showVal = true;
@@ -436,8 +424,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                         if (chain.Terminal != null)
                         {
                             var term = chain.Terminal;
-
-                            // FIX 3: Apply Recall Context only if current chain actually uses it
                             string noun = (hasRecallContext && currentChainUsesRecall) ? recallContext : "items";
 
                             if (term.Flag == "MeasuredIf")
@@ -622,11 +608,8 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 else if (c.Flag == "AndNext" || c.Flag == "OrNext" || c.Flag == "ResetNextIf")
                 {
-                    // REFINED FIX: 
                     // Case 1: "OrNext" inside an accumulator chain usually signifies the end of a check (e.g. Sum=X OR Sum=Y).
                     // We must break here to treat it as a terminal.
-                    // Case 2: "AndNext" / "ResetNextIf" are binding gates that apply to the NEXT condition (e.g. AndNext -> AddHits).
-                    // These should remain part of the chain.
                     if (hasAccumulator && c.Flag == "OrNext")
                     {
                         break;
@@ -779,7 +762,6 @@ namespace RALogicEditor.Services.Explainer.Processors
         {
             if (!ignoreTerminal)
             {
-                // Check Terminal consistency first
                 if ((c1.Terminal == null) != (c2.Terminal == null)) return false;
                 if (c1.Terminal != null && c2.Terminal != null)
                 {

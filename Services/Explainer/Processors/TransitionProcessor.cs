@@ -176,11 +176,18 @@ namespace RALogicEditor.Services.Explainer.Processors
                 // Skip pointer chain logic, as it belongs to the condition that follows it
                 if (condB.Flag == "Add Address") continue;
 
+                // CRITICAL FIX: If the potential tail has a connector Flag like ResetNextIf,
+                // we MUST NOT pair with it here. This processor (Transition) has priority 1.
+                // ResetNextIf processing happens in AndNextProcessor (Priority 15).
+                // If we consume it here, AndNextProcessor never sees the ResetNextIf logic.
+                if (condB.Flag == "AndNext" || condB.Flag == "OrNext" || condB.Flag == "ResetNextIf")
+                    return false;
+
                 // Validate Flag Compatibility
                 bool isValidFlag = string.IsNullOrEmpty(condB.Flag) ||
                                    condB.Flag == "Trigger" ||
-                                   condB.Flag == "AndNext" ||
-                                   condB.Flag == "ResetNextIf" ||
+                                   condB.Flag == "Reset If" ||
+                                   condB.Flag == "Pause If" ||
                                    condB.Flag.StartsWith("Measured");
 
                 if (!isValidFlag) return false;
@@ -204,21 +211,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                     return true;
                 }
             }
-            return false;
-        }
-
-        private bool IsSupportedTransition(string opA, string opB)
-        {
-            // Note: This method is kept for reference but logic has moved to generic handling in Process()
-            if (opA == "=" && opB == "=") return true;
-            if (opA == "!=" && opB == "=") return true;
-            if (opA == "=" && opB == "!=") return true;
-
-            if (opA == "<" && opB == ">=") return true;
-            if (opA == "<=" && opB == ">") return true;
-            if (opA == ">" && opB == "<=") return true;
-            if (opA == ">=" && opB == "<") return true;
-
             return false;
         }
 

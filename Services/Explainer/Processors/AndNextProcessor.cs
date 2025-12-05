@@ -71,8 +71,8 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                 // Instantiate processors (in order of priority)
                 var transProc = new TransitionProcessor();
-                var asciiProc = new AsciiStringProcessor(); // Added
-                var accumProc = new AccumulatorProcessor(); // <--- CRITICAL ADDITION
+                var asciiProc = new AsciiStringProcessor();
+                var accumProc = new AccumulatorProcessor();
                 var measuredProc = new MeasuredTriggerProcessor();
                 var resetProc = new ResetProcessor();
                 var pauseProc = new PauseProcessor();
@@ -82,7 +82,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                 // Priority Check: Ensure complex logic is caught before standard fallbacks
                 if (transProc.CanProcess(conditions, ptr)) targetRes = transProc.Process(ctx, conditions, ptr);
                 else if (asciiProc.CanProcess(conditions, ptr)) targetRes = asciiProc.Process(ctx, conditions, ptr);
-                else if (accumProc.CanProcess(conditions, ptr)) targetRes = accumProc.Process(ctx, conditions, ptr); // <--- DELEGATE TO ACCUMULATOR
+                else if (accumProc.CanProcess(conditions, ptr)) targetRes = accumProc.Process(ctx, conditions, ptr);
                 else if (measuredProc.CanProcess(conditions, ptr)) targetRes = measuredProc.Process(ctx, conditions, ptr);
                 else if (resetProc.CanProcess(conditions, ptr)) targetRes = resetProc.Process(ctx, conditions, ptr);
                 else if (pauseProc.CanProcess(conditions, ptr)) targetRes = pauseProc.Process(ctx, conditions, ptr);
@@ -98,58 +98,83 @@ namespace RALogicEditor.Services.Explainer.Processors
                 if (chainItems.Count > 0)
                 {
                     string targetText = targetRes.Text;
-                    string prefixWrapper = "";
-                    string suffixWrapper = "";
+                    string measuredHeader = "A Measured Indicator will start measuring: ";
 
-                    // Unwrap complex sentences (e.g., "The Measured condition will work if...") 
-                    // so we can place the AND/OR logic inside the sentence structure.
-                    if (category == ExplanationCategory.MeasuredIf)
+                    // SPECIAL HANDLING: Measured Logic
+                    // Rephrase "A Measured Indicator... (when A and B)" instead of wrapping it.
+                    if (targetText.StartsWith(measuredHeader))
                     {
-                        string p = "The Measured condition will work if ";
-                        string s = " (MeasuredIf)";
-                        if (targetText.StartsWith(p) && targetText.EndsWith(s))
+                        sb.Append(measuredHeader);
+                        // Append the body (what is being measured)
+                        sb.Append(targetText.Substring(measuredHeader.Length));
+
+                        // Append the condition clause
+                        sb.Append(" when (");
+                        for (int k = 0; k < chainItems.Count; k++)
                         {
-                            prefixWrapper = p; suffixWrapper = s;
-                            targetText = targetText.Substring(p.Length, targetText.Length - p.Length - s.Length);
+                            var item = chainItems[k];
+                            sb.Append(item.Text);
+                            // Only append connector if not last item
+                            if (k < chainItems.Count - 1) sb.Append($" {item.Connector} ");
                         }
+                        sb.Append(")");
                     }
-                    else if (category == ExplanationCategory.Reset)
+                    else
                     {
-                        string p = "If "; string s = ", reset the achievement.";
-                        if (targetText.StartsWith(p) && targetText.EndsWith(s))
+                        // STANDARD HANDLING: Unwrap complex sentences or wrap basic ones
+                        string prefixWrapper = "";
+                        string suffixWrapper = "";
+
+                        // Unwrap complex sentences (e.g., "The Measured condition will work if...") 
+                        // so we can place the AND/OR logic inside the sentence structure.
+                        if (category == ExplanationCategory.MeasuredIf)
                         {
-                            prefixWrapper = p; suffixWrapper = s;
-                            targetText = targetText.Substring(p.Length, targetText.Length - p.Length - s.Length);
-                        }
-                    }
-                    else if (category == ExplanationCategory.Pause)
-                    {
-                        string p = "If ";
-                        if (targetText.StartsWith(p))
-                        {
-                            int lastComma = targetText.LastIndexOf(',');
-                            if (lastComma > p.Length)
+                            string p = "The Measured condition will work if ";
+                            string s = " (MeasuredIf)";
+                            if (targetText.StartsWith(p) && targetText.EndsWith(s))
                             {
-                                prefixWrapper = p; suffixWrapper = targetText.Substring(lastComma);
-                                targetText = targetText.Substring(p.Length, lastComma - p.Length);
+                                prefixWrapper = p; suffixWrapper = s;
+                                targetText = targetText.Substring(p.Length, targetText.Length - p.Length - s.Length);
                             }
                         }
-                    }
-                    else if (targetText.StartsWith("Calculate: "))
-                    {
-                        targetText = targetText.Substring(11);
-                    }
+                        else if (category == ExplanationCategory.Reset)
+                        {
+                            string p = "If "; string s = ", reset the achievement.";
+                            if (targetText.StartsWith(p) && targetText.EndsWith(s))
+                            {
+                                prefixWrapper = p; suffixWrapper = s;
+                                targetText = targetText.Substring(p.Length, targetText.Length - p.Length - s.Length);
+                            }
+                        }
+                        else if (category == ExplanationCategory.Pause)
+                        {
+                            string p = "If ";
+                            if (targetText.StartsWith(p))
+                            {
+                                int lastComma = targetText.LastIndexOf(',');
+                                if (lastComma > p.Length)
+                                {
+                                    prefixWrapper = p; suffixWrapper = targetText.Substring(lastComma);
+                                    targetText = targetText.Substring(p.Length, lastComma - p.Length);
+                                }
+                            }
+                        }
+                        else if (targetText.StartsWith("Calculate: "))
+                        {
+                            targetText = targetText.Substring(11);
+                        }
 
-                    sb.Append(prefixWrapper);
-                    sb.Append("(");
-                    foreach (var item in chainItems)
-                    {
-                        sb.Append(item.Text);
-                        sb.Append($" {item.Connector} ");
+                        sb.Append(prefixWrapper);
+                        sb.Append("(");
+                        foreach (var item in chainItems)
+                        {
+                            sb.Append(item.Text);
+                            sb.Append($" {item.Connector} ");
+                        }
+                        sb.Append(targetText);
+                        sb.Append(")");
+                        sb.Append(suffixWrapper);
                     }
-                    sb.Append(targetText);
-                    sb.Append(")");
-                    sb.Append(suffixWrapper);
                 }
                 else
                 {

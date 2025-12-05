@@ -290,7 +290,8 @@ namespace RALogicEditor.Services
                         sb.Append("A Measured Indicator will be displayed");
 
                     // Summarize MeasuredIf conditions in the header line
-                    var mIfs = results.Where(r => r.Category == ExplanationCategory.MeasuredIf).ToList();
+                    // FIX: Exclude the result used as the main statement from the conditional list
+                    var mIfs = results.Where(r => r.Category == ExplanationCategory.MeasuredIf && r != measuredRes).ToList();
                     if (mIfs.Any())
                     {
                         sb.Append(" once ");
