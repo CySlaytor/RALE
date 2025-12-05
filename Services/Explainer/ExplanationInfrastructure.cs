@@ -101,14 +101,12 @@ namespace RALogicEditor.Services.Explainer
         // Added contextSize to support Bit Label lookup for values
         public string FormatValue(Operand op, int index, string contextAddress = "", string contextSize = "")
         {
-            if (op.Type == "Float") return op.Value;
-
+            // MOVED: Try lookup BEFORE returning raw float value.
             if (!string.IsNullOrEmpty(contextAddress))
             {
                 // 1. Check for Bit Label Value (0=false, 1="Label")
                 if (!string.IsNullOrEmpty(contextSize) && contextSize.StartsWith("Bit"))
                 {
-                    // Local ParseHex
                     string clean = op.Value.Replace("0x", "").Trim();
                     if (long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long bitVal))
                     {
@@ -122,10 +120,13 @@ namespace RALogicEditor.Services.Explainer
                     }
                 }
 
-                // 2. Check for Enum Label
+                // 2. Check for Enum Label (Float or Int)
                 string enumLabel = TryGetEnumLabel(contextAddress, op.Value, index);
                 if (!string.IsNullOrEmpty(enumLabel)) return $"\"{enumLabel}\"";
             }
+
+            // 3. Fallback: Raw formatting
+            if (op.Type == "Float") return op.Value;
 
             if (long.TryParse(op.Value.Replace("0x", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long defaultVal))
             {
@@ -280,22 +281,48 @@ namespace RALogicEditor.Services.Explainer
         {
             if (string.IsNullOrEmpty(content)) return "";
 
-            long targetVal = 0;
-            if (value.StartsWith("0x")) long.TryParse(value.Substring(2), NumberStyles.HexNumber, null, out targetVal);
-            else long.TryParse(value, out targetVal);
+            // Determine if we are looking up a Float or an Int based on the operand value
+            bool isFloatLookup = float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out float targetFloat);
+
+            long targetInt = 0;
+            if (!isFloatLookup)
+            {
+                if (value.StartsWith("0x")) long.TryParse(value.Substring(2), NumberStyles.HexNumber, null, out targetInt);
+                else long.TryParse(value, out targetInt);
+            }
 
             var lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // UPDATED REGEX: Matches hex, integers, negatives, and decimals (e.g. -1.0, 0.5)
+            var regex = new Regex(@"^\s*(?:0x)?([0-9A-Fa-f\.\-]+)\s*[:=]\s*(.+)");
+
             foreach (var line in lines)
             {
-                var match = Regex.Match(line, @"^\s*(?:0x)?([0-9A-Fa-f]+)\s*[:=]\s*(.+)");
+                var match = regex.Match(line);
                 if (match.Success)
                 {
-                    long lineVal = 0;
-                    if (!long.TryParse(match.Groups[1].Value, NumberStyles.HexNumber, null, out lineVal)) continue;
+                    string keyStr = match.Groups[1].Value;
+                    string label = match.Groups[2].Value.Trim();
 
-                    if (lineVal == targetVal)
+                    if (isFloatLookup)
                     {
-                        return match.Groups[2].Value.Trim();
+                        // Try parsing the note line key as a float
+                        if (float.TryParse(keyStr, NumberStyles.Float, CultureInfo.InvariantCulture, out float lineFloat))
+                        {
+                            // Use a small epsilon for float comparison safety
+                            if (Math.Abs(lineFloat - targetFloat) < 0.0001f)
+                            {
+                                return label;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Existing Integer/Hex Logic
+                        if (long.TryParse(keyStr, NumberStyles.HexNumber, null, out long lineInt))
+                        {
+                            if (lineInt == targetInt) return label;
+                        }
                     }
                 }
             }
