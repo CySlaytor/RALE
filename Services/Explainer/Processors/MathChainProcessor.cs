@@ -1,6 +1,7 @@
 ﻿using RALogicEditor.Definitions;
 using RALogicEditor.Models;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace RALogicEditor.Services.Explainer.Processors
@@ -27,7 +28,7 @@ namespace RALogicEditor.Services.Explainer.Processors
             {
                 var cond = conditions[ptr];
 
-                // FIX: Skip Add Address lines so they don't break the math chain
+                // Skip Add Address lines
                 if (cond.Flag == "Add Address")
                 {
                     ptr++;
@@ -50,14 +51,12 @@ namespace RALogicEditor.Services.Explainer.Processors
                 string left = "";
                 string right = "";
 
-                // Get Operand Text
                 if (cond.LeftOperand.Type == "Recall") left = currentExpression;
                 else left = ctx.GetOperandText(cond.LeftOperand, ptr, false, "", "", true);
 
                 if (cond.RightOperand.Type == "Recall") right = currentExpression;
                 else right = ctx.GetOperandText(cond.RightOperand, ptr, true, cond.LeftOperand.Value, cond.LeftOperand.Size, true);
 
-                // Optimization: Simplify 0+X, X*1, etc.
                 bool leftIsZero = IsZero(cond.LeftOperand);
                 bool rightIsZero = IsZero(cond.RightOperand);
 
@@ -67,34 +66,59 @@ namespace RALogicEditor.Services.Explainer.Processors
                     else if (rightIsZero) currentExpression = left;
                     else currentExpression = $"({left} + {right})";
                 }
-                else if (op == "-" && rightIsZero)
-                {
-                    currentExpression = left;
-                }
-                else if (op == "*" && (IsOne(cond.LeftOperand) || IsOne(cond.RightOperand)))
-                {
-                    currentExpression = IsOne(cond.LeftOperand) ? right : left;
-                }
-                else if (op == "/" && IsOne(cond.RightOperand))
-                {
-                    currentExpression = left;
-                }
+                else if (op == "-" && rightIsZero) currentExpression = left;
+                else if (op == "*" && (IsOne(cond.LeftOperand) || IsOne(cond.RightOperand))) currentExpression = IsOne(cond.LeftOperand) ? right : left;
+                else if (op == "/" && IsOne(cond.RightOperand)) currentExpression = left;
                 else
                 {
-                    // Wrap previous expression if needed
                     if (!string.IsNullOrEmpty(currentExpression) && currentExpression.Contains(" "))
                     {
                         if (cond.LeftOperand.Type == "Recall") left = $"({left})";
                         if (cond.RightOperand.Type == "Recall") right = $"({right})";
                     }
-
                     currentExpression = $"{left} {op} {right}";
                 }
 
                 ptr++;
             }
 
-            // 2. Process Result Checks
+            // 2. Look Ahead: Is this Math Chain feeding into an Accumulator that uses {recall}?
+            // If so, consume this line silently. The AccumulatorProcessor will explain the context ("increasing"/"decreasing").
+            if (ptr < conditions.Count)
+            {
+                var nextFlag = conditions[ptr].Flag;
+                if (nextFlag.Contains("Add") || nextFlag.Contains("Sub"))
+                {
+                    int scan = ptr;
+                    bool usesRecall = false;
+                    while (scan < conditions.Count)
+                    {
+                        var c = conditions[scan];
+                        if (!c.Flag.Contains("Add") && !c.Flag.Contains("Sub") && !c.Flag.Contains("Next") && c.Flag != "Add Address")
+                            break;
+
+                        if (c.LeftOperand.Type == "Recall" || c.RightOperand.Type == "Recall")
+                        {
+                            usesRecall = true;
+                            break;
+                        }
+                        scan++;
+                    }
+
+                    if (usesRecall)
+                    {
+                        // Return empty text to "consume" these lines silently.
+                        return new ProcessorResult
+                        {
+                            Text = "",
+                            Category = ExplanationCategory.Context,
+                            ConditionsConsumed = ptr - index
+                        };
+                    }
+                }
+            }
+
+            // 3. Process Result Checks (if not consumed above)
             var sb = new StringBuilder();
             sb.AppendLine($"Calculate: {currentExpression}");
 
@@ -104,7 +128,6 @@ namespace RALogicEditor.Services.Explainer.Processors
             {
                 var cond = conditions[ptr];
 
-                // Skip Add Address lines here too
                 if (cond.Flag == "Add Address")
                 {
                     consumed++;

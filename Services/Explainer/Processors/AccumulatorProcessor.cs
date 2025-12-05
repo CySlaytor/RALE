@@ -12,6 +12,7 @@ namespace RALogicEditor.Services.Explainer.Processors
     public class AccumulatorProcessor : ILogicProcessor
     {
         // Priority MUST be higher (lower value) than PointerCleanupProcessor (5).
+        // This ensures we catch AddAddress lines that are part of an accumulator chain before they are hidden.
         public int Priority => 3;
 
         // Definition for internal chain tracking
@@ -34,6 +35,7 @@ namespace RALogicEditor.Services.Explainer.Processors
             if (isAccumulatorStart) return true;
 
             // 2. Logic Chain Start (Add Address / AndNext / OrNext / ResetNextIf)
+            // Sometimes an accumulator starts with pointer logic or a gate
             bool isPotentialLead = cond.Flag == "Add Address" ||
                                    cond.Flag == "AndNext" ||
                                    cond.Flag == "OrNext" ||
@@ -74,14 +76,15 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             var result = new ProcessorResult { Category = ExplanationCategory.Complex };
 
-            // 1. Collect all accumulator chains, including non-contiguous ones
+            // ---------------------------------------------------------
+            // STEP 1: Collect all accumulator chains (Grouping Logic)
+            // ---------------------------------------------------------
             var chains = new List<AccumulatorChainDef>();
             int currentPtr = index;
 
-            // Main collection loop
             while (currentPtr < conditions.Count)
             {
-                // If we are scanning ahead and hit a chain already processed (unlikely in this logic flow, but safe)
+                // If we are scanning ahead and hit a chain already processed
                 if (ctx.ProcessedIndices.Contains(currentPtr)) break;
 
                 // Extract a single contiguous accumulator chain
@@ -90,17 +93,17 @@ namespace RALogicEditor.Services.Explainer.Processors
                 if (conditionsInChain.Count == 0)
                 {
                     // No chain found here. Check if we should stop or scan forward.
-                    // If we have existing chains, we try to skip intermediate non-accumulator logic.
                     if (chains.Count > 0)
                     {
                         // Check for barriers: ResetIf, PauseIf, OrNext
+                        // If we hit these flags outside of a chain, they usually break the group.
                         var currCond = conditions[currentPtr];
                         if (currCond.Flag == "Reset If" || currCond.Flag == "Pause If" || currCond.Flag == "OrNext")
                         {
-                            break; // Barrier found, stop grouping
+                            break;
                         }
 
-                        // If it's a standard condition (empty flag) or other safe intermediates, skip and continue scanning
+                        // If it's a standard condition (empty flag), skip and continue scanning
                         currentPtr++;
                         continue;
                     }
@@ -118,8 +121,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                 if (!hasAccumulatorAction)
                 {
                     // This chain extracted only setup flags (e.g. Add Address) but no actual Add/Sub action.
-                    // This shouldn't happen if CanProcess passed, but safety check.
-                    // Treat as intermediate logic?
                     if (chains.Count > 0)
                     {
                         currentPtr = endPtr + 1;
@@ -132,9 +133,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                 AchievementCondition? termCond = null;
                 if (endPtr < conditions.Count) termCond = conditions[endPtr];
 
-                // Check if this chain is connected to previous chains via OrNext/AndNext at the terminal level.
-                // If the previous chain ended with `OrNext`, we MUST be contiguous.
-                // If we skipped lines to get here, but the previous chain ended with `OrNext`, that's invalid logic (OrNext implies immediate follow-up).
+                // Check connectivity with previous chains
                 if (chains.Count > 0)
                 {
                     var prev = chains.Last();
@@ -169,6 +168,8 @@ namespace RALogicEditor.Services.Explainer.Processors
                 };
 
                 // "Terminal Stealing" Logic (for naked gates)
+                // If a chain ends with a gate (AndNext) but that gate is technically the start of the next line,
+                // we move it to the previous chain's terminal.
                 if (chains.Count > 0 && chainDef.Conditions.Count > 0)
                 {
                     var prev = chains.Last();
@@ -194,55 +195,55 @@ namespace RALogicEditor.Services.Explainer.Processors
                 // Add to collection and mark as processed
                 chains.Add(chainDef);
 
-                // Mark indices of this chain (except the first one, which is 'index' and is being processed now)
-                // We will handle 'ConditionsConsumed' for the first chain, but mark subsequent chains to be skipped.
+                // Mark indices of this chain (except the first one, which is 'index')
                 if (chains.Count > 1)
                 {
                     ctx.ProcessedIndices.Add(currentPtr);
                 }
 
-                // Determine next scan pointer
-                bool hasExplicitConnector = termCond != null && (termCond.Flag == "AndNext" || termCond.Flag == "OrNext");
-
-                if (hasExplicitConnector)
-                {
-                    currentPtr = endPtr + 1;
-                }
-                else
-                {
-                    // Scan forward to look for split accumulator blocks
-                    // We just increment pointer and loop, the loop logic handles skipping.
-                    currentPtr = endPtr + 1;
-                }
+                currentPtr = endPtr + 1;
             }
 
+            // Fallback: If no accumulator chains found, process as standard
             if (chains.Count == 0)
             {
                 return new StandardConditionProcessor().Process(ctx, conditions, index);
             }
 
-            // --- RECALL LOGIC CONTEXT ---
+            // ---------------------------------------------------------
+            // STEP 2: Recall Context Detection (Remember/Recall)
+            // ---------------------------------------------------------
             string recallContext = "";
             bool hasRecallContext = false;
 
+            // Check if the condition immediately preceding this block was a "Remember"
             if (index > 0 && conditions[index - 1].Flag == "Remember")
             {
                 var remCond = conditions[index - 1];
+
+                // Verify if any of the collected chains actually USE {recall}
                 bool chainUsesRecall = chains.Any(ch => ch.Conditions.Any(c => c.LeftOperand.Type == "Recall" || c.RightOperand.Type == "Recall"));
 
                 if (chainUsesRecall)
                 {
                     bool leftIsDelta = remCond.LeftOperand.Type == "Delta";
-                    bool leftIsMem = remCond.LeftOperand.Type == "Mem";
-                    bool rightIsDelta = remCond.RightOperand.Type == "Delta";
                     bool rightIsMem = remCond.RightOperand.Type == "Mem";
                     bool sameAddr = remCond.LeftOperand.Value == remCond.RightOperand.Value;
 
+                    // Detect Increasing vs Decreasing
                     if (remCond.Operator == "-" && sameAddr)
                     {
                         string varName = ctx.GetName(remCond.LeftOperand, index - 1, true);
-                        if (leftIsDelta && rightIsMem) { recallContext = $"{varName} decreasing"; hasRecallContext = true; }
-                        else if (remCond.LeftOperand.Type == "Mem" && remCond.RightOperand.Type == "Delta") { recallContext = $"{varName} increasing"; hasRecallContext = true; }
+                        if (leftIsDelta && rightIsMem)
+                        {
+                            recallContext = $"{varName} decreasing";
+                            hasRecallContext = true;
+                        }
+                        else if (remCond.LeftOperand.Type == "Mem" && remCond.RightOperand.Type == "Delta")
+                        {
+                            recallContext = $"{varName} increasing";
+                            hasRecallContext = true;
+                        }
                     }
 
                     if (!hasRecallContext)
@@ -252,11 +253,14 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
             }
 
-            // 2. Analyze Chains for Transition (Delta -> Mem)
+            // ---------------------------------------------------------
+            // STEP 3: Transition Analysis (Sum of Delta vs Sum of Mem)
+            // ---------------------------------------------------------
             var deltaChains = chains.Where(c => IsChainDelta(c.Conditions)).ToList();
             var memChains = chains.Where(c => !IsChainDelta(c.Conditions)).ToList();
 
             bool isTransition = false;
+            // Transition heuristic: We have Delta Chains AND Mem Chains, and they are joined by OrNext (usually)
             if (deltaChains.Count > 0 && memChains.Count > 0)
             {
                 var lastDelta = deltaChains.Last();
@@ -268,6 +272,7 @@ namespace RALogicEditor.Services.Explainer.Processors
 
             if (isTransition)
             {
+                // Generate Transition Logic Text (Sum A > Sum B)
                 string fromText = BuildCondensedChainString(deltaChains, ctx, conditions);
                 string toText = BuildCondensedChainString(memChains, ctx, conditions);
 
@@ -291,12 +296,14 @@ namespace RALogicEditor.Services.Explainer.Processors
             }
             else
             {
-                // -- Measured Context Detection --
+                // ---------------------------------------------------------
+                // STEP 4: Standard / Measured Logic
+                // ---------------------------------------------------------
                 AchievementCondition? finalTerminal = chains.Count > 0 ? chains.Last().Terminal : null;
                 bool isMeasuredContext = false;
                 string measuredHeader = "";
 
-                // Check if the condition AFTER the last chain is Measured
+                // Detect if there is a Measured condition immediately following the last chain
                 int lastChainEnd = chains.Last().EndIndex;
                 if (lastChainEnd + 1 < conditions.Count)
                 {
@@ -315,6 +322,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     isMeasuredContext = true;
                 }
 
+                // Build Measured Header if applicable
                 if (isMeasuredContext && finalTerminal != null)
                 {
                     bool isHitChain = chains.Any(ch => ch.Conditions.Any(c => c.Flag.Contains("Hits"))) || finalTerminal.Flag.Contains("Hits");
@@ -329,6 +337,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     result.Category = ExplanationCategory.Complex;
                 }
 
+                // Build Chain Description Loop
                 var sb = new StringBuilder();
                 bool isTriggerStart = !isMeasuredContext;
 
@@ -343,7 +352,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     bool chainHasHits = chainTemplate.Conditions.Any(c => c.Flag.Contains("Hits"));
                     bool ignoreTerminalForGrouping = isMeasuredContext && chainHasHits;
 
-                    // Array detection
+                    // 4a. Array Detection (Group identical sequential chains)
                     int rangeEnd = i;
                     while (rangeEnd + 1 < chains.Count)
                     {
@@ -357,6 +366,7 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                     if (count > 3)
                     {
+                        // ARRAY LOGIC
                         var lastChain = chains[rangeEnd];
                         var terminal = lastChain.Terminal;
 
@@ -410,7 +420,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                     }
                     else
                     {
-                        // Single Chain Processing
+                        // SINGLE CHAIN LOGIC
                         var chain = chains[i];
                         var rawBlocks = PrepareDisplayBlocks(chain);
                         var displayBlocks = DeduplicateBlocks(rawBlocks, ctx);
@@ -424,7 +434,14 @@ namespace RALogicEditor.Services.Explainer.Processors
                         if (chain.Terminal != null)
                         {
                             var term = chain.Terminal;
-                            string noun = (hasRecallContext && currentChainUsesRecall) ? recallContext : "items";
+
+                            // FIX: Avoid redundant text. If Measured Header already describes the variable (e.g. "NPCs decreasing"),
+                            // use "events" as the noun for the body text instead of repeating "NPCs decreasing".
+                            string noun = "items";
+                            if (hasRecallContext && currentChainUsesRecall)
+                            {
+                                noun = isMeasuredContext ? "events" : recallContext;
+                            }
 
                             if (term.Flag == "MeasuredIf")
                             {
@@ -436,7 +453,6 @@ namespace RALogicEditor.Services.Explainer.Processors
                             }
                             else if (term.Flag.StartsWith("Measured"))
                             {
-                                // If inside MeasuredContext, we just describe the accumulation, not "Start measuring"
                                 string valText = (term.RequiredHits > 0) ? term.RequiredHits.ToString() : ctx.FormatValue(term.RightOperand, conditions.IndexOf(term), term.LeftOperand.Value, term.LeftOperand.Size);
                                 string opText = ctx.GetOperatorText(term.Operator);
 
@@ -448,16 +464,13 @@ namespace RALogicEditor.Services.Explainer.Processors
                                 {
                                     bool isHitChain = chain.Conditions.Any(c => c.Flag.Contains("Hits")) || term.Flag.Contains("Hits");
                                     string label = isHitChain ? "hits" : "value";
-                                    if (hasRecallContext)
-                                        chainText = $"Start measuring {recallContext} up to {valText}: {expandToken}";
-                                    else
-                                        chainText = $"Start measuring {label} up to {valText}: {expandToken}";
+                                    chainText = hasRecallContext ? $"Start measuring {recallContext} up to {valText}: {expandToken}" : $"Start measuring {label} up to {valText}: {expandToken}";
                                     isTriggerStart = false;
                                 }
                             }
                             else
                             {
-                                // Determine if we show value
+                                // Standard Logic (Hit Count or Value Sum)
                                 bool isHitChain = chain.Conditions.Any(c => c.Flag.Contains("Hits"));
                                 bool showVal = true;
                                 if (isMeasuredContext) showVal = false;
@@ -533,21 +546,8 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
             }
 
-            if (chains.Count > 0)
-            {
-                // We return consumption ONLY for the first chain.
-                // The main loop will advance past the first chain.
-                // It will then process intermediate rows.
-                // When it hits the second chain (which we already included in the text), 
-                // the check at the top of Process() will catch it via ProcessedIndices and skip it.
-                int firstChainLength = (chains[0].EndIndex - chains[0].StartIndex) + 1;
-                result.ConditionsConsumed = firstChainLength;
-            }
-            else
-            {
-                result.ConditionsConsumed = 1;
-            }
-
+            // Return consumption count for just the first chain to allow main loop to handle skipping
+            result.ConditionsConsumed = chains.Count > 0 ? (chains[0].EndIndex - chains[0].StartIndex) + 1 : 1;
             return result;
         }
 
@@ -557,11 +557,9 @@ namespace RALogicEditor.Services.Explainer.Processors
             int i = 0;
             while (i < chains.Count)
             {
-                // Collapse identical terminals logic
                 int rangeEnd = i;
                 while (rangeEnd + 1 < chains.Count)
                 {
-                    // Strict match here because we are in Transition mode logic which expects specific values
                     if (AreChainsStructureEqual(chains[i], chains[rangeEnd + 1], false, false))
                         rangeEnd++;
                     else
@@ -608,27 +606,23 @@ namespace RALogicEditor.Services.Explainer.Processors
                 }
                 else if (c.Flag == "AndNext" || c.Flag == "OrNext" || c.Flag == "ResetNextIf")
                 {
-                    // Case 1: "OrNext" inside an accumulator chain usually signifies the end of a check (e.g. Sum=X OR Sum=Y).
-                    // We must break here to treat it as a terminal.
+                    // If we encounter OrNext inside an accumulator chain, it usually splits the logic.
                     if (hasAccumulator && c.Flag == "OrNext")
                     {
                         break;
                     }
-
                     buffer.Add(c);
                 }
                 else if (c.Flag.Contains("Add") || c.Flag.Contains("Sub"))
                 {
                     hasAccumulator = true;
-                    // Flush buffer (which might contain AndNext/AddAddress from previous lines) into the chain
                     chain.AddRange(buffer);
                     buffer.Clear();
                     chain.Add(c);
                 }
                 else
                 {
-                    // This is a terminal (ResetIf, PauseIf, Measured, or Empty/Trigger)
-                    // Stop processing the chain here.
+                    // Terminals (Measured, ResetIf, etc) stop the extraction
                     break;
                 }
                 ptr++;
@@ -701,7 +695,6 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                 int index = ctx.Group.Conditions.IndexOf(leaf);
                 string name = ctx.GetName(leaf.LeftOperand, index, false);
-                // Include operator and right operand in signature to distinguish different checks on same address
                 string signature = $"{name} {leaf.Operator} {leaf.RightOperand.Value}";
 
                 if (seenSignatures.Add(signature))
@@ -767,7 +760,7 @@ namespace RALogicEditor.Services.Explainer.Processors
                 {
                     if (c1.Terminal.Flag != c2.Terminal.Flag) return false;
                     if (c1.Terminal.Operator != c2.Terminal.Operator) return false;
-                    if (!AreValuesEqual(c1.Terminal.RightOperand.Value, c2.Terminal.RightOperand.Value, false)) return false; // Terminals must usually match value (e.g. 5 vs 6 hits)
+                    if (!AreValuesEqual(c1.Terminal.RightOperand.Value, c2.Terminal.RightOperand.Value, false)) return false;
                 }
             }
 
@@ -796,7 +789,7 @@ namespace RALogicEditor.Services.Explainer.Processors
 
                 if (c1RightIsVal && c2RightIsVal)
                 {
-                    if (!AreValuesEqual(cond1.RightOperand.Value, cond2.RightOperand.Value, false)) return false; // Right side constants usually must match
+                    if (!AreValuesEqual(cond1.RightOperand.Value, cond2.RightOperand.Value, false)) return false;
                 }
                 else
                 {
@@ -810,8 +803,6 @@ namespace RALogicEditor.Services.Explainer.Processors
         private bool AreValuesEqual(string v1, string v2, bool ignoreAddresses)
         {
             if (v1 == v2) return true;
-
-            // If checking array-compatibility, ignore actual hex values for Memory fields
             if (ignoreAddresses) return true;
 
             string clean1 = string.IsNullOrEmpty(v1) ? "0" : v1.Trim().Replace("0x", "");
