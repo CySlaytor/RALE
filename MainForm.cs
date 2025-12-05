@@ -172,36 +172,68 @@ namespace RALogicEditor
         // Full Project Load Logic
         public void LoadFiles(string primaryPath)
         {
-            ImageCache.Clear(); // Free memory
-            _recentFiles.Add(primaryPath);
-            UpdateRecentMenu();
+            // 1. Lock UI to prevent flickering and event storms
+            _isLoading = true;
+            achievementGrid.SuspendLayout();
 
-            _currentFilePath = primaryPath;
-            _selectedAsset = null;
-            achievementGrid.Rows.Clear();
-            _mainHistory.Clear();
-            triggerEditor.Clear();
+            try
+            {
+                ImageCache.Clear();
+                _recentFiles.Add(primaryPath);
+                UpdateRecentMenu();
 
-            // Repository loads JSON + User.txt + Notes + RP
-            _projectRepo.LoadFiles(primaryPath, out _currentUserFilePath);
-            _rpMetadata.Load(_projectRepo.CurrentGameId);
+                _currentFilePath = primaryPath;
+                _selectedAsset = null;
+                achievementGrid.Rows.Clear();
+                _mainHistory.Clear();
+                triggerEditor.Clear();
 
-            if (_projectRepo.ServerData != null)
-                this.Text = $"RA Logic Editor - {_projectRepo.CurrentTitle}";
+                // 2. Load Repository
+                try
+                {
+                    _projectRepo.LoadFiles(primaryPath, out _currentUserFilePath);
+                    _rpMetadata.Load(_projectRepo.CurrentGameId);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error loading files: {ex.Message}", "Load Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
 
-            // Default view to JSON to show server data initially
-            if (cmbSource.SelectedItem?.ToString() != "JSON")
-                cmbSource.SelectedItem = "JSON";
+                if (_projectRepo.ServerData != null)
+                    this.Text = $"RA Logic Editor - {_projectRepo.CurrentTitle}";
+                else
+                    this.Text = $"RA Logic Editor - {Path.GetFileName(primaryPath)}";
 
-            ReloadDataView();
+                // 3. INTELLIGENT SOURCE SELECTION
+                // If Server Data is missing (Local file only), force "Local" view.
+                // Otherwise, default to "JSON" (Server) view.
+                string targetSource = _projectRepo.ServerData != null ? "JSON" : "Local";
 
-            // Push notes to sub-editors
-            var notes = _projectRepo.LocalData?.Notes ?? new List<CodeNote>();
-            codeNoteEditor.SetNotes(notes);
-            triggerEditor.SetNotes(notes);
+                // Only update if different to avoid triggering unnecessary events, 
+                // though _isLoading protects us now anyway.
+                if (cmbSource.SelectedItem?.ToString() != targetSource)
+                {
+                    cmbSource.SelectedItem = targetSource;
+                }
 
-            RunGlobalValidation();
-            UpdateUndoRedoState();
+                // 4. Force one clean refresh
+                ReloadDataView();
+
+                // Push notes to sub-editors
+                var notes = _projectRepo.LocalData?.Notes ?? new List<CodeNote>();
+                codeNoteEditor.SetNotes(notes);
+                triggerEditor.SetNotes(notes);
+
+                RunGlobalValidation();
+                UpdateUndoRedoState();
+            }
+            finally
+            {
+                // 5. Unlock UI
+                achievementGrid.ResumeLayout();
+                _isLoading = false;
+            }
         }
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
