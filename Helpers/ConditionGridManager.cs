@@ -313,11 +313,16 @@ namespace RALogicEditor.Helpers
         {
             if (e.RowIndex < 0) return;
             var row = _grid.Rows[e.RowIndex];
-            if (row.Tag is AchievementCondition cond)
+            if (row.Tag is AchievementCondition cond && _grid.Tag is AchievementConditionGroup group)
             {
                 ApplyConditionLogicRules(cond);
+
+                // FIX: Get correct Model Index, not visual Row Index, for alias resolution
+                // When chains are collapsed, row.Index != Model Index
+                int modelIndex = group.Conditions.IndexOf(cond);
+
                 // Refresh visuals (applying ShowDecimal and ShowAliases if active)
-                ConditionGridRenderer.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, _grid.Tag as AchievementConditionGroup, e.RowIndex);
+                ConditionGridRenderer.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, group, modelIndex);
                 LogicChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -326,6 +331,8 @@ namespace RALogicEditor.Helpers
         private void OnContextMenuItemClick(object? sender, EventArgs e)
         {
             if (_grid.ReadOnly || sender is not ToolStripMenuItem item) return;
+            if (_grid.Tag is not AchievementConditionGroup group) return;
+
             string val = item.Tag as string ?? "";
             if (val == RaLogicSyntax.NO_FLAG_TEXT || val == RaLogicSyntax.NO_OPERATOR_TEXT) val = "";
 
@@ -346,8 +353,12 @@ namespace RALogicEditor.Helpers
                     else if (colName == "ColRSize") cond.RightOperand.Size = val;
 
                     ApplyConditionLogicRules(cond);
+
+                    // FIX: Get correct Model Index, not visual Row Index, for alias resolution
+                    int modelIndex = group.Conditions.IndexOf(cond);
+
                     // Updated to use ConditionGridRenderer
-                    ConditionGridRenderer.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, _grid.Tag as AchievementConditionGroup, row.Index);
+                    ConditionGridRenderer.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, group, modelIndex);
                     changed = true;
                 }
             }
