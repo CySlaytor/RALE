@@ -44,6 +44,7 @@ namespace RALogicEditor
         #region State
         private IAssetItem? _selectedAsset;   // Currently edited item
         private bool _isLoading;              // Suppress events during batch updates
+        private bool _isDirty = false;        // Tracks if changes were made in current session
         private string _currentFilePath = ""; // Path to source JSON
         private string _currentUserFilePath = ""; // Path to local User.txt
         private List<IAssetItem> _currentDisplayList = new(); // Items currently visible in grid
@@ -246,6 +247,9 @@ namespace RALogicEditor
 
                 RunGlobalValidation();
                 UpdateUndoRedoState();
+
+                // Reset dirty flag after a fresh load
+                _isDirty = false;
             }
             finally
             {
@@ -268,17 +272,12 @@ namespace RALogicEditor
         // Prompts user if there are unsaved local changes
         private bool ConfirmDiscardChanges()
         {
-            if (_projectRepo.LocalData == null) return true;
-            bool hasChanges = _projectRepo.LocalData.Achievements.Any(a => a.State != AssetState.Synced) ||
-                              _projectRepo.LocalData.Leaderboards.Any(l => l.State != AssetState.Synced);
+            if (!_isDirty) return true;
 
-            if (hasChanges)
-            {
-                var result = MessageBox.Show("You have unsaved changes. Any unsaved local changes will be lost.\n\nContinue?",
-                    "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                return result == DialogResult.Yes;
-            }
-            return true;
+            var result = MessageBox.Show("You have unsaved changes. Any unsaved local changes will be lost.\n\nContinue?",
+                "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+            return result == DialogResult.Yes;
         }
 
         #region State & Settings Management
@@ -487,6 +486,7 @@ namespace RALogicEditor
                 MessageBox.Show("Rich Presence script updated in memory.", "RP Updated");
             }
 
+            _isDirty = true;
             MessageBox.Show($"Multi-Region logic applied to {count} assets.", "Batch Complete");
             ReloadDataView();
             if (_selectedAsset != null) SelectAssetInGrid(_selectedAsset);
@@ -498,6 +498,7 @@ namespace RALogicEditor
             _projectRepo.EnsureLocalDataExists();
             EnsureAssetIsLocal();
             UpdateAssetState(_selectedAsset);
+            _isDirty = true;
         }
 
         private void TriggerEditor_AchievementDataChanged(object? sender, EventArgs e)
@@ -511,6 +512,8 @@ namespace RALogicEditor
                 EnsureAssetIsLocal();
                 UpdateAssetState(_selectedAsset);
             }
+
+            _isDirty = true;
 
             // Update visible grid row
             foreach (DataGridViewRow row in achievementGrid.Rows)
@@ -555,6 +558,7 @@ namespace RALogicEditor
                 if (toRemove != null) _projectRepo.LocalData.Achievements.Remove(toRemove);
             }
 
+            _isDirty = true;
             ReloadDataView();
             LoadSelectedAsset();
         }
@@ -641,6 +645,7 @@ namespace RALogicEditor
             _projectRepo.LocalData.Achievements = previousState.Achievements;
             _projectRepo.LocalData.Leaderboards = previousState.Leaderboards;
             _projectRepo.LocalData.Notes = previousState.Notes;
+            _isDirty = true;
             ReloadDataView();
             LoadSelectedAsset();
         }
@@ -652,6 +657,7 @@ namespace RALogicEditor
             _projectRepo.LocalData.Achievements = nextState.Achievements;
             _projectRepo.LocalData.Leaderboards = nextState.Leaderboards;
             _projectRepo.LocalData.Notes = nextState.Notes;
+            _isDirty = true;
             ReloadDataView();
             LoadSelectedAsset();
         }

@@ -83,6 +83,10 @@ namespace RALogicEditor
                 _currentUserFilePath = savePath;
                 _projectRepo.SaveRichPresence();
                 _projectRepo.Metadata.Save();
+
+                // Reset session dirty flag
+                _isDirty = false;
+
                 MessageBox.Show("Saved to " + savePath);
             }
             catch (Exception ex) { MessageBox.Show($"Error saving: {ex.Message}"); }
@@ -132,6 +136,8 @@ namespace RALogicEditor
             }
 
             if (cmbSource.SelectedItem?.ToString() != "New") cmbSource.SelectedItem = "New";
+
+            _isDirty = true;
             ReloadDataView();
 
             // Select the newly created item
@@ -176,6 +182,7 @@ namespace RALogicEditor
             }
 
             cmbSource.SelectedItem = "New";
+            _isDirty = true;
             ReloadDataView();
             achievementGrid.ClearSelection();
             List<int> indicesToSelect = new List<int>();
@@ -202,6 +209,7 @@ namespace RALogicEditor
                     else if (item is RaLeaderboard rl) _projectRepo.LocalData.Leaderboards.Remove(rl);
                 }
             }
+            _isDirty = true;
             ReloadDataView();
         }
 
@@ -225,6 +233,7 @@ namespace RALogicEditor
                     }
                 }
             }
+            _isDirty = true;
             ReloadDataView();
             LoadSelectedAsset();
         }
@@ -298,6 +307,7 @@ namespace RALogicEditor
                     _projectRepo.LocalData.Achievements.Add(ach);
             }
 
+            _isDirty = true;
             ReloadDataView();
 
             // Restore Selection (based on Object Reference, not ID)
@@ -334,6 +344,8 @@ namespace RALogicEditor
             int currentId = 111000001;
             foreach (var ach in _projectRepo.LocalData.Achievements) ach.ID = currentId++;
             foreach (var lb in _projectRepo.LocalData.Leaderboards) lb.ID = currentId++;
+
+            _isDirty = true;
             ReloadDataView();
         }
         #endregion
@@ -429,6 +441,8 @@ namespace RALogicEditor
                         count++;
                     }
                 }
+
+                _isDirty = true;
                 ReloadDataView();
                 if (_selectedAsset != null) LoadSelectedAsset();
                 MessageBox.Show($"Reverted {count} assets to {targetRegion}.");
@@ -443,6 +457,7 @@ namespace RALogicEditor
                 try
                 {
                     _projectRepo.RichPresence = RichPresenceParser.Parse(_rpMetadata.CurrentBackup.OriginalScript);
+                    _isDirty = true;
                     MessageBox.Show("Reverted.");
                 }
                 catch (Exception ex) { MessageBox.Show($"Error: {ex.Message}"); }
@@ -506,6 +521,7 @@ namespace RALogicEditor
             }
             if (anyChanges)
             {
+                _isDirty = true;
                 ReloadDataView();
                 if (_selectedAsset != null) SelectAssetInGrid(_selectedAsset);
             }
@@ -543,7 +559,6 @@ namespace RALogicEditor
                 selectedId = item.ID;
 
             // Preserve current view filters (Source, Category, AssetType)
-            // LoadFiles tends to reset Source based on JSON availability, so we must restore it to keep the view stable.
             int savedSource = cmbSource.SelectedIndex;
             int savedCategory = cmbCategory.SelectedIndex;
             int savedType = cmbAssetType.SelectedIndex;
@@ -551,29 +566,18 @@ namespace RALogicEditor
             LoadFiles(_currentFilePath);
 
             // Restore filters
-            // Note: Setting these triggers ReloadDataView via events
-            bool filterChanged = false;
             if (savedType >= 0 && savedType < cmbAssetType.Items.Count && cmbAssetType.SelectedIndex != savedType)
             {
                 cmbAssetType.SelectedIndex = savedType;
-                filterChanged = true;
             }
             if (savedCategory >= 0 && savedCategory < cmbCategory.Items.Count && cmbCategory.SelectedIndex != savedCategory)
             {
                 cmbCategory.SelectedIndex = savedCategory;
-                filterChanged = true;
             }
             if (savedSource >= 0 && savedSource < cmbSource.Items.Count && cmbSource.SelectedIndex != savedSource)
             {
                 cmbSource.SelectedIndex = savedSource;
-                filterChanged = true;
             }
-
-            // Ensure grid is refreshed if filters didn't change (because LoadFiles reset it, but if we forced it back, maybe event didn't fire if index was same?)
-            // Actually LoadFiles calls ReloadDataView at the end.
-            // If we changed an index above, it triggered another reload.
-            // If we didn't change an index, the grid is in the state LoadFiles left it (which might be "New" if JSON empty).
-            // If we want "JSON" but LoadFiles switched to "New", the above restore logic handles it.
 
             // Restore row selection
             if (selectedId != -1)

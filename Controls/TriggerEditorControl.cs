@@ -332,6 +332,8 @@ namespace RALogicEditor.Controls
         // Loads an asset into the editor
         public async void BindAchievement(IAssetItem asset, string setType = "Core")
         {
+            _isProgrammaticallyChanging = true;
+
             // ViewModel handles strategy and parsing
             _viewModel.LoadAsset(asset);
 
@@ -362,6 +364,8 @@ namespace RALogicEditor.Controls
             btnReset.Visible = asset.State != AssetState.Local;
             SetStatus("Asset loaded.");
             RunValidation();
+
+            _isProgrammaticallyChanging = false;
         }
 
         private void SetupAchievementUI(RaAchievement cheevo)
@@ -416,6 +420,7 @@ namespace RALogicEditor.Controls
 
         public void Clear()
         {
+            _isProgrammaticallyChanging = true;
             _viewModel.LoadAsset(new RaAchievement()); // Dummy clear
             txtTitle.Text = "";
             txtDescription.Text = "";
@@ -435,6 +440,7 @@ namespace RALogicEditor.Controls
             btnReset.Visible = false;
             SetStatus("Ready");
             ValidationCompleted?.Invoke(this, new List<ValidationIssue>());
+            _isProgrammaticallyChanging = false;
         }
 
         public void Undo() { _viewModel.Undo(); SetStatus("Undone."); }
@@ -595,9 +601,9 @@ namespace RALogicEditor.Controls
         private void btnAddNote_Click(object? sender, EventArgs e) => AddFromCodeNoteRequested?.Invoke(this, EventArgs.Empty);
         private void btnCopyDef_Click(object? sender, EventArgs e) { if (_viewModel.BoundAsset != null) Clipboard.SetText(_viewModel.BoundAsset.Logic); SetStatus("Full definition copied."); }
 
-        private void TxtTitle_TextChanged(object? sender, EventArgs e) { if (_viewModel.BoundAsset != null) { _viewModel.BoundAsset.Title = txtTitle.Text; AchievementDataChanged?.Invoke(this, EventArgs.Empty); } }
-        private void TxtDescription_TextChanged(object? sender, EventArgs e) { if (_viewModel.BoundAsset != null) { _viewModel.BoundAsset.Description = txtDescription.Text; AchievementDataChanged?.Invoke(this, EventArgs.Empty); } }
-        private void CmbPoints_Changed(object? sender, EventArgs e) { if (_viewModel.BoundAsset is RaAchievement r && int.TryParse(cmbPoints.Text, out int p)) { r.Points = p; AchievementDataChanged?.Invoke(this, EventArgs.Empty); } }
+        private void TxtTitle_TextChanged(object? sender, EventArgs e) { if (_isProgrammaticallyChanging) return; if (_viewModel.BoundAsset != null) { _viewModel.BoundAsset.Title = txtTitle.Text; AchievementDataChanged?.Invoke(this, EventArgs.Empty); } }
+        private void TxtDescription_TextChanged(object? sender, EventArgs e) { if (_isProgrammaticallyChanging) return; if (_viewModel.BoundAsset != null) { _viewModel.BoundAsset.Description = txtDescription.Text; AchievementDataChanged?.Invoke(this, EventArgs.Empty); } }
+        private void CmbPoints_Changed(object? sender, EventArgs e) { if (_isProgrammaticallyChanging) return; if (_viewModel.BoundAsset is RaAchievement r && int.TryParse(cmbPoints.Text, out int p)) { r.Points = p; AchievementDataChanged?.Invoke(this, EventArgs.Empty); } }
 
         private void ChkShowDecimal_CheckedChanged(object? sender, EventArgs e) { _showDecimal = chkShowDecimal.Checked; _gridManager.ShowDecimal = _showDecimal; RefreshCurrentGridDisplay(); }
         private void ChkAliasMode_CheckedChanged(object? sender, EventArgs e) { _showAliases = chkAliasMode.Checked; _gridManager.ShowAliases = _showAliases; RefreshCurrentGridDisplay(); }
@@ -611,6 +617,7 @@ namespace RALogicEditor.Controls
 
         private void CmbType_SelectedIndexChanged(object? sender, EventArgs e)
         {
+            if (_isProgrammaticallyChanging) return;
             if (_viewModel.BoundAsset is RaAchievement cheevo)
             {
                 cheevo.Type = cmbType.SelectedItem?.ToString() switch
