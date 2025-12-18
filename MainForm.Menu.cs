@@ -21,7 +21,12 @@ namespace RALogicEditor
         {
             if (!ConfirmDiscardChanges()) return;
             using var ofd = new OpenFileDialog { Filter = "JSON Files (*.json)|*.json|Text Files (*.txt)|*.txt|All Files (*.*)|*.*" };
-            if (ofd.ShowDialog() == DialogResult.OK) LoadFiles(ofd.FileName);
+            if (ofd.ShowDialog() == DialogResult.OK)
+            {
+                // Clear search when opening a new file to prevent confusion
+                txtAssetSearch.Text = "";
+                LoadFiles(ofd.FileName);
+            }
         }
 
         private void saveToolStripMenuItem_Click(object sender, EventArgs e)
@@ -91,7 +96,15 @@ namespace RALogicEditor
                 string text = string.IsNullOrEmpty(entry.GameTitle) ? entry.Path : $"{entry.GameTitle} | {entry.Path}";
                 var item = new ToolStripMenuItem(text);
                 string path = entry.Path;
-                item.Click += (s, args) => { if (ConfirmDiscardChanges()) LoadFiles(path); };
+                item.Click += (s, args) =>
+                {
+                    if (ConfirmDiscardChanges())
+                    {
+                        // Clear search when loading from recent too
+                        txtAssetSearch.Text = "";
+                        LoadFiles(path);
+                    }
+                };
                 recentToolStripMenuItem.DropDownItems.Add(item);
             }
         }
@@ -524,12 +537,45 @@ namespace RALogicEditor
             if (string.IsNullOrEmpty(_currentFilePath)) return;
             if (!ConfirmDiscardChanges()) return;
 
+            // Preserve selection
             int selectedId = -1;
             if (achievementGrid.SelectedRows.Count > 0 && achievementGrid.SelectedRows[0].Tag is IAssetItem item)
                 selectedId = item.ID;
 
+            // Preserve current view filters (Source, Category, AssetType)
+            // LoadFiles tends to reset Source based on JSON availability, so we must restore it to keep the view stable.
+            int savedSource = cmbSource.SelectedIndex;
+            int savedCategory = cmbCategory.SelectedIndex;
+            int savedType = cmbAssetType.SelectedIndex;
+
             LoadFiles(_currentFilePath);
 
+            // Restore filters
+            // Note: Setting these triggers ReloadDataView via events
+            bool filterChanged = false;
+            if (savedType >= 0 && savedType < cmbAssetType.Items.Count && cmbAssetType.SelectedIndex != savedType)
+            {
+                cmbAssetType.SelectedIndex = savedType;
+                filterChanged = true;
+            }
+            if (savedCategory >= 0 && savedCategory < cmbCategory.Items.Count && cmbCategory.SelectedIndex != savedCategory)
+            {
+                cmbCategory.SelectedIndex = savedCategory;
+                filterChanged = true;
+            }
+            if (savedSource >= 0 && savedSource < cmbSource.Items.Count && cmbSource.SelectedIndex != savedSource)
+            {
+                cmbSource.SelectedIndex = savedSource;
+                filterChanged = true;
+            }
+
+            // Ensure grid is refreshed if filters didn't change (because LoadFiles reset it, but if we forced it back, maybe event didn't fire if index was same?)
+            // Actually LoadFiles calls ReloadDataView at the end.
+            // If we changed an index above, it triggered another reload.
+            // If we didn't change an index, the grid is in the state LoadFiles left it (which might be "New" if JSON empty).
+            // If we want "JSON" but LoadFiles switched to "New", the above restore logic handles it.
+
+            // Restore row selection
             if (selectedId != -1)
             {
                 foreach (DataGridViewRow row in achievementGrid.Rows)

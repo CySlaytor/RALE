@@ -349,7 +349,7 @@ namespace RALogicEditor.Helpers
                     else if (colName == "ColLType") HandleTypeChange(cond.LeftOperand, val, cond.LeftOperand.Size);
                     else if (colName == "ColLSize") cond.LeftOperand.Size = val;
                     else if (colName == "ColCmp") { string old = cond.Operator; cond.Operator = val; HandleOperatorChange(cond, old); }
-                    else if (colName == "ColRType") HandleTypeChange(cond.RightOperand, val, cond.LeftOperand.Size);
+                    else if (colName == "ColRType") HandleTypeChange(cond.RightOperand, val, cond.LeftOperand.Size, cond.LeftOperand); // Pass LeftOperand for auto-copy
                     else if (colName == "ColRSize") cond.RightOperand.Size = val;
 
                     ApplyConditionLogicRules(cond);
@@ -366,10 +366,20 @@ namespace RALogicEditor.Helpers
         }
 
         // Auto-formats value when Type changes (e.g., reset Float to 1.0 or Value to 0)
-        private void HandleTypeChange(Operand op, string newType, string refSize)
+        private void HandleTypeChange(Operand op, string newType, string refSize, Operand? copyFrom = null)
         {
             string oldType = op.Type;
             if (oldType == newType) return;
+
+            // QoL: If switching Right Operand to Delta or Prior, default to copying the Left Operand (address/size)
+            if (copyFrom != null && (newType == "Delta" || newType == "Prior"))
+            {
+                op.Value = copyFrom.Value;
+                op.Size = copyFrom.Size;
+                op.Type = newType;
+                return;
+            }
+
             if (newType == "Recall") { op.Value = ""; op.Type = newType; return; }
             if (string.IsNullOrEmpty(op.Value) || oldType == "Recall")
             {

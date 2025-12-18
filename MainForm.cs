@@ -1,4 +1,5 @@
 #nullable enable
+using RALogicEditor;
 using RALogicEditor.Controls;
 using RALogicEditor.Definitions;
 using RALogicEditor.Forms;
@@ -13,6 +14,8 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace RALogicEditor
@@ -206,9 +209,17 @@ namespace RALogicEditor
                     this.Text = $"RA Logic Editor - {Path.GetFileName(primaryPath)}";
 
                 // 3. INTELLIGENT SOURCE SELECTION
-                // If Server Data is missing (Local file only), force "Local" view.
-                // Otherwise, default to "JSON" (Server) view.
-                string targetSource = _projectRepo.ServerData != null ? "JSON" : "Local";
+                // Check if Server Data actually contains assets.
+                // Just checking _projectRepo.ServerData != null is insufficient because empty JSONs exist.
+                bool hasServerAssets = _projectRepo.ServerData != null &&
+                                       _projectRepo.ServerData.Sets != null &&
+                                       _projectRepo.ServerData.Sets.Any(s =>
+                                           (s.Achievements != null && s.Achievements.Count > 0) ||
+                                           (s.Leaderboards != null && s.Leaderboards.Count > 0));
+
+                // If Server Data has assets, default to "JSON".
+                // If it is empty or missing, default to "New" so the user can see their local work immediately.
+                string targetSource = hasServerAssets ? "JSON" : "New";
 
                 // Only update if different to avoid triggering unnecessary events, 
                 // though _isLoading protects us now anyway.
