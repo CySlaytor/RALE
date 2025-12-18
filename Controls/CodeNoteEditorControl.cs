@@ -83,9 +83,13 @@ namespace RALogicEditor.Controls
             string currentText = txtNoteBody.Text;
             if (string.IsNullOrWhiteSpace(currentText)) return;
 
-            // Use the Logic helper to fix indentation, sort, and merge
-            // Pass the indentation preference from the checkbox
-            string fixedText = CodeNoteLogic.FixHierarchy(currentText, chkIndentValues.Checked);
+            // Use the ported Logic helper to fix indentation, sort, and merge
+            // Pass the indentation prefix from settings and the indentation preference
+            string fixedText = CodeNoteLogic.FixHierarchy(
+                currentText,
+                AppSettings.Current.NotePrefix,
+                chkIndentValues.Checked
+            );
 
             // Update text box (will trigger TextChanged -> ViewModel buffering)
             if (txtNoteBody.Text != fixedText)

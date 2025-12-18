@@ -152,6 +152,14 @@ namespace RALogicEditor
             clearDataResetToolStripMenuItem.Click += ClearDataResetToolStripMenuItem_Click;
             viewReviewerToolStripMenuItem.Click += (s, e) => ToggleReviewer();
 
+            // --- New Formatting Settings Item ---
+            var settingsItem = new ToolStripMenuItem("Note Formatting Settings...");
+            settingsItem.Click += (s, e) => {
+                using var form = new SettingsForm();
+                form.ShowDialog();
+            };
+            editToolStripMenuItem.DropDownItems.Insert(3, settingsItem);
+
             // Dynamic Menu Construction
             var viewRpDiffItem = new ToolStripMenuItem("View RP Diff");
             viewRpDiffItem.Click += ViewRpDiff_Click;

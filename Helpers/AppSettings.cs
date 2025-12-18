@@ -37,6 +37,12 @@ namespace RALogicEditor.Helpers
         // Code Note Editor State
         public bool Notes_ShowLeafsOnly { get; set; } = false;
         public bool Notes_IndentValues { get; set; } = true;
+
+        // --- Ported Formatting Settings ---
+        public string NotePrefix { get; set; } = ".";
+        public string NoteSuffix { get; set; } = " |";
+        public bool NoteAlignSuffixes { get; set; } = true;
+        public bool NoteSuffixOnLastLineOnly { get; set; } = false;
     }
 
     public static class AppSettings
