@@ -75,7 +75,7 @@ namespace RALogicEditor.Logic
     {
         private class CodeNoteNode
         {
-            public string Content { get; set; }
+            public string Content { get; set; } = "";
             public List<CodeNoteNode> Children { get; } = new List<CodeNoteNode>();
             public int OriginalIndex { get; set; }
         }
@@ -114,7 +114,7 @@ namespace RALogicEditor.Logic
             var stack = new Stack<(int indent, List<CodeNoteNode> parentChildrenList)>();
             // Initialize stack with root level (indent -1)
             stack.Push((-1, rootNodes));
-            CodeNoteNode lastNode = null;
+            CodeNoteNode? lastNode = null;
             int lineIndex = 0;
 
             foreach (var line in lines)
@@ -225,9 +225,19 @@ namespace RALogicEditor.Logic
                 }
 
                 var newNode = new CodeNoteNode { Content = bestContent, OriginalIndex = representative.OriginalIndex };
+
                 // Recursively merge all children from all nodes in this group
                 var allChildren = group.SelectMany(n => n.Children).ToList();
-                if (allChildren.Any()) newNode.Children.AddRange(MergeTree(allChildren));
+                if (allChildren.Any())
+                {
+                    // FIX: Deduplicate child nodes by content before merging to prevent doubling up on enums/descriptions
+                    var uniqueChildren = allChildren
+                        .GroupBy(c => c.Content.Trim())
+                        .Select(g => g.First())
+                        .ToList();
+
+                    newNode.Children.AddRange(MergeTree(uniqueChildren));
+                }
                 finalNodes.Add(newNode);
             }
 

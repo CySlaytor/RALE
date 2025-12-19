@@ -538,17 +538,26 @@ namespace RALogicEditor.Controls
                     }
                 }
 
-                // Use Renderer
-                ConditionGridRenderer.PopulateGridRows(
-                    conditionGrid,
-                    group,
-                    isGenerated,
-                    _showDecimal,
-                    _showAliases,
-                    _notesLookup,
-                    _gridManager.RangeCache,
-                    _currentIssues,
-                    _collapseChains); // Pass collapse flag
+                // CRITICAL FIX: Guard updates here to prevent CellValueChanged from triggering and corrupting model with Alias strings
+                _gridManager.BeginUpdate();
+                try
+                {
+                    // Use Renderer
+                    ConditionGridRenderer.PopulateGridRows(
+                        conditionGrid,
+                        group,
+                        isGenerated,
+                        _showDecimal,
+                        _showAliases,
+                        _notesLookup,
+                        _gridManager.RangeCache,
+                        _currentIssues,
+                        _collapseChains); // Pass collapse flag
+                }
+                finally
+                {
+                    _gridManager.EndUpdate();
+                }
 
                 if (conditionGrid.Rows.Count > 0)
                 {

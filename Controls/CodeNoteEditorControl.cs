@@ -86,8 +86,8 @@ namespace RALogicEditor.Controls
             // Use the ported Logic helper to fix indentation, sort, and merge
             // Pass the indentation prefix from settings and the indentation preference
             string fixedText = CodeNoteLogic.FixHierarchy(
-                currentText,
-                AppSettings.Current.NotePrefix,
+                currentText, 
+                AppSettings.Current.NotePrefix, 
                 chkIndentValues.Checked
             );
 
@@ -165,8 +165,9 @@ namespace RALogicEditor.Controls
                                 n.Note.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
             }
 
-            cmbNotes.DataSource = null;
-            cmbNotes.DataSource = _filteredNotes;
+            // FIX: Don't set DataSource to null if it's already empty to prevent infinite traversal failure loops
+            // Using a fresh list prevents the control from getting stuck in a bound-error state
+            cmbNotes.DataSource = _filteredNotes.Count > 0 ? _filteredNotes : new List<CodeNote>();
 
             if (autoSelectFirst && _filteredNotes.Count > 0)
             {
@@ -175,9 +176,9 @@ namespace RALogicEditor.Controls
             }
             else if (_filteredNotes.Count == 0)
             {
-                txtNoteBody.Text = "";
-                cmbVariables.DataSource = null;
-                UpdateStatusDisplay(null);
+                // Note: We don't clear txtNoteBody here so the user doesn't lose sight of what they were editing
+                cmbVariables.DataSource = new List<NoteNode>();
+                UpdateStatusDisplay("No matches found.");
             }
         }
 

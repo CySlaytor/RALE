@@ -19,6 +19,7 @@ namespace RALogicEditor.Helpers
     public class ConditionGridManager
     {
         private readonly DoubleBufferedDataGridView _grid;
+        private bool _isUpdating = false; // Guard to prevent feedback loops during UI updates
 
         // Context menus for different column types
         private readonly ContextMenuStrip _flagContextMenu = new();
@@ -56,6 +57,10 @@ namespace RALogicEditor.Helpers
             InitializeContextMenus();
             WireUpGridEvents();
         }
+
+        // Public methods to control update state from external controllers (e.g. TriggerEditorControl)
+        public void BeginUpdate() => _isUpdating = true;
+        public void EndUpdate() => _isUpdating = false;
 
         private void WireUpGridEvents()
         {
@@ -296,6 +301,11 @@ namespace RALogicEditor.Helpers
         // Updates the Model object (AchievementCondition) when cell values change
         private void Grid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
+            // CRITICAL FIX: If we are programmatically updating the grid (e.g. rendering aliases),
+            // do not parse the cell value back into the model. This prevents "Blob's lives" alias string
+            // from overwriting "0x1234" in the model.
+            if (_isUpdating) return;
+
             if (e.RowIndex < 0) return;
             var row = _grid.Rows[e.RowIndex];
             if (row.Tag is not AchievementCondition cond) return;
@@ -322,7 +332,16 @@ namespace RALogicEditor.Helpers
                 int modelIndex = group.Conditions.IndexOf(cond);
 
                 // Refresh visuals (applying ShowDecimal and ShowAliases if active)
-                ConditionGridRenderer.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, group, modelIndex);
+                // GUARD: Prevent this update from triggering CellValueChanged and corrupting model
+                _isUpdating = true;
+                try
+                {
+                    ConditionGridRenderer.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, group, modelIndex);
+                }
+                finally
+                {
+                    _isUpdating = false;
+                }
                 LogicChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -337,31 +356,42 @@ namespace RALogicEditor.Helpers
             if (val == RaLogicSyntax.NO_FLAG_TEXT || val == RaLogicSyntax.NO_OPERATOR_TEXT) val = "";
 
             bool changed = false;
-            foreach (DataGridViewRow row in _grid.SelectedRows)
+
+            // GUARD: Prevent recursive updates during bulk change
+            _isUpdating = true;
+            try
             {
-                if (row.Tag is AchievementCondition cond)
+                foreach (DataGridViewRow row in _grid.SelectedRows)
                 {
-                    if (_grid.CurrentCell == null) continue;
-                    string colName = _grid.Columns[_grid.CurrentCell.ColumnIndex].Name;
+                    if (row.Tag is AchievementCondition cond)
+                    {
+                        if (_grid.CurrentCell == null) continue;
+                        string colName = _grid.Columns[_grid.CurrentCell.ColumnIndex].Name;
 
-                    // Apply selected menu item to the model
-                    if (colName == "ColFlag") { string old = cond.Flag; cond.Flag = val; HandleFlagChange(cond, old); }
-                    else if (colName == "ColLType") HandleTypeChange(cond.LeftOperand, val, cond.LeftOperand.Size);
-                    else if (colName == "ColLSize") cond.LeftOperand.Size = val;
-                    else if (colName == "ColCmp") { string old = cond.Operator; cond.Operator = val; HandleOperatorChange(cond, old); }
-                    else if (colName == "ColRType") HandleTypeChange(cond.RightOperand, val, cond.LeftOperand.Size, cond.LeftOperand); // Pass LeftOperand for auto-copy
-                    else if (colName == "ColRSize") cond.RightOperand.Size = val;
+                        // Apply selected menu item to the model
+                        if (colName == "ColFlag") { string old = cond.Flag; cond.Flag = val; HandleFlagChange(cond, old); }
+                        else if (colName == "ColLType") HandleTypeChange(cond.LeftOperand, val, cond.LeftOperand.Size);
+                        else if (colName == "ColLSize") cond.LeftOperand.Size = val;
+                        else if (colName == "ColCmp") { string old = cond.Operator; cond.Operator = val; HandleOperatorChange(cond, old); }
+                        else if (colName == "ColRType") HandleTypeChange(cond.RightOperand, val, cond.LeftOperand.Size, cond.LeftOperand); // Pass LeftOperand for auto-copy
+                        else if (colName == "ColRSize") cond.RightOperand.Size = val;
 
-                    ApplyConditionLogicRules(cond);
+                        ApplyConditionLogicRules(cond);
 
-                    // FIX: Get correct Model Index, not visual Row Index, for alias resolution
-                    int modelIndex = group.Conditions.IndexOf(cond);
+                        // FIX: Get correct Model Index, not visual Row Index, for alias resolution
+                        int modelIndex = group.Conditions.IndexOf(cond);
 
-                    // Updated to use ConditionGridRenderer
-                    ConditionGridRenderer.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, group, modelIndex);
-                    changed = true;
+                        // Updated to use ConditionGridRenderer
+                        ConditionGridRenderer.SetRowValues(row, cond, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, group, modelIndex);
+                        changed = true;
+                    }
                 }
             }
+            finally
+            {
+                _isUpdating = false;
+            }
+
             if (changed) { LogicChanged?.Invoke(this, EventArgs.Empty); StatusUpdateRequested?.Invoke(this, "Updated condition property."); }
         }
 
@@ -640,8 +670,16 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.InsertRange(insertIdx, conds);
 
-            // Updated to use ConditionGridRenderer
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            // Updated to use ConditionGridRenderer with Guard
+            _isUpdating = true;
+            try
+            {
+                ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            }
+            finally
+            {
+                _isUpdating = false;
+            }
 
             RestoreSelection(conds);
 
@@ -665,8 +703,16 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.InsertRange(insertIdx, clones);
 
-            // Updated to use ConditionGridRenderer
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            // Updated to use ConditionGridRenderer with Guard
+            _isUpdating = true;
+            try
+            {
+                ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            }
+            finally
+            {
+                _isUpdating = false;
+            }
 
             RestoreSelection(clones);
 
@@ -694,8 +740,16 @@ namespace RALogicEditor.Helpers
                 group.Conditions.Remove(cond);
             }
 
-            // Updated to use ConditionGridRenderer
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            // Updated to use ConditionGridRenderer with Guard
+            _isUpdating = true;
+            try
+            {
+                ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            }
+            finally
+            {
+                _isUpdating = false;
+            }
 
             if (firstSelIndex != -1)
             {
@@ -796,8 +850,16 @@ namespace RALogicEditor.Helpers
                 group.Conditions.AddRange(unit);
             }
 
-            // 5. Refresh
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            // 5. Refresh with Guard
+            _isUpdating = true;
+            try
+            {
+                ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            }
+            finally
+            {
+                _isUpdating = false;
+            }
             RestoreSelection(selectedConditions);
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
@@ -822,8 +884,16 @@ namespace RALogicEditor.Helpers
 
             group.Conditions.Insert(insertIdx, newCond);
 
-            // Updated to use ConditionGridRenderer
-            ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            // Updated to use ConditionGridRenderer with Guard
+            _isUpdating = true;
+            try
+            {
+                ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            }
+            finally
+            {
+                _isUpdating = false;
+            }
 
             RestoreSelection(new List<AchievementCondition> { newCond });
 
