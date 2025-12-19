@@ -104,7 +104,12 @@ namespace RALogicEditor.Parsers
                             if (parts.Count > 5) ach.Type = parts[5];
                             if (parts.Count > 6) ach.Author = parts[6];
                             if (parts.Count > 7 && int.TryParse(parts[7], out int pts)) ach.Points = pts;
-                            if (parts.Count > 12) ach.BadgeName = parts[12];
+                            if (parts.Count > 12)
+                            {
+                                // Clean up Badge Name to prevent issues
+                                string rawBadge = parts[12];
+                                ach.BadgeName = rawBadge.Trim();
+                            }
                             data.Achievements.Add(ach);
                         }
                     }

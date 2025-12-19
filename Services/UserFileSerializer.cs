@@ -28,7 +28,8 @@ namespace RALogicEditor.Services
             {
                 if (string.IsNullOrEmpty(input)) return "";
                 // If content has a colon or starts with a quote, it must be wrapped
-                if (input.Contains(":") || input.Contains("\""))
+                // Also wrap if it contains backslashes to ensure paths are grouped correctly
+                if (input.Contains(":") || input.Contains("\"") || input.Contains("\\"))
                 {
                     // Standard RA escape: replace internal quotes with \" and wrap whole string in quotes
                     return "\"" + input.Replace("\"", "\\\"") + "\"";
@@ -40,8 +41,11 @@ namespace RALogicEditor.Services
             {
                 if (a.State == AssetState.Synced) continue; // Don't save synced items to User.txt
 
-                // APPLY ESCAPE TO TITLE AND DESCRIPTION
-                sb.AppendLine($"{a.ID}:\"{a.Logic}\":{EscapeUserString(a.Title)}:{EscapeUserString(a.Description)}:::{a.Type}:{a.Author}:{a.Points}:::::{a.BadgeName}");
+                // Sanitize BadgeName to prevent multiline corruption
+                string cleanBadge = (a.BadgeName ?? "00000").Replace("\r", "").Replace("\n", "").Trim();
+
+                // APPLY ESCAPE TO TITLE, DESCRIPTION AND BADGE
+                sb.AppendLine($"{a.ID}:\"{a.Logic}\":{EscapeUserString(a.Title)}:{EscapeUserString(a.Description)}:::{a.Type}:{a.Author}:{a.Points}:::::{EscapeUserString(cleanBadge)}");
             }
 
             foreach (var l in mergedLeaderboards)

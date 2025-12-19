@@ -37,11 +37,27 @@ namespace RALogicEditor.Helpers
             if (string.IsNullOrEmpty(badgeName) || badgeName == "00000")
                 return CreatePlaceholder();
 
-            // 1. Check Memory
-            if (_memoryCache.ContainsKey(badgeName))
-                return _memoryCache[badgeName];
+            // Handle local paths e.g. "local\\hash.png" or "local/hash.png"
+            // We extract the filename (hash) to use as the cache key and download target
+            string cleanName = badgeName;
 
-            string localPath = Path.Combine(CacheDir, $"{badgeName}.png");
+            // Normalize slashes
+            if (cleanName.Contains("\\") || cleanName.Contains("/"))
+            {
+                cleanName = Path.GetFileName(cleanName);
+            }
+
+            // Remove extension if present to normalize cache key (RA Badges are typically accessed by hash, saved as .png)
+            if (cleanName.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanName = Path.GetFileNameWithoutExtension(cleanName);
+            }
+
+            // 1. Check Memory
+            if (_memoryCache.ContainsKey(cleanName))
+                return _memoryCache[cleanName];
+
+            string localPath = Path.Combine(CacheDir, $"{cleanName}.png");
 
             // 2. Check Disk
             if (File.Exists(localPath))
@@ -49,7 +65,7 @@ namespace RALogicEditor.Helpers
                 var img = LoadImageSafe(localPath);
                 if (img != null)
                 {
-                    _memoryCache[badgeName] = img;
+                    _memoryCache[cleanName] = img;
                     return img;
                 }
             }
@@ -57,7 +73,9 @@ namespace RALogicEditor.Helpers
             try
             {
                 // 3. Download from RA
-                string url = $"https://media.retroachievements.org/Badge/{badgeName}.png";
+                // Even for "local" badges, if they follow the hash naming convention, they might exist on the server.
+                // If not, this fails gracefully to placeholder.
+                string url = $"https://media.retroachievements.org/Badge/{cleanName}.png";
                 var data = await _client.GetByteArrayAsync(url);
 
                 await File.WriteAllBytesAsync(localPath, data);
@@ -65,7 +83,7 @@ namespace RALogicEditor.Helpers
 
                 if (img != null)
                 {
-                    _memoryCache[badgeName] = img;
+                    _memoryCache[cleanName] = img;
                     return img;
                 }
                 return CreatePlaceholder();
