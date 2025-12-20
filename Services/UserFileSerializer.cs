@@ -23,16 +23,19 @@ namespace RALogicEditor.Services
 
             var lbStrategy = new LeaderboardStrategy();
 
-            // --- HELPER FOR ESCAPING STRINGS (Fixes the Colon Bug) ---
+            // --- HELPER FOR ESCAPING STRINGS (Fixes the Colon/Backslash Bug) ---
             string EscapeUserString(string input)
             {
                 if (string.IsNullOrEmpty(input)) return "";
-                // If content has a colon or starts with a quote, it must be wrapped
-                // Also wrap if it contains backslashes to ensure paths are grouped correctly
+
+                // If content has a colon, quote, or backslash, it must be escaped/wrapped
                 if (input.Contains(":") || input.Contains("\"") || input.Contains("\\"))
                 {
-                    // Standard RA escape: replace internal quotes with \" and wrap whole string in quotes
-                    return "\"" + input.Replace("\"", "\\\"") + "\"";
+                    // 1. Escape backslashes first ( \ -> \\ ) to prevents paths like "local\img" becoming "local\\img" literals
+                    // 2. Escape quotes ( " -> \" )
+                    // 3. Wrap the entire string in quotes
+                    string escaped = input.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                    return "\"" + escaped + "\"";
                 }
                 return input;
             }

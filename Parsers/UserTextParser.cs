@@ -106,7 +106,6 @@ namespace RALogicEditor.Parsers
                             if (parts.Count > 7 && int.TryParse(parts[7], out int pts)) ach.Points = pts;
                             if (parts.Count > 12)
                             {
-                                // Clean up Badge Name to prevent issues
                                 string rawBadge = parts[12];
                                 ach.BadgeName = rawBadge.Trim();
                             }
@@ -143,7 +142,15 @@ namespace RALogicEditor.Parsers
             if (string.IsNullOrEmpty(val)) return "";
             val = val.Trim();
             if (val.StartsWith("\"") && val.EndsWith("\"") && val.Length >= 2)
-                return val.Substring(1, val.Length - 2).Replace("\\\"", "\"");
+            {
+                string inner = val.Substring(1, val.Length - 2);
+
+                // Proper unescaping:
+                // 1. Replace double backslashes (\\) with single backslash (\)
+                // 2. Replace escaped quotes (\") with quote (")
+                // This ensures "local\\img.png" becomes "local\img.png" in memory, breaking the multiplication cycle.
+                return inner.Replace("\\\\", "\\").Replace("\\\"", "\"");
+            }
             return val;
         }
     }

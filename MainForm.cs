@@ -1,5 +1,4 @@
 #nullable enable
-using RALogicEditor;
 using RALogicEditor.Controls;
 using RALogicEditor.Definitions;
 using RALogicEditor.Forms;
@@ -191,6 +190,11 @@ namespace RALogicEditor
             try
             {
                 ImageCache.Clear();
+
+                // Configure local paths for badge resolution
+                // This looks for the ../Badge folder relative to the loaded file
+                ImageCache.ConfigureLocalPaths(primaryPath);
+
                 _recentFiles.Add(primaryPath);
                 UpdateRecentMenu();
 
