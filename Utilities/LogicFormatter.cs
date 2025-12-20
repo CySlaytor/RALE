@@ -52,7 +52,15 @@ namespace RALogicEditor.Utilities
             }
             else if (core == "Value")
             {
-                if (op.Value.StartsWith("0x") && long.TryParse(op.Value.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v)) return v.ToString();
+                // Robustly parse value as Hex (even if missing 0x prefix) and convert to Decimal for RA logic string.
+                // This prevents issues where "ffffffff" is interpreted as Float by RAIntegration because it starts with 'f'.
+                string cleanVal = op.Value.Trim();
+                if (cleanVal.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                    cleanVal = cleanVal.Substring(2);
+
+                if (long.TryParse(cleanVal, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v))
+                    return v.ToString();
+
                 return op.Value;
             }
             else sb.Append(op.Value);
@@ -70,7 +78,11 @@ namespace RALogicEditor.Utilities
                     if (showDecimal) return val.ToString();
                     int padding = GetPaddingForSize(sizeReference);
                     long mask = GetMaskForSize(sizeReference);
-                    return "0x" + (val & mask).ToString($"x{padding}");
+
+                    // Apply mask only if valid mask (not -1)
+                    long displayVal = (mask != -1) ? (val & mask) : val;
+
+                    return "0x" + displayVal.ToString($"x{padding}");
                 }
                 else if (operand.Type != "Float")
                 {
@@ -125,7 +137,19 @@ namespace RALogicEditor.Utilities
                 }
                 else
                 {
-                    if (!long.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out val)) return input;
+                    if (!long.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out val))
+                    {
+                        // Fallback: Try parsing as Hex without 0x prefix (e.g. "ffffffff")
+                        // This fixes inputs that look like floats ("f...") from breaking RA parsing
+                        if (long.TryParse(input, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out val))
+                        {
+                            // Success parsing as hex
+                        }
+                        else
+                        {
+                            return input;
+                        }
+                    }
                 }
                 padding = GetPaddingForSize(size);
             }
