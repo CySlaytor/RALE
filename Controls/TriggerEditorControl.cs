@@ -151,6 +151,7 @@ namespace RALogicEditor.Controls
 
             conditionGrid.ContextMenuStrip.Opening += ConditionGrid_ContextMenuStrip_Opening;
             toolsContextMenu.Opening += ToolsContextMenu_Opening;
+            groupsContextMenu.Opening += GroupsContextMenu_Opening; // ADDED
         }
 
         private void InitializeGrids()
@@ -499,6 +500,7 @@ namespace RALogicEditor.Controls
                 bool wasChanging = _isProgrammaticallyChanging;
                 _isProgrammaticallyChanging = true;
                 groupsList.Items[savedIndex].Selected = true;
+                groupsList.EnsureVisible(savedIndex); // ADDED: Ensure valid scroll position when refreshing list
 
                 // Sync grid tag
                 var group = activeGroups[savedIndex];
@@ -654,6 +656,14 @@ namespace RALogicEditor.Controls
             saveAsSnippetToolStripMenuItem.Enabled = any;
         }
 
+        private void GroupsContextMenu_Opening(object? sender, CancelEventArgs e)
+        {
+            bool hasSelection = groupsList.SelectedIndices.Count > 0;
+            bool isCore = hasSelection && groupsList.SelectedIndices[0] == 0;
+
+            removeGroupToolStripMenuItem.Enabled = hasSelection && !isCore;
+        }
+
         private void ToolsContextMenu_Opening(object? sender, CancelEventArgs e)
         {
             createGeneratorToolStripMenuItem.Enabled = _viewModel.ActiveGroups.Count > 0;
@@ -681,12 +691,33 @@ namespace RALogicEditor.Controls
         private void cutToolStripMenuItem_Click(object? sender, EventArgs e) { _viewModel.PushUndoState(); _gridManager.CutSelected(); } // New Action
         private void pasteToolStripMenuItem_Click(object? sender, EventArgs e) { if (Clipboard.ContainsText()) GridManager_PasteRequested(sender, Clipboard.GetText()); }
 
-        private void addGroupToolStripMenuItem_Click(object? sender, EventArgs e) => _viewModel.AddGroup();
+        private void addGroupToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            _viewModel.AddGroup();
+
+            // Focus the new group (last one)
+            if (groupsList.Items.Count > 0)
+            {
+                int lastIndex = groupsList.Items.Count - 1;
+                groupsList.SelectedIndices.Clear();
+                groupsList.Items[lastIndex].Selected = true;
+                groupsList.EnsureVisible(lastIndex);
+                groupsList.Focus();
+            }
+        }
 
         private void removeGroupToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (groupsList.SelectedItems.Count == 0) return;
-            _viewModel.RemoveGroup(groupsList.SelectedItems[0].Index);
+            int index = groupsList.SelectedItems[0].Index;
+
+            if (index == 0)
+            {
+                MessageBox.Show("The Core group cannot be deleted.", "Operation Not Allowed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            _viewModel.RemoveGroup(index);
         }
 
         private void removeAllAltGroupsToolStripMenuItem_Click(object? sender, EventArgs e)
