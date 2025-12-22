@@ -33,7 +33,11 @@ namespace RALogicEditor.Utilities
                 case "Prior": sb.Append('p'); pfx = true; break;
                 case "BCD": sb.Append('b'); pfx = true; break;
                 case "Inverted": sb.Append('~'); pfx = true; break;
-                case "Float": return "f" + op.Value;
+                case "Float":
+                    // Fix: Ensure float values always have a decimal point for RA integration (e.g. 81 -> f81.0)
+                    string fVal = op.Value;
+                    if (!fVal.Contains(".")) fVal += ".0";
+                    return "f" + fVal;
             }
             if (pfx) core = "Mem";
             if (core == "Mem")

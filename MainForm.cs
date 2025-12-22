@@ -406,16 +406,33 @@ namespace RALogicEditor
             {
                 if (!_projectRepo.LocalData.Achievements.Any(a => a.ID == ra.ID))
                 {
-                    var clone = ra.Clone(false);
-                    _projectRepo.LocalData.Achievements.Add(clone);
+                    // FIX: If the asset passed in IS the currently selected asset (which is already a working clone),
+                    // we must add IT directly to LocalData, not create a new clone.
+                    // This ensures the object bound to the UI is the one being saved.
+                    if (object.ReferenceEquals(asset, _selectedAsset))
+                    {
+                        _projectRepo.LocalData.Achievements.Add(ra);
+                    }
+                    else
+                    {
+                        var clone = ra.Clone(false);
+                        _projectRepo.LocalData.Achievements.Add(clone);
+                    }
                 }
             }
             else if (asset is RaLeaderboard rl)
             {
                 if (!_projectRepo.LocalData.Leaderboards.Any(l => l.ID == rl.ID))
                 {
-                    var clone = rl.Clone(false);
-                    _projectRepo.LocalData.Leaderboards.Add(clone);
+                    if (object.ReferenceEquals(asset, _selectedAsset))
+                    {
+                        _projectRepo.LocalData.Leaderboards.Add(rl);
+                    }
+                    else
+                    {
+                        var clone = rl.Clone(false);
+                        _projectRepo.LocalData.Leaderboards.Add(clone);
+                    }
                 }
             }
         }
