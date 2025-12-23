@@ -34,6 +34,7 @@ namespace RALogicEditor.Controls
         private bool _showDecimal = false;
         private bool _showAliases = false;
         private bool _collapseChains = false;
+        private string? _preserveSegmentSelection; // Used to persist Leaderboard Segment (Start/Submit...) across asset switches
 
         // Current list of validation issues for highlighting specific rows
         private List<ValidationIssue> _currentIssues = new();
@@ -42,6 +43,38 @@ namespace RALogicEditor.Controls
         // Key: Normalized Address (e.g., "0x1234"), Value: Parsed Pointer Tree
         private Dictionary<string, List<NoteNode>> _notesLookup = new();
         private List<CodeNote> _rawNotes = new(); // Keep raw notes for Multi-Region tool
+
+        // Leaderboard Formats Mapping
+        private class LeaderboardFormat
+        {
+            public string Label { get; }
+            public string Value { get; }
+            public LeaderboardFormat(string label, string value) { Label = label; Value = value; }
+        }
+
+        private readonly List<LeaderboardFormat> _lbFormats = new()
+        {
+            new("Score", "SCORE"),
+            new("Time (Frames)", "TIME"),
+            new("Time (Centiseconds)", "MILLISECS"),
+            new("Time (Seconds)", "SECONDS"),
+            new("Time (Minutes)", "MINUTES"),
+            new("Time (Seconds as Minutes)", "SECS_AS_MINS"),
+            new("Value", "VALUE"),
+            new("Value (Unsigned)", "UNSIGNED"),
+            new("Value (Tens)", "TENS"),
+            new("Value (Hundreds)", "HUNDREDS"),
+            new("Value (Thousands)", "THOUSANDS"),
+            new("Value (Fixed1)", "FIXED1"),
+            new("Value (Fixed2)", "FIXED2"),
+            new("Value (Fixed3)", "FIXED3"),
+            new("Value (Float1)", "FLOAT1"),
+            new("Value (Float2)", "FLOAT2"),
+            new("Value (Float3)", "FLOAT3"),
+            new("Value (Float4)", "FLOAT4"),
+            new("Value (Float5)", "FLOAT5"),
+            new("Value (Float6)", "FLOAT6")
+        };
 
         // -- Events --
         public event EventHandler? TriggerTextChanged;
@@ -113,6 +146,7 @@ namespace RALogicEditor.Controls
             _gridManager = new ConditionGridManager(conditionGrid);
             InitializeEvents();
             InitializeGrids();
+            InitializeLeaderboardControls();
 
             SetStatus("Ready");
 
@@ -145,6 +179,11 @@ namespace RALogicEditor.Controls
             cmbPoints.SelectedIndexChanged += CmbPoints_Changed;
             cmbPoints.TextChanged += CmbPoints_Changed;
             cmbType.SelectedIndexChanged += CmbType_SelectedIndexChanged;
+
+            // Leaderboard Fields
+            cmbFormat.SelectedIndexChanged += CmbFormat_SelectedIndexChanged;
+            chkLowerIsBetter.CheckedChanged += ChkLowerIsBetter_CheckedChanged;
+
             chkShowDecimal.CheckedChanged += ChkShowDecimal_CheckedChanged;
             chkAliasMode.CheckedChanged += ChkAliasMode_CheckedChanged;
             chkCollapseChains.CheckedChanged += ChkCollapseChains_CheckedChanged;
@@ -174,6 +213,13 @@ namespace RALogicEditor.Controls
                 if (groupsList.Columns.Count > 0)
                     groupsList.Columns[0].Width = groupsList.ClientSize.Width - 2;
             };
+        }
+
+        private void InitializeLeaderboardControls()
+        {
+            cmbFormat.DisplayMember = "Label";
+            cmbFormat.ValueMember = "Value";
+            cmbFormat.DataSource = new BindingSource(_lbFormats, null);
         }
 
         private void AddGridColumn(DataGridView grid, string name, string header, int width, bool readOnly)
@@ -275,9 +321,30 @@ namespace RALogicEditor.Controls
                 lvLeaderboardComponents.Visible = true;
                 if (lvLeaderboardComponents.Items.Count > 0)
                 {
+                    // Logic improvement: Try to restore previous selection if switching between Leaderboards
+                    // Preserve the lock state because BindAchievement might be running
+                    bool wasLocked = _isProgrammaticallyChanging;
                     _isProgrammaticallyChanging = true;
-                    lvLeaderboardComponents.Items[0].Selected = true;
-                    _isProgrammaticallyChanging = false;
+
+                    int selectIndex = 0;
+                    if (!string.IsNullOrEmpty(_preserveSegmentSelection))
+                    {
+                        for (int i = 0; i < lvLeaderboardComponents.Items.Count; i++)
+                        {
+                            if (lvLeaderboardComponents.Items[i].Text.Equals(_preserveSegmentSelection, StringComparison.OrdinalIgnoreCase))
+                            {
+                                selectIndex = i;
+                                break;
+                            }
+                        }
+                    }
+
+                    lvLeaderboardComponents.Items[selectIndex].Selected = true;
+                    // Ensure the viewmodel matches the UI selection immediately
+                    _viewModel.SelectSegment(lvLeaderboardComponents.Items[selectIndex].Text);
+
+                    // Restore original lock state (likely true if called from BindAchievement)
+                    _isProgrammaticallyChanging = wasLocked;
                 }
 
                 // Wire up selection event if not already
@@ -333,6 +400,14 @@ namespace RALogicEditor.Controls
         // Loads an asset into the editor
         public async void BindAchievement(IAssetItem asset, string setType = "Core")
         {
+            // Logic improvement: Capture current segment before loading new asset
+            // This allows us to keep focus on "SUBMIT" when switching between Leaderboards
+            _preserveSegmentSelection = null;
+            if (lvLeaderboardComponents.Visible && lvLeaderboardComponents.SelectedItems.Count > 0)
+            {
+                _preserveSegmentSelection = lvLeaderboardComponents.SelectedItems[0].Text;
+            }
+
             _isProgrammaticallyChanging = true;
 
             // ViewModel handles strategy and parsing
@@ -348,7 +423,7 @@ namespace RALogicEditor.Controls
             }
             else if (asset is RaLeaderboard lb)
             {
-                SetupLeaderboardUI();
+                SetupLeaderboardUI(lb);
             }
 
             if (asset.State == AssetState.Local)
@@ -366,6 +441,7 @@ namespace RALogicEditor.Controls
             SetStatus("Asset loaded.");
             RunValidation();
 
+            _preserveSegmentSelection = null; // Reset buffer
             _isProgrammaticallyChanging = false;
         }
 
@@ -376,6 +452,11 @@ namespace RALogicEditor.Controls
             lblAuthor.Visible = true;
             lblAssetState.Visible = true;
             pbBadge.Visible = true;
+
+            // Hide LB specific controls
+            lblFormat.Visible = false;
+            cmbFormat.Visible = false;
+            chkLowerIsBetter.Visible = false;
 
             txtTitle.Left = 75;
             txtTitle.Width = panelHeader.Width - 75 - 10;
@@ -400,13 +481,18 @@ namespace RALogicEditor.Controls
             else cmbType.Text = displayType;
         }
 
-        private void SetupLeaderboardUI()
+        private void SetupLeaderboardUI(RaLeaderboard lb)
         {
             cmbPoints.Visible = false;
             cmbType.Visible = false;
             pbBadge.Visible = false;
             lblAuthor.Visible = true;
             lblAssetState.Visible = true;
+
+            // Show LB specific controls
+            lblFormat.Visible = true;
+            cmbFormat.Visible = true;
+            chkLowerIsBetter.Visible = true;
 
             int textLeft = 110; // Approx width of LV + margin
             txtTitle.Left = textLeft;
@@ -417,6 +503,30 @@ namespace RALogicEditor.Controls
             lblAuthor.Location = new Point(textLeft, 63);
             lblAuthor.Text = "Author: Unknown";
             lblAssetState.Location = new Point(textLeft + 150, 63);
+
+            // Populate LB values with safe fallback
+            cmbFormat.SelectedValue = lb.Format;
+            // Handle case where format isn't in list (e.g. new RA format)
+            if (cmbFormat.SelectedIndex == -1 && !string.IsNullOrEmpty(lb.Format))
+            {
+                cmbFormat.Text = lb.Format;
+            }
+
+            chkLowerIsBetter.Checked = lb.LowerIsBetter == 1;
+
+            // Position formatting controls
+            lblFormat.Location = new Point(textLeft - 100, 63); // Adjust relative to ListView
+            cmbFormat.Location = new Point(textLeft - 50, 59);
+            chkLowerIsBetter.Location = new Point(textLeft + 80, 61);
+
+            // Adjust label positions dynamically since author/state move around
+            lblFormat.Location = new Point(textLeft, 63);
+            cmbFormat.Location = new Point(textLeft + 50, 59);
+            chkLowerIsBetter.Location = new Point(textLeft + 180, 61);
+
+            // Push Author/Status further right
+            lblAuthor.Location = new Point(textLeft + 300, 63);
+            lblAssetState.Location = new Point(textLeft + 420, 63);
         }
 
         public void Clear()
@@ -427,6 +537,8 @@ namespace RALogicEditor.Controls
             txtDescription.Text = "";
             cmbPoints.SelectedIndex = -1;
             cmbType.SelectedIndex = -1;
+            cmbFormat.SelectedIndex = -1;
+            chkLowerIsBetter.Checked = false;
             lblAuthor.Text = "";
             pbBadge.Image = null;
             groupsList.Items.Clear();
@@ -438,6 +550,10 @@ namespace RALogicEditor.Controls
             lblAuthor.Visible = true;
             lblAssetState.Visible = false;
             pbBadge.Visible = true;
+            lblFormat.Visible = false;
+            cmbFormat.Visible = false;
+            chkLowerIsBetter.Visible = false;
+
             btnReset.Visible = false;
             SetStatus("Ready");
             ValidationCompleted?.Invoke(this, new List<ValidationIssue>());
@@ -615,6 +731,26 @@ namespace RALogicEditor.Controls
         private void TxtTitle_TextChanged(object? sender, EventArgs e) { if (_isProgrammaticallyChanging) return; if (_viewModel.BoundAsset != null) { _viewModel.BoundAsset.Title = txtTitle.Text; AchievementDataChanged?.Invoke(this, EventArgs.Empty); } }
         private void TxtDescription_TextChanged(object? sender, EventArgs e) { if (_isProgrammaticallyChanging) return; if (_viewModel.BoundAsset != null) { _viewModel.BoundAsset.Description = txtDescription.Text; AchievementDataChanged?.Invoke(this, EventArgs.Empty); } }
         private void CmbPoints_Changed(object? sender, EventArgs e) { if (_isProgrammaticallyChanging) return; if (_viewModel.BoundAsset is RaAchievement r && int.TryParse(cmbPoints.Text, out int p)) { r.Points = p; AchievementDataChanged?.Invoke(this, EventArgs.Empty); } }
+
+        private void CmbFormat_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (_isProgrammaticallyChanging) return;
+            if (_viewModel.BoundAsset is RaLeaderboard lb)
+            {
+                lb.Format = cmbFormat.SelectedValue?.ToString() ?? "VALUE";
+                AchievementDataChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        private void ChkLowerIsBetter_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (_isProgrammaticallyChanging) return;
+            if (_viewModel.BoundAsset is RaLeaderboard lb)
+            {
+                lb.LowerIsBetter = chkLowerIsBetter.Checked ? 1 : 0;
+                AchievementDataChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
 
         private void ChkShowDecimal_CheckedChanged(object? sender, EventArgs e) { _showDecimal = chkShowDecimal.Checked; _gridManager.ShowDecimal = _showDecimal; RefreshCurrentGridDisplay(); }
         private void ChkAliasMode_CheckedChanged(object? sender, EventArgs e) { _showAliases = chkAliasMode.Checked; _gridManager.ShowAliases = _showAliases; RefreshCurrentGridDisplay(); }

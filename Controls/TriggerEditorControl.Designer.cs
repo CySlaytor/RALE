@@ -27,6 +27,12 @@
             txtDescription = new TextBox();
             txtTitle = new TextBox();
             pbBadge = new PictureBox();
+
+            // New Leaderboard Controls
+            lblFormat = new Label();
+            cmbFormat = new ComboBox();
+            chkLowerIsBetter = new CheckBox();
+
             toolsContextMenu = new ContextMenuStrip(components);
             createGeneratorToolStripMenuItem = new ToolStripMenuItem();
             commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
@@ -86,6 +92,9 @@
             // panelHeader
             // 
             panelHeader.BackColor = SystemColors.Control;
+            panelHeader.Controls.Add(chkLowerIsBetter);
+            panelHeader.Controls.Add(cmbFormat);
+            panelHeader.Controls.Add(lblFormat);
             panelHeader.Controls.Add(btnCopyDef);
             panelHeader.Controls.Add(lblAssetState);
             panelHeader.Controls.Add(btnTools);
@@ -237,6 +246,37 @@
             pbBadge.SizeMode = PictureBoxSizeMode.Zoom;
             pbBadge.TabIndex = 0;
             pbBadge.TabStop = false;
+            // 
+            // lblFormat
+            // 
+            lblFormat.AutoSize = true;
+            lblFormat.Location = new Point(5, 63);
+            lblFormat.Name = "lblFormat";
+            lblFormat.Size = new System.Drawing.Size(48, 15);
+            lblFormat.TabIndex = 12;
+            lblFormat.Text = "Format:";
+            lblFormat.Visible = false;
+            // 
+            // cmbFormat
+            // 
+            cmbFormat.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbFormat.FormattingEnabled = true;
+            cmbFormat.Location = new Point(60, 59);
+            cmbFormat.Name = "cmbFormat";
+            cmbFormat.Size = new Size(120, 23);
+            cmbFormat.TabIndex = 13;
+            cmbFormat.Visible = false;
+            // 
+            // chkLowerIsBetter
+            // 
+            chkLowerIsBetter.AutoSize = true;
+            chkLowerIsBetter.Location = new Point(190, 62);
+            chkLowerIsBetter.Name = "chkLowerIsBetter";
+            chkLowerIsBetter.Size = new Size(105, 19);
+            chkLowerIsBetter.TabIndex = 14;
+            chkLowerIsBetter.Text = "Lower is Better";
+            chkLowerIsBetter.UseVisualStyleBackColor = true;
+            chkLowerIsBetter.Visible = false;
             // 
             // toolsContextMenu
             // 
@@ -650,5 +690,10 @@
         private System.Windows.Forms.CheckBox chkCollapseChains = null!;
         private System.Windows.Forms.ToolStripMenuItem multiRegionToolStripMenuItem = null!;
         private System.Windows.Forms.ToolStripMenuItem logicOptimizerToolStripMenuItem = null!;
+
+        // Leaderboard Specific
+        private System.Windows.Forms.Label lblFormat = null!;
+        private System.Windows.Forms.ComboBox cmbFormat = null!;
+        private System.Windows.Forms.CheckBox chkLowerIsBetter = null!;
     }
 }
