@@ -58,6 +58,7 @@ namespace RALogicEditor.Controls
             new("Time (Frames)", "TIME"),
             new("Time (Centiseconds)", "MILLISECS"),
             new("Time (Seconds)", "SECONDS"),
+            new("Time (Seconds) [Legacy]", "TIMESECS"), // Compatibility
             new("Time (Minutes)", "MINUTES"),
             new("Time (Seconds as Minutes)", "SECS_AS_MINS"),
             new("Value", "VALUE"),
@@ -506,7 +507,8 @@ namespace RALogicEditor.Controls
 
             // Populate LB values with safe fallback
             cmbFormat.SelectedValue = lb.Format;
-            // Handle case where format isn't in list (e.g. new RA format)
+
+            // Handle case where format isn't in list (e.g. new RA format or custom)
             if (cmbFormat.SelectedIndex == -1 && !string.IsNullOrEmpty(lb.Format))
             {
                 cmbFormat.Text = lb.Format;

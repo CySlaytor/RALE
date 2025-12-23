@@ -159,6 +159,10 @@ namespace RALogicEditor
                 {
                     if (a.Points != b.Points || a.Type != b.Type) equal = false;
                 }
+                else if (item is RaLeaderboard l && serverItem is RaLeaderboard sl)
+                {
+                    if (l.Format != sl.Format || l.LowerIsBetter != sl.LowerIsBetter) equal = false;
+                }
                 item.State = equal ? AssetState.Synced : AssetState.Modified;
             }
 

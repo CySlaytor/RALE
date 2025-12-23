@@ -1,4 +1,5 @@
-﻿using RALogicEditor.Models;
+﻿#nullable enable
+using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Services; // Added for Metadata
 using System;
@@ -264,6 +265,11 @@ namespace RALogicEditor.Services
                 if (aa.Type != bb.Type) return false;
                 // Note: We don't compare Flags/Category for sync state, as User.txt doesn't store them.
                 // Sync state is strictly about data persisted in User.txt vs Server.
+            }
+            else if (a is RaLeaderboard la && b is RaLeaderboard lb)
+            {
+                if (la.Format != lb.Format) return false;
+                if (la.LowerIsBetter != lb.LowerIsBetter) return false;
             }
             return true;
         }
