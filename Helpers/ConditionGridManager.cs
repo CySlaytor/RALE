@@ -921,8 +921,7 @@ namespace RALogicEditor.Helpers
 
             List<long> offsets = new List<long>();
             string baseAddress = val;
-            var collected = new Stack<long>();
-            collected.Push(currentOffset);
+            var collected = new List<AchievementCondition>();
 
             // Pointer Logic Scan
             if (_grid.Tag is not AchievementConditionGroup group) return;
@@ -940,24 +939,47 @@ namespace RALogicEditor.Helpers
                 // If we hit a non-AddAddress line, chain breaks
                 if (prevCond.Flag != "Add Address") break;
 
-                string memVal = prevCond.LeftOperand.Value;
-                if (memVal.StartsWith("0x") && long.TryParse(memVal.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long addr))
-                {
-                    collected.Push(addr);
-                    scanIndex--;
-                    chainFound = true;
-                }
-                else break;
+                collected.Insert(0, prevCond);
+                scanIndex--;
+                chainFound = true;
             }
 
             if (chainFound)
             {
-                long baseAddrLong = collected.Pop();
-                baseAddress = "0x" + baseAddrLong.ToString("x");
-                offsets = collected.ToList();
-                PointerChainSelected?.Invoke(this, new PointerChainArgs(baseAddress, offsets));
+                long ParseHex(string hex)
+                {
+                    string clean = hex.Replace("0x", "").Trim();
+                    return long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+                }
+
+                // Filter Array Indexing (AddAddress starting with no code note)
+                while (collected.Count > 0)
+                {
+                    var first = collected[0];
+                    long baseAddrNum = ParseHex(first.LeftOperand.Value);
+                    if (!RaLogicSyntax.MemoryTypes.Contains(first.LeftOperand.Type) || ConditionFormatter.GetEffectiveNote(NotesLookup, baseAddrNum) == null)
+                    {
+                        collected.RemoveAt(0);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                if (collected.Count > 0)
+                {
+                    long baseAddrLong = ParseHex(collected[0].LeftOperand.Value);
+                    baseAddress = "0x" + baseAddrLong.ToString("x");
+                    offsets = collected.Select(c => ParseHex(c.LeftOperand.Value)).ToList();
+                    offsets.Add(currentOffset); // Add the leaf offset
+
+                    PointerChainSelected?.Invoke(this, new PointerChainArgs(baseAddress, offsets));
+                    return;
+                }
             }
-            else AddressSelected?.Invoke(this, val);
+
+            AddressSelected?.Invoke(this, val);
         }
     }
 }

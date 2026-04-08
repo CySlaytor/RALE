@@ -17,7 +17,7 @@ namespace RALogicEditor
     public partial class MainForm
     {
         #region File Menu
-        private void openToolStripMenuItem_Click(object sender, EventArgs e)
+        private void openToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (!ConfirmDiscardChanges()) return;
             using var ofd = new OpenFileDialog { Filter = "JSON Files (*.json)|*.json|Text Files (*.txt)|*.txt|All Files (*.*)|*.*" };
@@ -29,7 +29,7 @@ namespace RALogicEditor
             }
         }
 
-        private void saveToolStripMenuItem_Click(object sender, EventArgs e)
+        private void saveToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (_projectRepo.LocalData == null && _projectRepo.ServerData == null) return;
             codeNoteEditor.CommitChanges();
@@ -351,7 +351,7 @@ namespace RALogicEditor
         #endregion
 
         #region Tools & View Options
-        private void viewDiffToolStripMenuItem_Click(object sender, EventArgs e)
+        private void viewDiffToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             if (achievementGrid.SelectedRows.Count != 1) return;
             var row = achievementGrid.SelectedRows[0];

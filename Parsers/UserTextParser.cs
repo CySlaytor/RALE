@@ -1,4 +1,5 @@
-﻿using RALogicEditor.Models;
+﻿#nullable enable
+using RALogicEditor.Models;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -75,7 +76,7 @@ namespace RALogicEditor.Parsers
                                 Format = parts[4],
                                 Title = parts[5],
                                 Description = parts[6],
-                                LowerIsBetter = int.TryParse(parts[7], out int lbVal) ? lbVal : 0,
+                                LowerIsBetter = parts[7] == "1" || parts[7].Equals("true", System.StringComparison.OrdinalIgnoreCase),
                                 State = AssetState.Local
                             });
                         }
@@ -144,11 +145,6 @@ namespace RALogicEditor.Parsers
             if (val.StartsWith("\"") && val.EndsWith("\"") && val.Length >= 2)
             {
                 string inner = val.Substring(1, val.Length - 2);
-
-                // Proper unescaping:
-                // 1. Replace double backslashes (\\) with single backslash (\)
-                // 2. Replace escaped quotes (\") with quote (")
-                // This ensures "local\\img.png" becomes "local\img.png" in memory, breaking the multiplication cycle.
                 return inner.Replace("\\\\", "\\").Replace("\\\"", "\"");
             }
             return val;

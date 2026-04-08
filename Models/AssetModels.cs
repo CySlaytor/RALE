@@ -27,13 +27,20 @@ namespace RALogicEditor.Models
         public bool Success { get; set; }
         public int GameId { get; set; }
         public string Title { get; set; } = "";
-        // RichPresencePatch removed as requested
+        public string ImageIconUrl { get; set; } = "";
+        public int RichPresenceGameId { get; set; }
+        public string RichPresencePatch { get; set; } = "";
+        public int ConsoleId { get; set; }
         public List<RaSet> Sets { get; set; } = new List<RaSet>();
     }
 
     public class RaSet
     {
+        public string Title { get; set; } = "";
         public string Type { get; set; } = ""; // "core", "unofficial"
+        public int AchievementSetId { get; set; }
+        public int GameId { get; set; }
+        public string ImageIconUrl { get; set; } = "";
         public List<RaAchievement> Achievements { get; set; } = new List<RaAchievement>();
         public List<RaLeaderboard> Leaderboards { get; set; } = new List<RaLeaderboard>();
     }
@@ -92,7 +99,7 @@ namespace RALogicEditor.Models
         public string Logic { get; set; } = "";
 
         public string Format { get; set; } = "VALUE";
-        public int LowerIsBetter { get; set; }
+        public bool LowerIsBetter { get; set; } // Fixed JSON breaking change (int -> bool)
         public string Title { get; set; } = "";
         public string Description { get; set; } = "";
         public bool Hidden { get; set; }

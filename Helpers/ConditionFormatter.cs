@@ -1,4 +1,5 @@
-﻿using RALogicEditor.Definitions;
+﻿#nullable enable
+using RALogicEditor.Definitions;
 using RALogicEditor.Models;
 using RALogicEditor.Utilities;
 using System;
@@ -9,9 +10,11 @@ using System.Text.RegularExpressions;
 
 namespace RALogicEditor.Helpers
 {
-    // Responsibilty: Formats raw model data into display strings (Values, Aliases)
+    // Responsibility: Formats raw model data into display strings (Values, Aliases)
     public static class ConditionFormatter
     {
+        private class ChainNode { public bool IsMem; public string Value = ""; }
+
         public static string FormatOperandDisplay(
             Operand op,
             bool showDecimal,
@@ -67,6 +70,7 @@ namespace RALogicEditor.Helpers
             // Robust Hex Parser: Removes 0x and any non-hex size prefixes (W, H, X, etc.)
             long ParseHex(string s)
             {
+                if (string.IsNullOrWhiteSpace(s)) return -1;
                 string clean = s.Replace("0x", "").Trim();
                 // Regex to keep only valid hex characters 0-9, A-F
                 clean = Regex.Replace(clean, "[^0-9A-Fa-f]", "");
@@ -79,7 +83,7 @@ namespace RALogicEditor.Helpers
             // Fix: Check bounds before accessing group.Conditions
             if (group != null && group.Conditions != null && rowIndex > 0 && rowIndex < group.Conditions.Count)
             {
-                var chainStack = new Stack<string>();
+                var chainStack = new List<ChainNode>();
                 int scan = rowIndex - 1;
                 while (scan >= 0)
                 {
@@ -93,16 +97,48 @@ namespace RALogicEditor.Helpers
                     var prevCond = group.Conditions[scan];
                     if (prevCond.Flag == "Add Address")
                     {
-                        chainStack.Push(prevCond.LeftOperand.Value);
+                        // Add to front of list to maintain top-to-bottom order for indexing filtering
+                        chainStack.Insert(0, new ChainNode
+                        {
+                            IsMem = RaLogicSyntax.MemoryTypes.Contains(prevCond.LeftOperand.Type),
+                            Value = prevCond.LeftOperand.Value
+                        });
                         scan--;
                     }
                     else break;
                 }
 
+                // Handle Array Indexing (Index + Base) imported from AutoCR
+                // If an AddAddress chain starts with something that has no code note, we assume it is an Index.
+                while (chainStack.Count > 1)
+                {
+                    var first = chainStack[0];
+                    long baseAddrNum = ParseHex(LogicFormatter.NormalizeAddress(first.Value));
+                    if (!first.IsMem || GetEffectiveNote(notesLookup, baseAddrNum) == null)
+                    {
+                        chainStack.RemoveAt(0);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                // Ensure we don't accidentally preserve a non-address value if it's the only one left
+                if (chainStack.Count == 1)
+                {
+                    var first = chainStack[0];
+                    long baseAddrNum = ParseHex(LogicFormatter.NormalizeAddress(first.Value));
+                    if (!first.IsMem || GetEffectiveNote(notesLookup, baseAddrNum) == null)
+                    {
+                        chainStack.RemoveAt(0);
+                    }
+                }
+
                 if (chainStack.Count > 0)
                 {
-                    string baseAddrStr = chainStack.Pop();
-                    string normalizedBase = LogicFormatter.NormalizeAddress(baseAddrStr);
+                    var baseNode = chainStack[0];
+                    chainStack.RemoveAt(0);
+                    string normalizedBase = LogicFormatter.NormalizeAddress(baseNode.Value);
 
                     if (notesLookup.TryGetValue(normalizedBase, out var nodes))
                     {
@@ -138,8 +174,9 @@ namespace RALogicEditor.Helpers
 
                         while (chainStack.Count > 0)
                         {
-                            string offsetStr = chainStack.Pop();
-                            long offset = ParseHex(offsetStr);
+                            var offsetNode = chainStack[0];
+                            chainStack.RemoveAt(0);
+                            long offset = ParseHex(offsetNode.Value);
                             if (offset == -1) { chainValid = false; break; }
 
                             NoteNode? match = null;
@@ -269,6 +306,42 @@ namespace RALogicEditor.Helpers
             }
 
             return "";
+        }
+
+        // Newly added helper to fetch a resolved note, handling redirects to mirror AutoCR
+        public static NoteNode? GetEffectiveNote(Dictionary<string, List<NoteNode>> notesLookup, long addrVal)
+        {
+            string addrStr = "0x" + addrVal.ToString("x");
+            if (!notesLookup.TryGetValue(addrStr, out var nodes))
+                return null;
+
+            List<NoteNode> workingNodes = nodes;
+            int redirects = 0;
+
+            while (redirects < 5 && workingNodes.Count > 0)
+            {
+                var root = workingNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? workingNodes[0];
+                string content = root.Content ?? "";
+
+                if (content.Contains("refer to", StringComparison.OrdinalIgnoreCase))
+                {
+                    var match = Regex.Match(content, @"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        string targetAddr = match.Groups[1].Value;
+                        string normTarget = LogicFormatter.NormalizeAddress(targetAddr);
+                        if (notesLookup.TryGetValue(normTarget, out var targetNodes))
+                        {
+                            workingNodes = targetNodes;
+                            redirects++;
+                            continue;
+                        }
+                    }
+                }
+                break;
+            }
+
+            return workingNodes.FirstOrDefault(n => n.IndentLevel == -2) ?? workingNodes.FirstOrDefault();
         }
     }
 }

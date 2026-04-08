@@ -38,8 +38,7 @@
             commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
             multiRegionToolStripMenuItem = new ToolStripMenuItem();
             logicOptimizerToolStripMenuItem = new ToolStripMenuItem();
-            toolStripSeparator5 = new ToolStripSeparator();
-            explainLogicToolStripMenuItem = new ToolStripMenuItem();
+
             splitGroups = new SplitContainer();
             groupsList = new ListView();
             colGroups = new ColumnHeader();
@@ -280,9 +279,9 @@
             // 
             // toolsContextMenu
             // 
-            toolsContextMenu.Items.AddRange(new ToolStripItem[] { createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, multiRegionToolStripMenuItem, logicOptimizerToolStripMenuItem, toolStripSeparator5, explainLogicToolStripMenuItem });
+            toolsContextMenu.Items.AddRange(new ToolStripItem[] { createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, multiRegionToolStripMenuItem, logicOptimizerToolStripMenuItem });
             toolsContextMenu.Name = "toolsContextMenu";
-            toolsContextMenu.Size = new Size(221, 142);
+            toolsContextMenu.Size = new Size(221, 92);
             // 
             // createGeneratorToolStripMenuItem
             // 
@@ -311,18 +310,6 @@
             logicOptimizerToolStripMenuItem.Size = new Size(220, 22);
             logicOptimizerToolStripMenuItem.Text = "Logic Optimizer (Length)...";
             logicOptimizerToolStripMenuItem.Click += logicOptimizerToolStripMenuItem_Click;
-            // 
-            // toolStripSeparator5
-            // 
-            toolStripSeparator5.Name = "toolStripSeparator5";
-            toolStripSeparator5.Size = new Size(217, 6);
-            // 
-            // explainLogicToolStripMenuItem
-            // 
-            explainLogicToolStripMenuItem.Name = "explainLogicToolStripMenuItem";
-            explainLogicToolStripMenuItem.Size = new Size(220, 22);
-            explainLogicToolStripMenuItem.Text = "Explain Logic (Preview)";
-            explainLogicToolStripMenuItem.Click += explainLogicToolStripMenuItem_Click;
             // 
             // splitGroups
             // 
@@ -682,10 +669,8 @@
         private System.Windows.Forms.CheckBox chkAliasMode = null!;
         private System.Windows.Forms.Button btnTools = null!;
         private System.Windows.Forms.ContextMenuStrip toolsContextMenu = null!;
-        private System.Windows.Forms.ToolStripSeparator toolStripSeparator5 = null!;
         private System.Windows.Forms.ToolStripMenuItem saveAsSnippetToolStripMenuItem = null!;
         private System.Windows.Forms.ToolStripMenuItem insertSnippetToolStripMenuItem = null!;
-        private System.Windows.Forms.ToolStripMenuItem explainLogicToolStripMenuItem = null!;
         private System.Windows.Forms.Button btnCopyDef = null!;
         private System.Windows.Forms.CheckBox chkCollapseChains = null!;
         private System.Windows.Forms.ToolStripMenuItem multiRegionToolStripMenuItem = null!;

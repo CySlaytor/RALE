@@ -9,17 +9,16 @@ using System.Text.RegularExpressions;
 namespace RALogicEditor.Parsers
 {
     // Parses raw Code Note text into a hierarchical tree of NoteNodes.
-    // Handles standard RetroAchievements pointer notation (indentation with dots/pluses).
-    // Refactored to instance-based class implementing IPointerTreeParser.
+    // Handles standard RetroAchievements pointer notation, including Unicode box characters.
     public class PointerTreeParser : IPointerTreeParser
     {
         // Main entry point: Converts a multiline string into a flat list of nodes
         // preserving hierarchy via Parent/Children references.
         public List<NoteNode> ParseNoteText(string noteText)
         {
+            if (string.IsNullOrWhiteSpace(noteText)) return new List<NoteNode>();
+
             string[] lines = noteText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-            // Check for pointer keyword in the entire text to enable tree parsing
-            bool isPointerNote = noteText.Contains("Pointer", StringComparison.OrdinalIgnoreCase);
 
             var flatList = new List<NoteNode>();
 
@@ -33,154 +32,117 @@ namespace RALogicEditor.Parsers
 
             flatList.Add(root);
 
-            if (isPointerNote)
+            // Stack used to track the current parent at each indentation level.
+            var stack = new Stack<NoteNode>();
+
+            // Logical Root acts as the parent for top-level pointer offsets (Indent 0).
+            var logicalRoot = new NoteNode { IndentLevel = -1 };
+            stack.Push(logicalRoot);
+
+            NoteNode? lastAddedNode = null;
+
+            // Regex to parse specific pointer lines.
+            // Group 1: Indentation (traditional chars + whitespace + Unicode box drawing chars \u2500-\u257F)
+            // Group 2: Sign (+ or -). Optional capture.
+            // Group 3: Hex value (0x...).
+            // Group 4: Separator (|, =, :). Optional capture.
+            // Group 5: Description/Remainder.
+            var offsetRegex = new Regex(@"^([.\+\s\u2500-\u257F]*)([-+]?)(0x[0-9A-Fa-f]+)\s*([|=:])?\s*(.*)$");
+
+            // Helper regex to strip structural characters from description/enum lines.
+            var prefixStripRegex = new Regex(@"^([.\+\s\u2500-\u257F]+)");
+
+            for (int i = 0; i < lines.Length; i++)
             {
-                // Stack used to track the current parent at each indentation level.
-                var stack = new Stack<NoteNode>();
+                // TrimEnd instead of Trim ensures leading spaces/visual depth are preserved for the regex
+                string line = lines[i].TrimEnd();
+                if (string.IsNullOrWhiteSpace(line)) continue;
 
-                // Logical Root acts as the parent for top-level pointer offsets (Indent 0).
-                var logicalRoot = new NoteNode { IndentLevel = -1 };
-                stack.Push(logicalRoot);
+                var match = offsetRegex.Match(line);
+                bool isNode = false;
 
-                NoteNode? lastAddedNode = null;
-
-                // Regex to parse specific pointer lines.
-                // Group 1: Indentation (e.g., "+", ".+", "..", "++")
-                // Group 2: Sign (+ or -). Optional capture.
-                // Group 3: Hex value (0x...).
-                // Group 4: Separator (|, =, :). Optional capture.
-                // Group 5: Description/Remainder.
-                // UPDATED: Now captures the separator in Group 4 to distinguish between Pointer Nodes (|) and Value Definitions (=).
-                var offsetRegex = new Regex(@"^([.\+\s]*)([-+]?)(0x[0-9A-Fa-f]+)\s*([|=:])?\s*(.*)$");
-
-                // Helper regex to strip indentation characters from description lines.
-                var prefixStripRegex = new Regex(@"^([.\+\s]+)");
-
-                for (int i = 0; i < lines.Length; i++)
+                if (match.Success)
                 {
-                    string line = lines[i].Replace("\r", "").Replace("\n", "");
-                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    string indentStr = match.Groups[1].Value;
+                    string sign = match.Groups[2].Value;
+                    string separator = match.Groups[4].Value;
 
-                    var match = offsetRegex.Match(line.Trim());
-                    bool isNode = false;
+                    bool hasSign = !string.IsNullOrEmpty(sign); // e.g. +0x10 is definitely an offset
+                    bool hasIndent = indentStr.Length > 0;
 
-                    if (match.Success)
+                    if (hasSign)
                     {
-                        string indentStr = match.Groups[1].Value;
-                        string sign = match.Groups[2].Value;
-                        string separator = match.Groups[4].Value;
-
-                        // Heuristic Logic to distinguish a "Pointer Offset" from a "Value Enumeration".
-
-                        bool hasSign = !string.IsNullOrEmpty(sign); // e.g. +0x10 is definitely an offset
-                        bool hasIndent = indentStr.Contains(".") || indentStr.Contains("+");
-
-                        if (hasSign)
+                        isNode = true;
+                    }
+                    else if (indentStr.Contains("+"))
+                    {
+                        isNode = true; // Treat any indentation with '+' as a node
+                    }
+                    else if (hasIndent)
+                    {
+                        // Indented with dots/spaces/box only, no sign (e.g. "..0x04").
+                        if (separator == "|")
                         {
                             isNode = true;
-                        }
-                        else if (indentStr.Contains("+"))
-                        {
-                            // Treat any indentation with '+' as a node, even if the sign was swallowed by the indent group.
-                            // Example: "+0x10" -> G1="+" G2="" G3="0x10".
-                            isNode = true;
-                        }
-                        else if (hasIndent)
-                        {
-                            // Indented with dots only, no sign (e.g. "..0x04").
-                            // This is ambiguous: Could be a struct offset or a value definition.
-
-                            // If separator is '|', it is a description -> Node.
-                            if (separator == "|")
-                            {
-                                isNode = true;
-                            }
-                            // If separator is '=' or ':', it is a value definition -> Content.
-                            // (e.g. "...0x04 = Level 02: Operation Phone")
-
-                            // If no separator, default to Content (Value) for unsigned dot-indentation.
-                        }
-                    }
-
-                    if (isNode)
-                    {
-                        // Determine indentation depth
-                        string indentStr = match.Groups[1].Value;
-                        int indent = 0;
-                        if (indentStr.Contains("+"))
-                        {
-                            // Standard/Mixed format
-                            if (indentStr.Contains("."))
-                            {
-                                // Dot-based (e.g., ".+") -> count dots
-                                indent = indentStr.Count(c => c == '.');
-                            }
-                            else
-                            {
-                                // Pure plus-based (e.g., "++") -> count pluses minus 1
-                                // + = 0, ++ = 1, etc.
-                                indent = indentStr.Count(c => c == '+') - 1;
-                                if (indent < 0) indent = 0;
-                            }
-                        }
-                        else
-                        {
-                            // Non-standard format: just dots.
-                            indent = indentStr.Count(c => c == '.');
-                        }
-
-                        string sign = match.Groups[2].Value;
-                        string hex = match.Groups[3].Value;
-                        string desc = match.Groups[5].Value; // Updated index
-
-                        // Strip leading separators (- : =) from the description just in case regex didn't catch weird spacing
-                        while (desc.Length > 0 && (desc[0] == '-' || desc[0] == ':' || desc[0] == '=' || char.IsWhiteSpace(desc[0])))
-                        {
-                            desc = desc.Substring(1);
-                        }
-                        desc = desc.Trim();
-
-                        // Normalization: Ensure offset string always has a sign for logic generation consistency.
-                        string offset = sign + hex;
-                        if (!offset.StartsWith("+") && !offset.StartsWith("-")) offset = "+" + offset;
-
-                        long size = ParseSizeFromDescription(desc);
-
-                        var node = new NoteNode { Offset = offset, Description = desc, RawLineIndex = i, IndentLevel = indent, Size = size };
-
-                        // Tree Construction:
-                        // Pop the stack until we find a node with a lower indent level (the parent).
-                        while (stack.Count > 0 && stack.Peek().IndentLevel >= indent)
-                            stack.Pop();
-
-                        // Safety fallback
-                        if (stack.Count == 0) stack.Push(logicalRoot);
-
-                        var parent = stack.Peek();
-                        node.Parent = parent;
-                        parent.Children.Add(node);
-
-                        // Push this node as the potential parent for the next iteration.
-                        stack.Push(node);
-
-                        lastAddedNode = node;
-                    }
-                    else
-                    {
-                        // This line is not a node (e.g., a value definition like "0x01 = True").
-                        // Append it to the Content of the most recently added node.
-                        if (lastAddedNode != null)
-                        {
-                            if (lastAddedNode.Content.Length > 0) lastAddedNode.Content += "\r\n";
-                            // Clean up indentation markers so the content box looks clean.
-                            string cleanContentLine = prefixStripRegex.Replace(line.Trim(), "");
-                            lastAddedNode.Content += cleanContentLine;
                         }
                     }
                 }
-                // Recursively flatten the tree for the dropdown list.
-                CollectAllNodes(logicalRoot, flatList);
+
+                if (isNode)
+                {
+                    // Natural depth tracking: visual prefix length dictates the hierarchy level
+                    string indentStr = match.Groups[1].Value;
+                    int indent = indentStr.Length;
+
+                    string sign = match.Groups[2].Value;
+                    string hex = match.Groups[3].Value;
+                    string desc = match.Groups[5].Value;
+
+                    // Strip leading separators (- : =) just in case
+                    while (desc.Length > 0 && (desc[0] == '-' || desc[0] == ':' || desc[0] == '=' || char.IsWhiteSpace(desc[0])))
+                    {
+                        desc = desc.Substring(1);
+                    }
+                    desc = desc.Trim();
+
+                    // Normalization: Ensure offset string always has a sign for logic generation consistency.
+                    string offset = sign + hex;
+                    if (!offset.StartsWith("+") && !offset.StartsWith("-")) offset = "+" + offset;
+
+                    long size = ParseSizeFromDescription(desc);
+
+                    var node = new NoteNode { Offset = offset, Description = desc, RawLineIndex = i, IndentLevel = indent, Size = size };
+
+                    // Tree Construction:
+                    while (stack.Count > 0 && stack.Peek().IndentLevel >= indent)
+                        stack.Pop();
+
+                    // Safety fallback
+                    if (stack.Count == 0) stack.Push(logicalRoot);
+
+                    var parent = stack.Peek();
+                    node.Parent = parent;
+                    parent.Children.Add(node);
+
+                    stack.Push(node);
+
+                    lastAddedNode = node;
+                }
+                else
+                {
+                    // Append to content of most recent node
+                    if (lastAddedNode != null)
+                    {
+                        if (lastAddedNode.Content.Length > 0) lastAddedNode.Content += "\r\n";
+                        // Remove structural prefixes (like │ ) from description content to keep tooltips clean
+                        string cleanContentLine = prefixStripRegex.Replace(line, "").TrimStart();
+                        lastAddedNode.Content += cleanContentLine;
+                    }
+                }
             }
+
+            // Recursively flatten the tree for the dropdown list.
+            CollectAllNodes(logicalRoot, flatList);
             return flatList;
         }
 

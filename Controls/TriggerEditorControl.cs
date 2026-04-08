@@ -16,7 +16,6 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace RALogicEditor.Controls
 {
@@ -278,7 +277,7 @@ namespace RALogicEditor.Controls
             foreach (var note in notes)
             {
                 // Basic check: Does it look like a real note?
-                bool hasStructure = Regex.IsMatch(note.Note, @"^[.+]", RegexOptions.Multiline);
+                bool hasStructure = Regex.IsMatch(note.Note, @"^[.\+\s\u2500-\u257F]", RegexOptions.Multiline);
                 if (!hasStructure)
                 {
                     var match = redirectRegex.Match(note.Note);
@@ -514,7 +513,7 @@ namespace RALogicEditor.Controls
                 cmbFormat.Text = lb.Format;
             }
 
-            chkLowerIsBetter.Checked = lb.LowerIsBetter == 1;
+            chkLowerIsBetter.Checked = lb.LowerIsBetter;
 
             // Position formatting controls
             lblFormat.Location = new Point(textLeft - 100, 63); // Adjust relative to ListView
@@ -592,14 +591,12 @@ namespace RALogicEditor.Controls
                 if (generatedIndices.Contains(i))
                 {
                     item.ForeColor = Color.Gray;
-                    // FIX: Ambiguous reference 'Font'. Fully qualified System.Drawing.Font
                     item.Font = new System.Drawing.Font(groupsList.Font, FontStyle.Italic);
                     item.Text += " (Auto)";
                 }
                 else if (generatorRules.ContainsKey(i))
                 {
                     item.ForeColor = Color.Blue;
-                    // FIX: Ambiguous reference 'Font'. Fully qualified System.Drawing.Font
                     item.Font = new System.Drawing.Font(groupsList.Font, FontStyle.Bold);
                     item.Text += " *";
 
@@ -749,7 +746,7 @@ namespace RALogicEditor.Controls
             if (_isProgrammaticallyChanging) return;
             if (_viewModel.BoundAsset is RaLeaderboard lb)
             {
-                lb.LowerIsBetter = chkLowerIsBetter.Checked ? 1 : 0;
+                lb.LowerIsBetter = chkLowerIsBetter.Checked;
                 AchievementDataChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -1380,34 +1377,6 @@ namespace RALogicEditor.Controls
                     }
                 }
             }
-        }
-
-        // Event Handler for the "Explain Logic" tool menu item
-        private void explainLogicToolStripMenuItem_Click(object? sender, EventArgs e)
-        {
-            if (_viewModel.BoundAsset == null) return;
-
-            var form = new LogicExplainerForm();
-            var allGroups = new List<AchievementConditionGroup>();
-
-            // Gather all groups from all segments to show the full logic
-            foreach (var segName in _viewModel.AssetStrategy.GetSegmentNames())
-            {
-                if (!_viewModel.AssetStrategy.IsLeaderboard)
-                {
-                    allGroups.AddRange(_viewModel.ActiveGroups);
-                    break;
-                }
-                else
-                {
-                    // For Leaderboards, showing only the active tab (e.g. Start) is safer for now
-                    allGroups.AddRange(_viewModel.ActiveGroups);
-                    break;
-                }
-            }
-
-            form.DisplayLogic(_viewModel.BoundAsset, allGroups, _notesLookup, _gridManager.RangeCache);
-            form.Show();
         }
 
         // Multi-Region Support Menu Handler (Passes logic to MainForm)

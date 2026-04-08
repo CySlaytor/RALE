@@ -1,4 +1,5 @@
-﻿using RALogicEditor.Helpers;
+﻿#nullable enable
+using RALogicEditor.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,7 +12,7 @@ namespace RALogicEditor.Logic
     // This is used for the "Live Preview" and generating new notes based on prefs.
     public static class CodeNoteFormatter
     {
-        public static string BuildCodeNote(List<int> offsets, string prefixPref, string suffixPref, bool alignSuffixes, bool lastLineOnly, string finalMemorySize = null, string finalDescription = null)
+        public static string BuildCodeNote(List<int> offsets, string prefixPref, string suffixPref, bool alignSuffixes, bool lastLineOnly, string? finalMemorySize = null, string? finalDescription = null)
         {
             if (offsets == null || offsets.Count == 0) return string.Empty;
 
@@ -88,23 +89,16 @@ namespace RALogicEditor.Logic
             var lines = inputText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
             // Auto-detect style if user pastes mixed content, though usually we pass the pref
-            char indentChar = (indentCharPref.Length > 0) ? indentCharPref[0] : '.';
-            if (lines.Any(line => line.TrimStart().StartsWith("++"))) indentChar = '+';
+            string style = "Dots (.)";
+            if (indentCharPref.StartsWith("├")) style = "Unicode Tree (├─)";
+            else if (lines.Any(line => line.TrimStart().StartsWith("++")) || indentCharPref.StartsWith("+")) style = "Plusses (+)";
 
             var parsedTree = ParseLinesToTree(lines);
             var mergedTree = MergeTree(parsedTree);
 
-            // Sort: Non-offsets first, then offsets numerically
-            var offsetRegex = new Regex(@"^[\+\-]0x([0-9a-fA-F]+)", RegexOptions.IgnoreCase);
-            mergedTree = mergedTree.OrderBy(node => offsetRegex.IsMatch(node.Content) ? 1 : 0)
-                                   .ThenBy(node =>
-                                   {
-                                       var match = offsetRegex.Match(node.Content);
-                                       if (match.Success) return Convert.ToInt64(match.Groups[1].Value, 16);
-                                       return (long)node.OriginalIndex;
-                                   }).ToList();
+            // Sort: Non-offsets first, then offsets numerically (Handled inside MergeTree now)
 
-            return RebuildTextFromTree(mergedTree, 0, indentChar, indentValues).Trim();
+            return RebuildTextFromTree(mergedTree, 0, style, indentValues).Trim();
         }
 
         private static List<CodeNoteNode> ParseLinesToTree(string[] lines)
@@ -126,27 +120,49 @@ namespace RALogicEditor.Logic
                 int indent = 0;
                 string content;
                 string untrimmedLine = line.TrimEnd();
-                // Calculate indentation level based on leading characters (. or +)
-                int prefixLength = untrimmedLine.TakeWhile(c => c == '.' || c == '+').Count();
 
-                if (prefixLength > 0)
+                // Count leading characters that define indentation level for traditional styles
+                int classicPrefixLength = untrimmedLine.TakeWhile(c => c == '.' || c == '+').Count();
+
+                if (classicPrefixLength > 0)
                 {
                     // Handle specific edge case for '+' style (e.g. "++0x...")
-                    if (untrimmedLine[prefixLength - 1] == '+' && untrimmedLine.Length > prefixLength && untrimmedLine[prefixLength] != ' ')
+                    // For plus-based indents like "++0x...", the indent is one less than the count
+                    if (untrimmedLine[classicPrefixLength - 1] == '+' && untrimmedLine.Length > classicPrefixLength && untrimmedLine[classicPrefixLength] != ' ')
                     {
-                        indent = prefixLength - 1;
+                        indent = classicPrefixLength - 1;
                         content = untrimmedLine.Substring(indent).Trim();
                     }
                     else
                     {
-                        indent = prefixLength;
+                        indent = classicPrefixLength;
                         content = untrimmedLine.Substring(indent).Trim();
                     }
                 }
                 else
                 {
-                    indent = 0;
-                    content = untrimmedLine.Trim();
+                    // Check for Unicode tree characters so pasting existing formatted trees still works
+                    int unicodePrefixLength = untrimmedLine.TakeWhile(c => c == '│' || c == ' ' || c == '├' || c == '└' || c == '┬' || c == '─').Count();
+                    bool hasBoxChar = untrimmedLine.Substring(0, unicodePrefixLength).Any(c => c == '│' || c == '├' || c == '└' || c == '┬' || c == '─');
+
+                    if (unicodePrefixLength > 0 && hasBoxChar)
+                    {
+                        char lastChar = untrimmedLine[unicodePrefixLength - 1];
+                        if (lastChar == '┬' || lastChar == '─')
+                        {
+                            indent = unicodePrefixLength - 1;
+                        }
+                        else
+                        {
+                            indent = 0; // Force 0 so it attaches to lastNode as an Attached Note
+                        }
+                        content = untrimmedLine.Substring(unicodePrefixLength).Trim();
+                    }
+                    else
+                    {
+                        indent = 0;
+                        content = untrimmedLine.Trim();
+                    }
                 }
 
                 if (indent < 0) indent = 0;
@@ -154,12 +170,14 @@ namespace RALogicEditor.Logic
                 // Heuristic: Is this line a note attached to the previous pointer?
                 // Logic: It has 0 indent, there was a previous node, and it DOESN'T look like a new pointer offset.
                 bool isAttachedNote = (indent == 0) && (lastNode != null) &&
-                                      !(content.StartsWith("+0x") || content.StartsWith("-0x") || content.StartsWith("["));
+                                      !(content.StartsWith("+0x", StringComparison.OrdinalIgnoreCase) ||
+                                        content.StartsWith("-0x", StringComparison.OrdinalIgnoreCase) ||
+                                        content.StartsWith("["));
 
                 if (isAttachedNote)
                 {
                     // Add it as a child of the previous node regardless of hierarchy
-                    lastNode.Children.Add(new CodeNoteNode { Content = content, OriginalIndex = lineIndex });
+                    lastNode!.Children.Add(new CodeNoteNode { Content = content, OriginalIndex = lineIndex });
                 }
                 else
                 {
@@ -253,47 +271,100 @@ namespace RALogicEditor.Logic
                 finalNodes.Add(node);
             }
 
-            // Return sorted by original file position to keep context
-            return finalNodes.OrderBy(n => n.OriginalIndex).ToList();
+            // Finally, sort the processed nodes at this level.
+            // This ensures offsets are numerically sorted, while other content stays in place.
+            return SortNodes(finalNodes);
         }
 
-        private static string RebuildTextFromTree(List<CodeNoteNode> nodes, int indentLevel, char indentChar, bool indentValues)
+        // Helper method to sort nodes intelligently.
+        private static List<CodeNoteNode> SortNodes(List<CodeNoteNode> nodes)
         {
+            var offsetRegex = new Regex(@"^[\+\-]0x([0-9a-fA-F]+)", RegexOptions.IgnoreCase);
+
+            // Logic:
+            // 1. Primary Sort: Non-offsets (Group 0) come before Offsets (Group 1).
+            // 2. Secondary Sort:
+            //    - If it's an offset (Group 1), sort by the numeric hexadecimal value.
+            //    - If it's not an offset (Group 0), sort by OriginalIndex to preserve file order.
+            return nodes.OrderBy(node => offsetRegex.IsMatch(node.Content) ? 1 : 0)
+                        .ThenBy(node =>
+                        {
+                            var match = offsetRegex.Match(node.Content);
+                            if (match.Success)
+                            {
+                                return Convert.ToInt64(match.Groups[1].Value, 16);
+                            }
+                            return (long)node.OriginalIndex;
+                        }).ToList();
+        }
+
+        private static string RebuildTextFromTree(List<CodeNoteNode> nodes, int indentLevel, string style, bool indentDescriptions, List<bool>? ancestorIsLast = null)
+        {
+            if (ancestorIsLast == null) ancestorIsLast = new List<bool>();
             var sb = new StringBuilder();
-            foreach (var node in nodes)
+
+            for (int i = 0; i < nodes.Count; i++)
             {
+                var node = nodes[i];
+                bool isLastChild = (i == nodes.Count - 1);
+
+                // Check if any actual pointer descendants exist to know whether to draw a "┬" or "─"
+                bool hasPointerChildren = node.Children.Any(c => c.Content.StartsWith("+0x", StringComparison.OrdinalIgnoreCase) || c.Content.StartsWith("-0x", StringComparison.OrdinalIgnoreCase));
+
                 // Formatting: Add a blank line before top-level nodes (except the first) for readability
-                if (indentLevel == 0 && sb.Length > 0) sb.AppendLine();
+                if (indentLevel == 0 && sb.Length > 0)
+                {
+                    sb.AppendLine();
+                }
 
                 // Identify if this node is a pointer/struct offset or a value/comment
-                bool isPointerOrStruct = node.Content.StartsWith("+0x") || node.Content.StartsWith("[") || node.Content.StartsWith("-0x");
+                bool isPointerOffset = node.Content.StartsWith("+0x", StringComparison.OrdinalIgnoreCase) || node.Content.StartsWith("-0x", StringComparison.OrdinalIgnoreCase);
+                bool isAttachedNote = !isPointerOffset;
 
-                char currentChar;
                 string prefix = "";
 
-                if (isPointerOrStruct)
+                if (style.StartsWith("Unicode Tree"))
                 {
-                    currentChar = indentChar;
-                    prefix = indentLevel > 0 ? new string(currentChar, indentLevel) : "";
-                }
-                else
-                {
-                    // For values/comments (children that aren't pointers)
-                    if (indentValues)
+                    if (isAttachedNote)
                     {
-                        // Use '.' by default for values/comments attached to pointers as per common style
-                        currentChar = '.';
-                        prefix = indentLevel > 0 ? new string(currentChar, indentLevel) : "";
+                        if (indentDescriptions && indentLevel > 0)
+                        {
+                            for (int a = 0; a < indentLevel - 1; a++) prefix += ancestorIsLast[a] ? " " : "│";
+                            prefix += " "; // Fixed: Use a blank space for notes so they align cleanly under the parent text
+                        }
                     }
                     else
                     {
-                        // Flatten: No prefix
-                        prefix = "";
+                        if (indentLevel > 0)
+                        {
+                            for (int a = 0; a < indentLevel - 1; a++) prefix += ancestorIsLast[a] ? " " : "│";
+                            prefix += isLastChild ? "└" : "├";
+                            prefix += hasPointerChildren ? "┬" : "─";
+                        }
+                    }
+                }
+                else
+                {
+                    char indentChar = style.StartsWith("Plusses") ? '+' : '.';
+
+                    if (isAttachedNote)
+                    {
+                        // For values/comments (children that aren't pointers)
+                        if (indentDescriptions) prefix = indentLevel > 0 ? new string('.', indentLevel) : "";
+                    }
+                    else
+                    {
+                        prefix = indentLevel > 0 ? new string(indentChar, indentLevel) : "";
                     }
                 }
 
                 sb.AppendLine($"{prefix}{node.Content}");
-                if (node.Children.Any()) sb.Append(RebuildTextFromTree(node.Children, indentLevel + 1, indentChar, indentValues));
+
+                if (node.Children.Any())
+                {
+                    List<bool> newAncestorIsLast = indentLevel == 0 ? new List<bool>() : new List<bool>(ancestorIsLast) { isLastChild };
+                    sb.Append(RebuildTextFromTree(node.Children, indentLevel + 1, style, indentDescriptions, newAncestorIsLast));
+                }
             }
             return sb.ToString();
         }

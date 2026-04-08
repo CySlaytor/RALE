@@ -104,7 +104,7 @@ namespace RALogicEditor.Helpers
             // Check for Redirection (Refer to $0x...)
             // Logic: If the note is essentially empty (no structure) AND has a referral, follow it.
             // We check if the note has actual pointer structure (plus/dots). If not, we assume it's a stub.
-            bool hasStructure = Regex.IsMatch(note.Note, @"^[.+]", RegexOptions.Multiline);
+            bool hasStructure = Regex.IsMatch(note.Note, @"^[.\+\s\u2500-\u257F]", RegexOptions.Multiline);
             var referralMatch = Regex.Match(note.Note, @"refer to \$0x([0-9a-f]+)", RegexOptions.IgnoreCase);
 
             IsRedirected = false;
@@ -392,13 +392,45 @@ namespace RALogicEditor.Helpers
             SelectBaseNote(newNote);
         }
 
+        // Helper to provide NotesLookup for Range Array Indexing Filtering
+        private Dictionary<string, List<NoteNode>> NotesLookup()
+        {
+            var lookup = new Dictionary<string, List<NoteNode>>();
+            foreach (var note in AllNotes)
+            {
+                lookup[LogicFormatter.NormalizeAddress(note.Address)] = _parser.ParseNoteText(note.Note);
+            }
+            return lookup;
+        }
+
         public void HighlightVariable(List<long> offsets)
         {
             if (EditState.IsDirty) CommitEditState();
 
             if (offsets == null || offsets.Count == 0) return;
-            if (CurrentBaseNote == null) return;
-            if (CurrentParsedNodes.Count == 0) return;
+
+            // Re-apply Array Indexing Filter just in case it wasn't cleaned by the caller (ConditionGridManager does this now, but extra safety is good)
+            while (offsets.Count > 1)
+            {
+                long baseAddr = offsets[0];
+                if (ConditionFormatter.GetEffectiveNote(NotesLookup(), baseAddr) == null)
+                {
+                    offsets.RemoveAt(0);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            string baseHex = "0x" + offsets[0].ToString("x");
+            var matchNote = AllNotes.FirstOrDefault(n => n.Address.Equals(baseHex, StringComparison.OrdinalIgnoreCase));
+            if (matchNote != null)
+            {
+                SelectBaseNote(matchNote);
+            }
+
+            if (CurrentBaseNote == null || CurrentParsedNodes.Count == 0) return;
 
             var nodes = CurrentParsedNodes;
             NoteNode? bestMatchNode = null;
@@ -417,17 +449,22 @@ namespace RALogicEditor.Helpers
             }
 
             var rootNodes = nodes.Where(n => n.IndentLevel == 0 || (n.Parent != null && n.Parent.IndentLevel == -1) || (n.Parent == null && n.IndentLevel != -2)).ToList();
-            var current = rootNodes.FirstOrDefault(n => ParseOffsetString(n.Offset) == offsets[0]);
+
+            // Skip the base address since we're already at the root of its note
+            // offsets[0] is the base address, offsets[1] is the first actual inner offset
+            if (offsets.Count <= 1) return;
+
+            var current = rootNodes.FirstOrDefault(n => ParseOffsetString(n.Offset) == offsets[1]);
 
             if (current == null)
             {
                 foreach (var n in rootNodes)
                 {
                     long start = ParseOffsetString(n.Offset);
-                    if (offsets[0] >= start && offsets[0] < start + n.Size)
+                    if (offsets[1] >= start && offsets[1] < start + n.Size)
                     {
                         current = n;
-                        finalRemainder = offsets[0] - start;
+                        finalRemainder = offsets[1] - start;
                         break;
                     }
                 }
@@ -436,7 +473,7 @@ namespace RALogicEditor.Helpers
             if (current != null)
             {
                 bestMatchNode = current;
-                matchedDepth = 1;
+                matchedDepth = 2; // Matched base + first offset
 
                 // Continue matching even if we have a remainder (Array/Struct coverage logic)
                 while (matchedDepth < offsets.Count)
@@ -488,7 +525,7 @@ namespace RALogicEditor.Helpers
                 string baseAddrStr = CurrentBaseNote.Address.StartsWith("0x") ? CurrentBaseNote.Address.Substring(2) : CurrentBaseNote.Address;
                 StringBuilder sbLogic = new StringBuilder();
                 sbLogic.Append($"I:0x{baseAddrStr}");
-                for (int i = 0; i < offsets.Count; i++)
+                for (int i = 1; i < offsets.Count; i++) // Skip base
                 {
                     sbLogic.Append("_");
                     if (i == offsets.Count - 1) sbLogic.Append($"0x{offsets[i]:x}");
@@ -506,8 +543,8 @@ namespace RALogicEditor.Helpers
                     desc += $" +0x{finalRemainder:X}";
                 }
 
-                // Pass the full chain of offsets to allow recreation
-                SetEditState(true, desc, desc, sbLogic.ToString(), type, size, offsets);
+                // Store chain offsets starting AFTER the base address to allow reconstruction inside InjectNoteContent correctly
+                SetEditState(true, desc, desc, sbLogic.ToString(), type, size, offsets.Skip(1).ToList());
                 return;
             }
 
@@ -517,7 +554,7 @@ namespace RALogicEditor.Helpers
                 StringBuilder sb = new StringBuilder();
                 sb.Append($"I:0x{baseAddrStr}");
 
-                for (int i = 0; i < offsets.Count; i++)
+                for (int i = 1; i < offsets.Count; i++)
                 {
                     sb.Append("_");
                     if (i == offsets.Count - 1) sb.Append($"0x{offsets[i]:x}");
@@ -525,9 +562,9 @@ namespace RALogicEditor.Helpers
                 }
 
                 string desc = $"{CurrentBaseNote.Address} Chain";
-                foreach (var o in offsets) desc += $" +0x{o:X}";
+                foreach (var o in offsets.Skip(1)) desc += $" +0x{o:X}";
 
-                SetEditState(true, desc, desc, sb.ToString(), "Mem", "32-bit", offsets);
+                SetEditState(true, desc, desc, sb.ToString(), "Mem", "32-bit", offsets.Skip(1).ToList());
                 return;
             }
         }

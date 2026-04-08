@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -44,6 +45,10 @@ namespace RALogicEditor.Forms
 
         private void AlignDiffLists(ref List<string> left, ref List<string> right)
         {
+            // Simple greedy alignment algorithm
+            // If line A != line B, check if matching line appears later.
+            // Insert blank lines to align matching blocks.
+
             int i = 0;
             int j = 0;
             var newLeft = new List<string>();
@@ -250,7 +255,9 @@ namespace RALogicEditor.Forms
 
         // --- Basic Word Diff Algorithm ---
         private class DiffResult { public List<DiffToken> LeftTokens = new(); public List<DiffToken> RightTokens = new(); }
-        private class DiffToken { public string Text; public bool IsMatch; }
+
+        // Added default empty string initialization to avoid CS8618 warning
+        private class DiffToken { public string Text = ""; public bool IsMatch; }
 
         private DiffResult ComputeWordDiff(string left, string right)
         {

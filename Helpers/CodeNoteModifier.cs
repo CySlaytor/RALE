@@ -11,7 +11,7 @@ namespace RALogicEditor.Helpers
 {
     public static class CodeNoteModifier
     {
-        public enum IndentStyle { Plus, Mixed, Dot }
+        public enum IndentStyle { Plus, Mixed, Dot, Unicode }
         public enum SeparatorStyle { Pipe, Equals, Colon, Space }
 
         public class NoteStyle
@@ -22,6 +22,13 @@ namespace RALogicEditor.Helpers
             public string GetIndentString(int depth)
             {
                 if (depth < 1) return "";
+
+                // Fully support the Unicode drawing logic
+                if (Indentation == IndentStyle.Unicode)
+                {
+                    if (depth == 1) return "├─";
+                    return new string('│', depth - 1) + "├─";
+                }
 
                 if (Indentation == IndentStyle.Plus)
                     return new string('+', depth);
@@ -57,11 +64,12 @@ namespace RALogicEditor.Helpers
             public int PlusCount = 0;
             public int MixedCount = 0;
             public int DotCount = 0;
+            public int UnicodeCount = 0;
             public int PipeCount = 0;
             public int EqCount = 0;
             public int ColCount = 0;
 
-            public bool HasIndent => PlusCount > 0 || MixedCount > 0 || DotCount > 0;
+            public bool HasIndent => PlusCount > 0 || MixedCount > 0 || DotCount > 0 || UnicodeCount > 0;
             public bool HasSeparator => PipeCount > 0 || EqCount > 0 || ColCount > 0;
         }
 
@@ -74,9 +82,6 @@ namespace RALogicEditor.Helpers
             // If we found relevant styling in the current note, use it.
             if (localStats.HasIndent || localStats.HasSeparator)
             {
-                // If local stats define indentation but not separator, or vice versa,
-                // we should arguably merge with global stats, but for now let's trust local detection logic
-                // which defaults intelligently.
                 var style = ResolveStyle(localStats);
 
                 // If local lacked separator info, try to fill from global
@@ -104,7 +109,9 @@ namespace RALogicEditor.Helpers
         private static StyleStats ScanStats(IEnumerable<string> notes)
         {
             var stats = new StyleStats();
-            var indentRegex = new Regex(@"^([.+]+)0x", RegexOptions.Multiline);
+
+            // Expanded regex to catch Unicode box drawing characters as well as . and +
+            var indentRegex = new Regex(@"^([.\+\s\u2500-\u257F]+)0x", RegexOptions.Multiline);
             var sepRegex = new Regex(@"0x[0-9A-Fa-f]+\s*([|=:])\s*", RegexOptions.Multiline);
 
             foreach (var noteText in notes)
@@ -115,7 +122,11 @@ namespace RALogicEditor.Helpers
                 foreach (Match m in matches)
                 {
                     string indent = m.Groups[1].Value;
-                    if (indent.Contains("."))
+                    if (indent.Any(c => c == '│' || c == '├' || c == '└' || c == '┬' || c == '─'))
+                    {
+                        stats.UnicodeCount++;
+                    }
+                    else if (indent.Contains("."))
                     {
                         if (indent.Contains("+")) stats.MixedCount++;
                         else stats.DotCount++;
@@ -142,7 +153,9 @@ namespace RALogicEditor.Helpers
         {
             var style = new NoteStyle();
 
-            if (stats.MixedCount > stats.DotCount && stats.MixedCount > stats.PlusCount) style.Indentation = IndentStyle.Mixed;
+            // Priority check for Unicode
+            if (stats.UnicodeCount > stats.DotCount && stats.UnicodeCount > stats.PlusCount && stats.UnicodeCount > stats.MixedCount) style.Indentation = IndentStyle.Unicode;
+            else if (stats.MixedCount > stats.DotCount && stats.MixedCount > stats.PlusCount) style.Indentation = IndentStyle.Mixed;
             else if (stats.DotCount > stats.PlusCount && stats.DotCount > stats.MixedCount) style.Indentation = IndentStyle.Dot;
             else style.Indentation = IndentStyle.Plus;
 
@@ -169,12 +182,16 @@ namespace RALogicEditor.Helpers
             else if (parentLine.Contains(":")) localStyle.Separator = SeparatorStyle.Colon;
 
             // Infer Indentation Pattern from specific line
-            // Regex matches start of line like "  +0x" or ".+0x"
-            var match = Regex.Match(parentLine.TrimStart(), @"^([.+]+)");
+            // Regex matches start of line like "  +0x" or ".+0x" or "├─0x"
+            var match = Regex.Match(parentLine.TrimStart(), @"^([.\+\s\u2500-\u257F]+)");
             if (match.Success)
             {
                 string indent = match.Groups[1].Value;
-                if (indent.Contains("."))
+                if (indent.Any(c => c == '│' || c == '├' || c == '└' || c == '┬' || c == '─'))
+                {
+                    localStyle.Indentation = IndentStyle.Unicode;
+                }
+                else if (indent.Contains("."))
                 {
                     // Explicit dots
                     localStyle.Indentation = indent.Contains("+") ? IndentStyle.Mixed : IndentStyle.Dot;
@@ -296,54 +313,22 @@ namespace RALogicEditor.Helpers
 
                     if (i == chainOffsets.Count - 1)
                     {
-                        // Re-detect style from the child itself to ensure we match its current format during replacement
-                        // NOTE: If we matched via Range (child.Offset != targetOffset), we do NOT edit this node's content.
-                        // We only edit if it was an exact match. If it's a range match, we effectively "found" the 
-                        // struct base, but the user is asking to edit the *specific* offset.
-                        // However, logic flow suggests if we are at the end of the chain, we want to edit the LEAF.
-                        // If the leaf was "0x40" (in logic) but we matched "0x00" (in notes), we shouldn't overwrite 0x00's text
-                        // with 0x40's text. 
-                        // But practically, the logic shouldn't end on a struct base if it's meant to be a value.
-                        // If the user clicked "Add Note" on 0x40, and 0x40 is hidden in 0x00, they likely want to ADD 0x40 inside 0x00?
-                        // But `InjectNoteContent` is iterating the chain. If we are here, we are consuming `0x40`.
-                        // If we consume `0x40` by stepping into `0x00`, we haven't actually "found" the node for 0x40,
-                        // we found its container.
-                        // But the loop will end here. 
-                        // If we matched by range, we shouldn't replace the content of the container.
-                        // We should probably CREATE the specific node inside the container?
-                        // But the requirement is "offset in the code note is the one it should take the lead, which is 0x00".
-                        // So we just stop here and assume the user meant to edit the container?
-                        // Or we create a new child inside?
-
-                        // Per the requirement: "merge this offset... offset in the code note is the one it should take the lead"
-                        // This implies we simply navigate to the container and stop. 
-                        // If the user wants to edit the specific field, they will be editing the Container's text block.
-
                         long childOffset = ParseOffset(child.Offset);
                         if (childOffset == targetOffset)
                         {
                             var childStyle = DetectLocalStyle(lines[child.RawLineIndex], effectiveStyle);
                             ReplaceNodeContent(lines, child, newContent, childStyle, child.IndentLevel + 1);
                         }
-                        // If range match (childOffset != targetOffset), we do nothing to the file text for THIS step.
-                        // We just treat 'child' as the valid path node and finish. 
-                        // This effectively "merges" the logic offset into the existing note structure.
                     }
                 }
                 else
                 {
                     // Node missing, create it
-                    // If currentNode is null, we are inserting at Top Level (Level 0)
-                    // If currentNode is set, we insert into it
-
                     int insertIndex = GetInsertionIndex(lines, currentNode, rootNodes);
 
                     string offsetHex = "0x" + targetOffset.ToString("x");
                     if (targetOffset < 0) offsetHex = "-0x" + Math.Abs(targetOffset).ToString("x");
 
-                    // Determine insertion depth.
-                    // If no parent (root insertion), depth is 1.
-                    // If parent exists, depth is parent.IndentLevel + 2 (e.g. Parent Level 0 -> Depth 1 -> Child Depth 2).
                     int insertionDepth = (currentNode == null) ? 1 : currentNode.IndentLevel + 2;
 
                     string indent = effectiveStyle.GetIndentString(insertionDepth);
@@ -401,9 +386,8 @@ namespace RALogicEditor.Helpers
             int idx = node.RawLineIndex + 1;
 
             // Improved Regex: Must look for Structural Nodes, NOT value definitions.
-            // A Structural Node MUST start with . or + (for indentation) followed immediately by 0x
-            // This prevents stopping early on lines like "0x01 = True" inside a node body.
-            var nodeStructureRegex = new Regex(@"^\s*[.+]+0x", RegexOptions.IgnoreCase);
+            // Added Unicode box drawing characters to regex.
+            var nodeStructureRegex = new Regex(@"^\s*[.\+\u2500-\u257F]+0x", RegexOptions.IgnoreCase);
 
             while (idx < lines.Count)
             {
@@ -415,7 +399,7 @@ namespace RALogicEditor.Helpers
                     idx++; removeCount++; continue;
                 }
 
-                // If we hit a line that starts with . or + AND 0x, it's a new structural node -> Stop removing
+                // If we hit a line that starts with indent AND 0x, it's a new structural node -> Stop removing
                 if (nodeStructureRegex.IsMatch(line)) break;
 
                 // Safety: If we hit something that looks like a root pointer "+0x...", stop
@@ -477,8 +461,7 @@ namespace RALogicEditor.Helpers
             // Start searching *after* the node's header line
             int idx = node.RawLineIndex + 1;
 
-            // Same improved regex here to properly skip body content
-            var nodeStructureRegex = new Regex(@"^\s*[.+]+0x", RegexOptions.IgnoreCase);
+            var nodeStructureRegex = new Regex(@"^\s*[.\+\u2500-\u257F]+0x", RegexOptions.IgnoreCase);
 
             while (idx < lines.Count)
             {
