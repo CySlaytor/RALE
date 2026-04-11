@@ -87,7 +87,8 @@ namespace RALogicEditor.Services
                     // Only save notes that are modified or new compared to the server JSON
                     if (repo.IsNoteSynced(n)) continue;
 
-                    sb.AppendLine($"N0:{n.Address}:\"{n.Note.Replace("\r\n", "\\r\\n")}\"");
+                    // Replaces literal line feeds with \r\n formatting. Handles all forms safely to prevent regex parse failures on reload
+                    sb.AppendLine($"N0:{n.Address}:\"{n.Note.Replace("\r", "").Replace("\n", "\\r\\n")}\"");
                 }
             }
 

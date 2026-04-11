@@ -9,6 +9,15 @@ namespace RALogicEditor.Forms
 
     public partial class NoteMultiplierForm : Form
     {
+        // Static fields to persist state across session
+        private static int _lastCopies = 1;
+        private static string _lastStride = "0x0";
+        private static int _lastStartNum = 2;
+        private static int _lastNamingIdx = 1;
+        private static string _lastSearch = "";
+        private static string _lastReplace = "";
+        private static bool _lastApplyToChildren = true;
+
         public int Copies { get; private set; }
         public long Stride { get; private set; }
         public NamingStyle Naming { get; private set; }
@@ -21,7 +30,14 @@ namespace RALogicEditor.Forms
         {
             InitializeComponent();
 
-            cmbNaming.SelectedIndex = 1; // Default to Replace "Slot 1"
+            // Load persisted state
+            txtCopies.Text = _lastCopies.ToString();
+            txtStride.Text = _lastStride;
+            txtStartNum.Text = _lastStartNum.ToString();
+            txtSearch.Text = _lastSearch;
+            txtReplace.Text = _lastReplace;
+            cmbNaming.SelectedIndex = _lastNamingIdx;
+            chkApplyToChildren.Checked = _lastApplyToChildren;
 
             if (mode == MultiplierMode.Address)
             {
@@ -74,6 +90,15 @@ namespace RALogicEditor.Forms
             ReplaceText = txtReplace.Text;
             StartNumber = startNum;
             ApplyToChildren = chkApplyToChildren.Checked;
+
+            // Save state for next use
+            _lastCopies = Copies;
+            _lastStride = txtStride.Text.Trim();
+            _lastStartNum = StartNumber;
+            _lastNamingIdx = cmbNaming.SelectedIndex;
+            _lastSearch = SearchText;
+            _lastReplace = ReplaceText;
+            _lastApplyToChildren = ApplyToChildren;
 
             this.DialogResult = DialogResult.OK;
             this.Close();

@@ -21,7 +21,8 @@ namespace RALogicEditor.Controls
     public partial class CodeNoteEditorControl : UserControl
     {
         public event EventHandler? ReloadRequested;
-        public event EventHandler? SaveRequested; // New Event for Save button
+        public event EventHandler? SaveRequested;
+        public event EventHandler? NoteUpdated; // New Event for real-time grid refresh
 
         // The ViewModel handles the heavy logic (Moved out of View)
         private readonly CodeNoteViewModel _viewModel;
@@ -58,8 +59,56 @@ namespace RALogicEditor.Controls
             _viewModel.EditStateChanged += ViewModel_EditStateChanged;
             _viewModel.SelectionRequested += ViewModel_SelectionRequested;
 
+            // Bridge ViewModel modification to real-time event
+            _viewModel.NoteContentChanged += (s, e) => NoteUpdated?.Invoke(this, EventArgs.Empty);
+
             // Re-parse view when filter toggles
             chkShowLeafsOnly.CheckedChanged += (s, e) => RefreshVariableTreeDisplay();
+
+            // Wire up Undo intercept
+            txtNoteBody.KeyDown += txtNoteBody_KeyDown;
+            txtNoteBody.Enter += txtNoteBody_Enter;
+
+            // Handle Context Menu State Logic
+            cmsNoteContext.Opening += (s, e) =>
+            {
+                deleteNodeToolStripMenuItem.Enabled = !_viewModel.EditState.IsVirtual;
+            };
+        }
+
+        private void txtNoteBody_Enter(object? sender, EventArgs e)
+        {
+            // Push undo state right before user starts manually typing
+            if (!txtNoteBody.ReadOnly)
+            {
+                _viewModel.PushUndoState();
+            }
+        }
+
+        private void txtNoteBody_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Control && e.KeyCode == Keys.Z)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                if (_viewModel.CanUndo)
+                {
+                    _viewModel.Undo();
+                    _hasUnsavedChanges = true;
+                    UpdateStatusDisplay("Undone.");
+                }
+            }
+            else if (e.Control && e.KeyCode == Keys.Y)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                if (_viewModel.CanRedo)
+                {
+                    _viewModel.Redo();
+                    _hasUnsavedChanges = true;
+                    UpdateStatusDisplay("Redone.");
+                }
+            }
         }
 
         private void btnReload_Click(object sender, EventArgs e)
@@ -84,6 +133,8 @@ namespace RALogicEditor.Controls
             string currentText = txtNoteBody.Text;
             if (string.IsNullOrWhiteSpace(currentText)) return;
 
+            _viewModel.PushUndoState();
+
             // Use the ported Logic helper to fix indentation, sort, and merge
             // Pass the indentation prefix from settings and the indentation preference
             string fixedText = CodeNoteLogic.FixHierarchy(
@@ -95,7 +146,7 @@ namespace RALogicEditor.Controls
             // Update text box (will trigger TextChanged -> ViewModel buffering)
             if (txtNoteBody.Text != fixedText)
             {
-                txtNoteBody.Text = fixedText;
+                _viewModel.UpdateNoteContent(fixedText);
                 _hasUnsavedChanges = true;
                 UpdateStatusDisplay("Hierarchy fixed.");
             }
@@ -209,17 +260,14 @@ namespace RALogicEditor.Controls
 
                     // Lock if redirected
                     txtNoteBody.ReadOnly = _viewModel.IsRedirected;
-
-                    // Reset unsaved status on load
-                    _hasUnsavedChanges = false;
                 }
 
                 // 2. Refresh Tree Dropdown
                 RefreshVariableTreeDisplay();
 
-                // 3. Select Root
-                if (cmbVariables.Items.Count > 0) cmbVariables.SelectedIndex = 0;
-                else cmbVariables.SelectedIndex = -1;
+                // 3. Select Root (If nothing else was selected during a tree refresh)
+                if (cmbVariables.Items.Count > 0 && cmbVariables.SelectedIndex == -1)
+                    cmbVariables.SelectedIndex = 0;
 
                 UpdateStatusDisplay(null);
             }
@@ -250,7 +298,14 @@ namespace RALogicEditor.Controls
             }
 
             var finalList = query.ToList();
+
+            // Preserve selection
+            NoteNode? previousSelection = cmbVariables.SelectedItem as NoteNode;
+
             cmbVariables.DataSource = finalList;
+
+            if (previousSelection != null && finalList.Contains(previousSelection))
+                cmbVariables.SelectedItem = previousSelection;
 
             // Disable dropdown if redirected to avoid confusing "edit via tree" actions on read-only content
             // Though reading is fine, editing is not. Let's keep it enabled for navigation but block write.
@@ -341,6 +396,7 @@ namespace RALogicEditor.Controls
             if (cmbNotes.SelectedItem is CodeNote note)
             {
                 _viewModel.SelectBaseNote(note);
+                _hasUnsavedChanges = false; // Reset unsaved status on deliberate note switch
             }
         }
 
@@ -493,8 +549,23 @@ namespace RALogicEditor.Controls
         }
 
         // Context Menu Handlers
-        private void cutToolStripMenuItem_Click(object sender, EventArgs e) { if (!txtNoteBody.ReadOnly) txtNoteBody.Cut(); }
-        private void pasteToolStripMenuItem_Click(object sender, EventArgs e) { if (!txtNoteBody.ReadOnly) txtNoteBody.Paste(); }
+        private void cutToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!txtNoteBody.ReadOnly)
+            {
+                _viewModel.PushUndoState();
+                txtNoteBody.Cut();
+            }
+        }
+
+        private void pasteToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!txtNoteBody.ReadOnly)
+            {
+                _viewModel.PushUndoState();
+                txtNoteBody.Paste();
+            }
+        }
 
         private void copyToolStripMenuItem_Click(object sender, EventArgs e)
         {
@@ -563,6 +634,7 @@ namespace RALogicEditor.Controls
             else MessageBox.Show("No size syntax errors found!", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
+        // --- NEW FEATURE: Code Note Multiplier (Save Slots) ---
         // Mode 1: Multiply highlighted text inside the note
         private void multiplySelectedTextToolStripMenuItem_Click(object sender, EventArgs e)
         {
@@ -580,6 +652,8 @@ namespace RALogicEditor.Controls
             {
                 if (form.ShowDialog() == DialogResult.OK)
                 {
+                    _viewModel.PushUndoState(); // Store undo state before applying the multiplier
+
                     string generated = CodeNoteMultiplier.GenerateText(
                         targetText,
                         form.Copies,
@@ -590,9 +664,12 @@ namespace RALogicEditor.Controls
                         form.StartNumber,
                         form.ApplyToChildren);
 
-                    // Insert right after the highlighted selection
+                    // We apply via the ViewModel to ensure it tracks history properly
+                    // but we need to compute the full text to push to the VM
                     int insertPos = txtNoteBody.SelectionStart + txtNoteBody.SelectionLength;
-                    txtNoteBody.Text = txtNoteBody.Text.Insert(insertPos, "\r\n" + generated);
+                    string newFullText = txtNoteBody.Text.Insert(insertPos, "\r\n" + generated);
+
+                    _viewModel.UpdateNoteContent(newFullText);
 
                     // Move cursor/selection so the user can easily see what was pasted
                     txtNoteBody.SelectionStart = insertPos + 2;
@@ -624,6 +701,34 @@ namespace RALogicEditor.Controls
                     _hasUnsavedChanges = true;
                     UpdateStatusDisplay("New Base Addresses generated.");
                 }
+            }
+        }
+
+        private void deleteNodeToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (txtNoteBody.ReadOnly) return;
+
+            if (_viewModel.EditState.IsVirtual)
+            {
+                MessageBox.Show("Cannot use Intelligent Delete in Virtual Mode. Please select a real node.", "Invalid Target", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (cmbVariables.SelectedItem is NoteNode node)
+            {
+                if (node.IndentLevel == -2)
+                {
+                    MessageBox.Show("Cannot intelligently delete the Root note. Use manual text deletion if you want to clear it.", "Invalid Target", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                _viewModel.IntelligentDelete(node);
+                _hasUnsavedChanges = true;
+                UpdateStatusDisplay("Node and orphaned parents deleted.");
+            }
+            else
+            {
+                MessageBox.Show("Please select a specific node in the dropdown tree to use Intelligent Delete.", "No Node Selected", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
     }

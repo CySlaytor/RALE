@@ -220,6 +220,62 @@ namespace RALogicEditor.Helpers
             return localStyle;
         }
 
+        // --- NEW: INTELLIGENT DELETION ---
+        public static string DeleteNodeFamily(string baseNoteText, NoteNode node)
+        {
+            var lines = baseNoteText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList();
+            if (node.RawLineIndex >= lines.Count || node.RawLineIndex < 0) return baseNoteText;
+
+            // To measure indent reliably, we look at the raw string prefix
+            string targetPrefix = Regex.Match(lines[node.RawLineIndex], @"^([.\+\s\u2500-\u257F]*)").Groups[1].Value;
+
+            int removeCount = 1;
+            int idx = node.RawLineIndex + 1;
+            var offsetRegex = new Regex(@"^([.\+\s\u2500-\u257F]*)([-+]?)(0x[0-9A-Fa-f]+)", RegexOptions.IgnoreCase);
+
+            while (idx < lines.Count)
+            {
+                string line = lines[idx];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    removeCount++;
+                    idx++;
+                    continue;
+                }
+
+                var match = offsetRegex.Match(line);
+                if (match.Success)
+                {
+                    string currentPrefix = match.Groups[1].Value;
+                    string sign = match.Groups[2].Value;
+
+                    bool isStructural = !string.IsNullOrEmpty(sign) || currentPrefix.Contains("+") || currentPrefix.Contains(".") || currentPrefix.Any(c => c >= '\u2500' && c <= '\u257F');
+
+                    // If current line is a structural node with an indentation level LESS THAN OR EQUAL to our target,
+                    // we have reached the next sibling or an uncle node. We stop deleting.
+                    if (isStructural && currentPrefix.Length <= targetPrefix.Length)
+                    {
+                        break;
+                    }
+                }
+
+                // If it's a child offset or body text, include it in deletion
+                removeCount++;
+                idx++;
+            }
+
+            lines.RemoveRange(node.RawLineIndex, removeCount);
+
+            // Cleanup double blank lines that might result from the gap
+            for (int i = lines.Count - 1; i > 0; i--)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i]) && string.IsNullOrWhiteSpace(lines[i - 1]))
+                    lines.RemoveAt(i);
+            }
+
+            return string.Join("\r\n", lines).TrimEnd();
+        }
+
         // Updates a specific EXISTING node in the tree with new content
         // Used when editing a real node to prevent data loss in the rest of the file
         public static string UpdateRealNode(string baseNoteText, NoteNode node, string newContent, NoteStyle globalStyle)
@@ -316,14 +372,36 @@ namespace RALogicEditor.Helpers
                         long childOffset = ParseOffset(child.Offset);
                         if (childOffset == targetOffset)
                         {
+                            // Strict Match - Update Existing Node
                             var childStyle = DetectLocalStyle(lines[child.RawLineIndex], effectiveStyle);
                             ReplaceNodeContent(lines, child, newContent, childStyle, child.IndentLevel + 1);
+                        }
+                        else
+                        {
+                            // Range Match - Insert as New Child of the Range Coverage Node
+                            int insertIndex = GetInsertionIndex(lines, child, rootNodes);
+                            int insertionDepth = child.IndentLevel + 2;
+                            string indent = effectiveStyle.GetIndentString(insertionDepth);
+                            string offsetHex = "0x" + targetOffset.ToString("x");
+                            if (targetOffset < 0) offsetHex = "-0x" + Math.Abs(targetOffset).ToString("x");
+
+                            string[] contentParts = newContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                            string title = contentParts.Length > 0 ? contentParts[0] : "New Node";
+                            string sep = effectiveStyle.GetSeparatorString();
+                            string header = $"{indent}{offsetHex}{sep}{title}";
+
+                            lines.Insert(insertIndex, header);
+
+                            for (int k = 1; k < contentParts.Length; k++)
+                            {
+                                lines.Insert(insertIndex + k, contentParts[k]);
+                            }
                         }
                     }
                 }
                 else
                 {
-                    // Node missing, create it
+                    // Node missing entirely, create it
                     int insertIndex = GetInsertionIndex(lines, currentNode, rootNodes);
 
                     string offsetHex = "0x" + targetOffset.ToString("x");
@@ -385,8 +463,6 @@ namespace RALogicEditor.Helpers
             int removeCount = 1;
             int idx = node.RawLineIndex + 1;
 
-            // Improved Regex: Must look for Structural Nodes, NOT value definitions.
-            // Added Unicode box drawing characters to regex.
             var nodeStructureRegex = new Regex(@"^\s*[.\+\u2500-\u257F]+0x", RegexOptions.IgnoreCase);
 
             while (idx < lines.Count)

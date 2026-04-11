@@ -86,6 +86,7 @@ namespace RALogicEditor
             // Code Note Editor actions
             codeNoteEditor.ReloadRequested += Reload_Click;
             codeNoteEditor.SaveRequested += saveToolStripMenuItem_Click;
+            codeNoteEditor.NoteUpdated += CodeNoteEditor_NoteUpdated; // Real-time grid updates
 
             // Main Grid
             achievementGrid.CellDoubleClick += achievementGrid_CellDoubleClick;
@@ -113,6 +114,15 @@ namespace RALogicEditor
             UpdateRecentMenu();
             ToggleReviewer(AppSettings.Current.ShowLogicReviewer);
             UpdateUndoRedoState();
+        }
+
+        private void CodeNoteEditor_NoteUpdated(object? sender, EventArgs e)
+        {
+            // Sync changes instantly to the Grid Editor when notes are edited/fixed
+            if (!_isLoading && _projectRepo.LocalData != null)
+            {
+                triggerEditor.SetNotes(_projectRepo.LocalData.Notes);
+            }
         }
 
         private void InitializeFilters()

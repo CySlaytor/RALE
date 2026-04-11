@@ -36,6 +36,12 @@ namespace RALogicEditor.Helpers
         public string RedirectedContent { get; private set; } = "";
         public string RedirectTargetAddress { get; private set; } = "";
 
+        // -- Undo/Redo State (Local to currently edited note) --
+        private Stack<string> _undoStack = new();
+        private Stack<string> _redoStack = new();
+        public bool CanUndo => _undoStack.Count > 0;
+        public bool CanRedo => _redoStack.Count > 0;
+
         // -- Virtual/Edit State --
         // Unified State for both Virtual (Ghost) and Real (Existing) edits.
         // This acts as a buffer: changing DisplayText does not immediately affect the CodeNote.
@@ -68,6 +74,54 @@ namespace RALogicEditor.Helpers
         {
             _parser = parser;
         }
+
+        #region Undo / Redo
+
+        public void PushUndoState()
+        {
+            if (CurrentBaseNote != null)
+            {
+                // Only push if the state is actually different from the top of the stack
+                if (_undoStack.Count == 0 || _undoStack.Peek() != CurrentBaseNote.Note)
+                {
+                    _undoStack.Push(CurrentBaseNote.Note);
+                    _redoStack.Clear();
+                }
+            }
+        }
+
+        public void Undo()
+        {
+            if (CurrentBaseNote != null && _undoStack.Count > 0)
+            {
+                _redoStack.Push(CurrentBaseNote.Note);
+                string previous = _undoStack.Pop();
+
+                CurrentBaseNote.Note = previous;
+                CurrentParsedNodes = _parser.ParseNoteText(previous);
+
+                // Clear active buffer so UI refreshes cleanly
+                ClearEditState();
+                NoteContentChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        public void Redo()
+        {
+            if (CurrentBaseNote != null && _redoStack.Count > 0)
+            {
+                _undoStack.Push(CurrentBaseNote.Note);
+                string next = _redoStack.Pop();
+
+                CurrentBaseNote.Note = next;
+                CurrentParsedNodes = _parser.ParseNoteText(next);
+
+                ClearEditState();
+                NoteContentChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        #endregion
 
         // -- Logic --
 
@@ -123,12 +177,55 @@ namespace RALogicEditor.Helpers
             NotesLoaded?.Invoke(this, EventArgs.Empty);
         }
 
+        public void IntelligentDelete(NoteNode target)
+        {
+            if (CurrentBaseNote == null || target.IndentLevel == -2) return; // Cannot delete full note from here
+
+            PushUndoState();
+
+            // 1. Find the highest parent that has only 1 child leading to our target
+            NoteNode highestToDelete = target;
+            NoteNode? current = target.Parent;
+
+            while (current != null && current.IndentLevel >= 0)
+            {
+                // If this parent only has 1 child, it's an orphan once we delete the target.
+                if (current.Children.Count == 1)
+                {
+                    highestToDelete = current;
+                    current = current.Parent;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            // 2. Call our robust bounds deletion logic
+            string updatedNote = CodeNoteModifier.DeleteNodeFamily(CurrentBaseNote.Note, highestToDelete);
+
+            // 3. Apply update
+            CurrentBaseNote.Note = updatedNote;
+            CurrentParsedNodes = _parser.ParseNoteText(updatedNote);
+
+            ClearEditState();
+            NoteContentChanged?.Invoke(this, EventArgs.Empty);
+
+            // We do NOT set EditState.IsDirty = true here.
+            // If we did, the next time the user hits "Save", the CommitEditState() method
+            // would think there is uncommitted text in the UI text box buffer (which is empty
+            // because of ClearEditState) and aggressively overwrite the note we just successfully deleted from.
+        }
+
         public void SelectBaseNote(CodeNote note)
         {
             // Auto-commit any pending edits before switching context
             if (EditState.IsDirty) CommitEditState();
 
             CurrentBaseNote = note;
+            _undoStack.Clear(); // Reset undo stack on new note selection
+            _redoStack.Clear();
+
             ClearEditState();
 
             // Check for Redirection (Refer to $0x...)
@@ -246,6 +343,8 @@ namespace RALogicEditor.Helpers
                     updatedBaseNote = EditState.DisplayText;
                 }
             }
+
+            PushUndoState(); // Save state before committing
 
             // Apply to Model
             CurrentBaseNote.Note = updatedBaseNote;
@@ -478,6 +577,28 @@ namespace RALogicEditor.Helpers
                 return long.MinValue;
             }
 
+            // Recursive search helper to jump over broken/skipped indentation layers
+            NoteNode? FindNodeRecursive(IEnumerable<NoteNode> searchNodes, long targetOffset, out long rem)
+            {
+                rem = 0;
+                foreach (var n in searchNodes)
+                {
+                    long start = ParseOffsetString(n.Offset);
+                    if (start != long.MinValue && targetOffset >= start && targetOffset < start + n.Size)
+                    {
+                        rem = targetOffset - start;
+                        return n;
+                    }
+                    var childMatch = FindNodeRecursive(n.Children, targetOffset, out long childRem);
+                    if (childMatch != null)
+                    {
+                        rem = childRem;
+                        return childMatch;
+                    }
+                }
+                return null;
+            }
+
             var rootNodes = nodes.Where(n => n.IndentLevel == 0 || (n.Parent != null && n.Parent.IndentLevel == -1) || (n.Parent == null && n.IndentLevel != -2)).ToList();
 
             // Skip the base address since we're already at the root of its note
@@ -491,7 +612,7 @@ namespace RALogicEditor.Helpers
                 foreach (var n in rootNodes)
                 {
                     long start = ParseOffsetString(n.Offset);
-                    if (offsets[1] >= start && offsets[1] < start + n.Size)
+                    if (start != long.MinValue && offsets[1] >= start && offsets[1] < start + n.Size)
                     {
                         current = n;
                         finalRemainder = offsets[1] - start;
@@ -509,21 +630,30 @@ namespace RALogicEditor.Helpers
                 while (matchedDepth < offsets.Count)
                 {
                     long nextOffset = offsets[matchedDepth];
+
+                    // First try direct children
                     var nextNode = current.Children.FirstOrDefault(n => ParseOffsetString(n.Offset) == nextOffset);
                     long stepRemainder = 0;
 
                     if (nextNode == null)
                     {
+                        // Try range match on direct children
                         foreach (var n in current.Children)
                         {
                             long start = ParseOffsetString(n.Offset);
-                            if (nextOffset >= start && nextOffset < start + n.Size)
+                            if (start != long.MinValue && nextOffset >= start && nextOffset < start + n.Size)
                             {
                                 nextNode = n;
                                 stepRemainder = nextOffset - start;
                                 break;
                             }
                         }
+                    }
+
+                    // Fallback to deep recursive search (survives skipped/broken indentation like ...+0x3e)
+                    if (nextNode == null)
+                    {
+                        nextNode = FindNodeRecursive(current.Children, nextOffset, out stepRemainder);
                     }
 
                     if (nextNode != null)

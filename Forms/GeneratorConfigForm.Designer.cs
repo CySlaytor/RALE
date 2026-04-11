@@ -22,7 +22,6 @@
             this.tvAddresses = new System.Windows.Forms.TreeView();
             this.lblInstructions = new System.Windows.Forms.Label();
             this.btnSelectAll = new System.Windows.Forms.Button();
-            this.chkAutoStride = new System.Windows.Forms.CheckBox();
             this.chkGenerateAsArray = new System.Windows.Forms.CheckBox();
             this.SuspendLayout();
             // 
@@ -122,17 +121,6 @@
             this.btnSelectAll.UseVisualStyleBackColor = true;
             this.btnSelectAll.Click += new System.EventHandler(this.btnSelectAll_Click);
             // 
-            // chkAutoStride
-            // 
-            this.chkAutoStride.AutoSize = true;
-            this.chkAutoStride.Enabled = true;
-            this.chkAutoStride.Location = new System.Drawing.Point(237, 268);
-            this.chkAutoStride.Name = "chkAutoStride";
-            this.chkAutoStride.Size = new System.Drawing.Size(97, 19);
-            this.chkAutoStride.TabIndex = 11;
-            this.chkAutoStride.Text = "Auto Detect";
-            this.chkAutoStride.UseVisualStyleBackColor = true;
-            // 
             // chkGenerateAsArray
             // 
             this.chkGenerateAsArray.AutoSize = true;
@@ -151,7 +139,6 @@
             this.CancelButton = this.btnCancel;
             this.ClientSize = new System.Drawing.Size(364, 370);
             this.Controls.Add(this.chkGenerateAsArray);
-            this.Controls.Add(this.chkAutoStride);
             this.Controls.Add(this.btnSelectAll);
             this.Controls.Add(this.lblInstructions);
             this.Controls.Add(this.tvAddresses);
@@ -183,7 +170,6 @@
         private System.Windows.Forms.TreeView tvAddresses;
         private System.Windows.Forms.Label lblInstructions;
         private System.Windows.Forms.Button btnSelectAll;
-        private System.Windows.Forms.CheckBox chkAutoStride;
         private System.Windows.Forms.CheckBox chkGenerateAsArray;
     }
 }

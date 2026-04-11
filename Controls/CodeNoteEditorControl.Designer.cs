@@ -33,9 +33,11 @@
             cutToolStripMenuItem = new ToolStripMenuItem();
             copyToolStripMenuItem = new ToolStripMenuItem();
             pasteToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparator1 = new ToolStripSeparator();
+            deleteNodeToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparator2 = new ToolStripSeparator();
             multiplySelectedTextToolStripMenuItem = new ToolStripMenuItem();
             multiplyCurrentAddressToolStripMenuItem = new ToolStripMenuItem();
-            toolStripSeparator1 = new ToolStripSeparator();
             checkSizeToolStripMenuItem = new ToolStripMenuItem();
             statusStripBottom = new StatusStrip();
             lblOffsetChain = new ToolStripStatusLabel();
@@ -207,15 +209,15 @@
             // 
             // cmsNoteContext
             // 
-            cmsNoteContext.Items.AddRange(new ToolStripItem[] { cutToolStripMenuItem, copyToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator1, multiplySelectedTextToolStripMenuItem, multiplyCurrentAddressToolStripMenuItem, checkSizeToolStripMenuItem });
+            cmsNoteContext.Items.AddRange(new ToolStripItem[] { cutToolStripMenuItem, copyToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator1, deleteNodeToolStripMenuItem, toolStripSeparator2, multiplySelectedTextToolStripMenuItem, multiplyCurrentAddressToolStripMenuItem, checkSizeToolStripMenuItem });
             cmsNoteContext.Name = "cmsNoteContext";
-            cmsNoteContext.Size = new Size(293, 142);
+            cmsNoteContext.Size = new Size(291, 170);
             // 
             // cutToolStripMenuItem
             // 
             cutToolStripMenuItem.Name = "cutToolStripMenuItem";
             cutToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.X;
-            cutToolStripMenuItem.Size = new Size(292, 22);
+            cutToolStripMenuItem.Size = new Size(290, 22);
             cutToolStripMenuItem.Text = "Cut";
             cutToolStripMenuItem.Click += cutToolStripMenuItem_Click;
             // 
@@ -223,7 +225,7 @@
             // 
             copyToolStripMenuItem.Name = "copyToolStripMenuItem";
             copyToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.C;
-            copyToolStripMenuItem.Size = new Size(292, 22);
+            copyToolStripMenuItem.Size = new Size(290, 22);
             copyToolStripMenuItem.Text = "Copy";
             copyToolStripMenuItem.Click += copyToolStripMenuItem_Click;
             // 
@@ -231,33 +233,45 @@
             // 
             pasteToolStripMenuItem.Name = "pasteToolStripMenuItem";
             pasteToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.V;
-            pasteToolStripMenuItem.Size = new Size(292, 22);
+            pasteToolStripMenuItem.Size = new Size(290, 22);
             pasteToolStripMenuItem.Text = "Paste";
             pasteToolStripMenuItem.Click += pasteToolStripMenuItem_Click;
             // 
             // toolStripSeparator1
             // 
             toolStripSeparator1.Name = "toolStripSeparator1";
-            toolStripSeparator1.Size = new Size(289, 6);
+            toolStripSeparator1.Size = new Size(287, 6);
+            // 
+            // deleteNodeToolStripMenuItem
+            // 
+            deleteNodeToolStripMenuItem.Name = "deleteNodeToolStripMenuItem";
+            deleteNodeToolStripMenuItem.Size = new Size(290, 22);
+            deleteNodeToolStripMenuItem.Text = "Intelligent Delete Node (Selected in Tree)";
+            deleteNodeToolStripMenuItem.Click += deleteNodeToolStripMenuItem_Click;
+            // 
+            // toolStripSeparator2
+            // 
+            toolStripSeparator2.Name = "toolStripSeparator2";
+            toolStripSeparator2.Size = new Size(287, 6);
             // 
             // multiplySelectedTextToolStripMenuItem
             // 
             multiplySelectedTextToolStripMenuItem.Name = "multiplySelectedTextToolStripMenuItem";
-            multiplySelectedTextToolStripMenuItem.Size = new Size(292, 22);
+            multiplySelectedTextToolStripMenuItem.Size = new Size(290, 22);
             multiplySelectedTextToolStripMenuItem.Text = "Multiply Selected Text (Inside Note)...";
             multiplySelectedTextToolStripMenuItem.Click += multiplySelectedTextToolStripMenuItem_Click;
             // 
             // multiplyCurrentAddressToolStripMenuItem
             // 
             multiplyCurrentAddressToolStripMenuItem.Name = "multiplyCurrentAddressToolStripMenuItem";
-            multiplyCurrentAddressToolStripMenuItem.Size = new Size(292, 22);
+            multiplyCurrentAddressToolStripMenuItem.Size = new Size(290, 22);
             multiplyCurrentAddressToolStripMenuItem.Text = "Multiply Current Note (New Addresses)...";
             multiplyCurrentAddressToolStripMenuItem.Click += multiplyCurrentAddressToolStripMenuItem_Click;
             // 
             // checkSizeToolStripMenuItem
             // 
             checkSizeToolStripMenuItem.Name = "checkSizeToolStripMenuItem";
-            checkSizeToolStripMenuItem.Size = new Size(292, 22);
+            checkSizeToolStripMenuItem.Size = new Size(290, 22);
             checkSizeToolStripMenuItem.Text = "Check for Code Note Size";
             checkSizeToolStripMenuItem.Click += checkSizeToolStripMenuItem_Click;
             // 
@@ -298,7 +312,7 @@
             chkIndentValues.Location = new Point(152, 2);
             chkIndentValues.Name = "chkIndentValues";
             chkIndentValues.Padding = new Padding(5, 0, 0, 0);
-            chkIndentValues.Size = new Size(72, 25);
+            chkIndentValues.Size = new Size(65, 25);
             chkIndentValues.TabIndex = 3;
             chkIndentValues.Text = "Indent";
             chkIndentValues.UseVisualStyleBackColor = true;
@@ -387,9 +401,11 @@
         private System.Windows.Forms.ToolStripMenuItem cutToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem copyToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem pasteToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem deleteNodeToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem multiplySelectedTextToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem multiplyCurrentAddressToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
         private System.Windows.Forms.ToolStripMenuItem checkSizeToolStripMenuItem;
     }
 }

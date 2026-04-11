@@ -11,6 +11,11 @@ namespace RALogicEditor.Forms
     // A dialog to capture Copies, Stride, and select multiple Addresses for the Logic Generator
     public partial class GeneratorConfigForm : Form
     {
+        // Static fields to persist state across the session
+        private static string _lastCopies = "1";
+        private static string _lastStride = "0x0";
+        private static bool _lastIsArray = false;
+
         public int Copies { get; private set; }
         public int Stride { get; private set; }
         public bool IsArray { get; private set; }
@@ -43,14 +48,18 @@ namespace RALogicEditor.Forms
             InitializeComponent();
             InitializeTreeView(rootItems);
 
-            // Pre-fill Stride
+            // 1. Apply Session Persistence Defaults First
+            txtCopies.Text = _lastCopies;
+            txtStride.Text = _lastStride;
+            chkGenerateAsArray.Checked = _lastIsArray;
+
+            // 2. Pre-fill Stride if auto-detected (Overrides session default)
             if (defaultStride > 0)
             {
                 txtStride.Text = "0x" + defaultStride.ToString("X");
-                chkAutoStride.Checked = true; // Visually indicate it was auto-detected
             }
 
-            // If we have existing rules, try to pre-fill the form checks
+            // 3. If we have existing rules, try to pre-fill the form checks (Overrides everything)
             if (existingDef != null)
             {
                 txtCopies.Text = existingDef.Copies.ToString();
@@ -176,6 +185,11 @@ namespace RALogicEditor.Forms
             Copies = c;
             Stride = s;
             IsArray = chkGenerateAsArray.Checked;
+
+            // Save state for next use in the same session
+            _lastCopies = txtCopies.Text;
+            _lastStride = txtStride.Text;
+            _lastIsArray = chkGenerateAsArray.Checked;
 
             this.DialogResult = DialogResult.OK;
             this.Close();

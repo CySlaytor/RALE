@@ -343,7 +343,7 @@ namespace RALogicEditor.Services
 
                     // ResolveAlias handles the pointer chain math (looking backwards at AddAddress lines)
                     // and returns the note name for the final resolved address (Leaf).
-                    string alias = ConditionFormatter.ResolveAlias(address, group, i, notesLookup, rangeCache);
+                    string alias = ConditionFormatter.ResolveAlias(address, op.Size, group, i, notesLookup, rangeCache);
 
                     if (string.IsNullOrWhiteSpace(alias))
                     {

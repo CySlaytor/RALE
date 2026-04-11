@@ -51,7 +51,8 @@ namespace RALogicEditor.Parsers
                             data.Notes.Add(new CodeNote
                             {
                                 Address = match.Groups[1].Value,
-                                Note = match.Groups[2].Value.Replace("\\r\\n", "\r\n"),
+                                // Unescape newlines AND quotes correctly
+                                Note = match.Groups[2].Value.Replace("\\r\\n", "\r\n").Replace("\\\"", "\""),
                                 User = "Local"
                             });
                         }

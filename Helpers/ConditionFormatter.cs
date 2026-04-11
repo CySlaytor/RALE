@@ -24,19 +24,8 @@ namespace RALogicEditor.Helpers
             AchievementConditionGroup? group,
             int rowIndex)
         {
-            // If Alias Mode is ON and this is a Memory type
-            if (showAliases && RaLogicSyntax.MemoryTypes.Contains(op.Type) && notesLookup != null)
-            {
-                string addr = LogicFormatter.NormalizeAddress(op.Value);
-                string alias = ResolveAlias(addr, group, rowIndex, notesLookup, rangeCache);
-                if (!string.IsNullOrEmpty(alias))
-                {
-                    return alias.Trim();
-                }
-            }
-
-            string sizeRef = "";
-            return LogicFormatter.FormatDisplayValue(op, showDecimal, sizeRef);
+            // Standard fallback without size ref override
+            return FormatOperandDisplay(op, showDecimal, showAliases, notesLookup, rangeCache, group, rowIndex, op.Size);
         }
 
         // Overload to support passing sizeRef explicitly
@@ -53,7 +42,7 @@ namespace RALogicEditor.Helpers
             if (showAliases && RaLogicSyntax.MemoryTypes.Contains(op.Type) && notesLookup != null)
             {
                 string addr = LogicFormatter.NormalizeAddress(op.Value);
-                string alias = ResolveAlias(addr, group, rowIndex, notesLookup, rangeCache);
+                string alias = ResolveAlias(addr, sizeRef, group, rowIndex, notesLookup, rangeCache);
                 if (!string.IsNullOrEmpty(alias)) return alias.Trim();
             }
             return LogicFormatter.FormatDisplayValue(op, showDecimal, sizeRef);
@@ -62,6 +51,7 @@ namespace RALogicEditor.Helpers
         // Changed to PUBLIC to allow the Preview Control to use this logic
         public static string ResolveAlias(
             string address,
+            string sizeRef, // NEW: Used for Bit extraction
             AchievementConditionGroup? group,
             int rowIndex,
             Dictionary<string, List<NoteNode>> notesLookup,
@@ -75,6 +65,23 @@ namespace RALogicEditor.Helpers
                 // Regex to keep only valid hex characters 0-9, A-F
                 clean = Regex.Replace(clean, "[^0-9A-Fa-f]", "");
                 return long.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : -1;
+            }
+
+            // Local fallback function to do a deep search if strict chain mapping breaks due to bad indentation
+            NoteNode? FindNodeByOffsetRecursive(List<NoteNode> nodes, long target)
+            {
+                foreach (var n in nodes)
+                {
+                    long nodeOff = ParseHex(n.Offset);
+                    if (n.Offset.Contains("-")) nodeOff = -nodeOff;
+
+                    if (nodeOff != -1 && target >= nodeOff && target < nodeOff + n.Size)
+                        return n;
+
+                    var childMatch = FindNodeByOffsetRecursive(n.Children, target);
+                    if (childMatch != null) return childMatch;
+                }
+                return null;
             }
 
             long targetVal = ParseHex(address);
@@ -196,6 +203,7 @@ namespace RALogicEditor.Helpers
                             else { chainValid = false; break; }
                         }
 
+                        NoteNode? finalMatchNode = null;
                         if (chainValid && targetVal != -1)
                         {
                             foreach (var node in currentLevelNodes)
@@ -205,19 +213,45 @@ namespace RALogicEditor.Helpers
 
                                 if (targetVal >= nodeOff && targetVal < nodeOff + node.Size)
                                 {
-                                    string desc = node.Description;
-                                    desc = Regex.Replace(desc, @"\[.*?\]", "").Trim();
-
-                                    long delta = targetVal - nodeOff;
-                                    if (delta > 0)
-                                    {
-                                        string suffix = $" +0x{delta:X}";
-                                        if (!desc.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-                                            desc += suffix;
-                                    }
-                                    return desc;
+                                    finalMatchNode = node;
+                                    break;
                                 }
                             }
+                        }
+
+                        // Fallback: If strict chain mapping breaks due to user indentation errors,
+                        // do a flat search over the entire base note tree.
+                        if (finalMatchNode == null && targetVal != -1)
+                        {
+                            finalMatchNode = FindNodeByOffsetRecursive(workingNodes, targetVal);
+                        }
+
+                        if (finalMatchNode != null)
+                        {
+                            string desc = finalMatchNode.Description;
+                            desc = Regex.Replace(desc, @"\[.*?\]", "").Trim();
+
+                            // BIT EXTRACTION
+                            if (!string.IsNullOrEmpty(sizeRef) && Regex.IsMatch(sizeRef, @"^(Bit\d+|Lower4|Upper4)", RegexOptions.IgnoreCase))
+                            {
+                                var bitRegex = new Regex($@"^{Regex.Escape(sizeRef)}\s*[:=|-]\s*(.*)$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+                                var m = bitRegex.Match(finalMatchNode.Content);
+                                if (m.Success)
+                                {
+                                    desc = m.Groups[1].Value.Trim();
+                                }
+                            }
+
+                            long nodeOff = ParseHex(finalMatchNode.Offset);
+                            if (finalMatchNode.Offset.Contains("-")) nodeOff = -nodeOff;
+                            long delta = targetVal - nodeOff;
+                            if (delta > 0)
+                            {
+                                string suffix = $" +0x{delta:X}";
+                                if (!desc.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                                    desc += suffix;
+                            }
+                            return desc;
                         }
                     }
                 }
@@ -269,6 +303,18 @@ namespace RALogicEditor.Helpers
                         if (m.Value.IndexOf("Pointer", StringComparison.OrdinalIgnoreCase) >= 0) return "[Pointer]";
                         return "";
                     }).Trim();
+
+                    // BIT EXTRACTION
+                    if (!string.IsNullOrEmpty(sizeRef) && Regex.IsMatch(sizeRef, @"^(Bit\d+|Lower4|Upper4)", RegexOptions.IgnoreCase))
+                    {
+                        var bitRegex = new Regex($@"^{Regex.Escape(sizeRef)}\s*[:=|-]\s*(.*)$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+                        var m = bitRegex.Match(main.Content);
+                        if (m.Success)
+                        {
+                            desc = m.Groups[1].Value.Trim();
+                        }
+                    }
+
                     desc = Regex.Replace(desc, @"\s{2,}", " ");
                     return desc;
                 }
@@ -280,10 +326,15 @@ namespace RALogicEditor.Helpers
                 var match = rangeCache.FirstOrDefault(r => targetVal >= r.Start && targetVal < r.End);
                 if (match.Node != null)
                 {
-                    string desc = match.Node.Description;
+                    // For range matches, the target is usually an offset within the struct.
+                    // We can try to find the specific offset node first, before falling back to the struct root!
+                    NoteNode? specificMatch = FindNodeByOffsetRecursive(new List<NoteNode> { match.Node }, targetVal);
+                    NoteNode activeNode = specificMatch ?? match.Node;
+
+                    string desc = activeNode.Description;
                     if (string.IsNullOrEmpty(desc) || desc.Equals("Full Note", StringComparison.OrdinalIgnoreCase))
                     {
-                        string content = match.Node.Content;
+                        string content = activeNode.Content;
                         desc = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
                     }
 
@@ -292,9 +343,26 @@ namespace RALogicEditor.Helpers
                         if (m.Value.IndexOf("Pointer", StringComparison.OrdinalIgnoreCase) >= 0) return "[Pointer]";
                         return "";
                     }).Trim();
+
+                    // BIT EXTRACTION
+                    if (!string.IsNullOrEmpty(sizeRef) && Regex.IsMatch(sizeRef, @"^(Bit\d+|Lower4|Upper4)", RegexOptions.IgnoreCase))
+                    {
+                        var bitRegex = new Regex($@"^{Regex.Escape(sizeRef)}\s*[:=|-]\s*(.*)$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+                        var m = bitRegex.Match(activeNode.Content);
+                        if (m.Success)
+                        {
+                            desc = m.Groups[1].Value.Trim();
+                        }
+                    }
+
                     desc = Regex.Replace(desc, @"\s{2,}", " ");
 
-                    long delta = targetVal - match.Start;
+                    long nodeOff = ParseHex(activeNode.Offset);
+                    if (activeNode.Offset.Contains("-")) nodeOff = -nodeOff;
+                    // If it was the root struct match, use the Start address. Otherwise use the specific node offset.
+                    long baseForDelta = specificMatch != null ? nodeOff : match.Start;
+
+                    long delta = targetVal - baseForDelta;
                     if (delta > 0)
                     {
                         string suffix = $" +0x{delta:X}";
