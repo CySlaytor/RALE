@@ -93,6 +93,36 @@ namespace RALogicEditor.Helpers
             NotesLoaded?.Invoke(this, EventArgs.Empty);
         }
 
+        public void MultiplyBaseNote(int copies, long stride, NamingStyle naming, string search, string replace, int startNum)
+        {
+            if (CurrentBaseNote == null) return;
+
+            long baseAddr = ParseAddress(CurrentBaseNote.Address);
+            if (baseAddr == -1) return;
+
+            var newNotes = new List<CodeNote>();
+
+            for (int i = 0; i < copies; i++)
+            {
+                int num = startNum + i;
+                long newAddr = baseAddr + (stride * (i + 1));
+                string newAddrStr = "0x" + newAddr.ToString("x");
+
+                // Use the helper to rename the text for the new Note
+                string newNoteText = CodeNoteMultiplier.ApplyNamingToNote(CurrentBaseNote.Note, naming, search, replace, num);
+
+                newNotes.Add(new CodeNote { Address = newAddrStr, Note = newNoteText, User = "Local" });
+            }
+
+            AllNotes.AddRange(newNotes);
+
+            // Sort by Address to keep the combo box list clean
+            AllNotes.Sort((a, b) => ParseAddress(a.Address).CompareTo(ParseAddress(b.Address)));
+
+            // Trigger complete UI refresh
+            NotesLoaded?.Invoke(this, EventArgs.Empty);
+        }
+
         public void SelectBaseNote(CodeNote note)
         {
             // Auto-commit any pending edits before switching context

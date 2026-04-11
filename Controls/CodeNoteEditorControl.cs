@@ -5,6 +5,7 @@ using RALogicEditor.Logic; // Added for CodeNoteLogic
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Utilities;
+using RALogicEditor.Forms; // Added for NoteMultiplierForm
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -86,8 +87,8 @@ namespace RALogicEditor.Controls
             // Use the ported Logic helper to fix indentation, sort, and merge
             // Pass the indentation prefix from settings and the indentation preference
             string fixedText = CodeNoteLogic.FixHierarchy(
-                currentText, 
-                AppSettings.Current.NotePrefix, 
+                currentText,
+                AppSettings.Current.NotePrefix,
                 chkIndentValues.Checked
             );
 
@@ -560,6 +561,70 @@ namespace RALogicEditor.Controls
 
             if (errors.Count > 0) MessageBox.Show(string.Join("\n", errors), "Code Note Issues", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             else MessageBox.Show("No size syntax errors found!", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Mode 1: Multiply highlighted text inside the note
+        private void multiplySelectedTextToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (txtNoteBody.ReadOnly) return;
+
+            string targetText = txtNoteBody.SelectedText;
+
+            if (string.IsNullOrEmpty(targetText))
+            {
+                MessageBox.Show("Please highlight the block of text you want to duplicate before clicking this option.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using (var form = new NoteMultiplierForm(MultiplierMode.Text))
+            {
+                if (form.ShowDialog() == DialogResult.OK)
+                {
+                    string generated = CodeNoteMultiplier.GenerateText(
+                        targetText,
+                        form.Copies,
+                        form.Stride,
+                        form.Naming,
+                        form.SearchText,
+                        form.ReplaceText,
+                        form.StartNumber,
+                        form.ApplyToChildren);
+
+                    // Insert right after the highlighted selection
+                    int insertPos = txtNoteBody.SelectionStart + txtNoteBody.SelectionLength;
+                    txtNoteBody.Text = txtNoteBody.Text.Insert(insertPos, "\r\n" + generated);
+
+                    // Move cursor/selection so the user can easily see what was pasted
+                    txtNoteBody.SelectionStart = insertPos + 2;
+                    txtNoteBody.SelectionLength = generated.Length;
+
+                    _hasUnsavedChanges = true;
+                    UpdateStatusDisplay("Note multiplied.");
+                }
+            }
+        }
+
+        // Mode 2: Multiply the Entire Address to make brand new Code Notes
+        private void multiplyCurrentAddressToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (_viewModel.CurrentBaseNote == null) return;
+
+            using (var form = new NoteMultiplierForm(MultiplierMode.Address))
+            {
+                if (form.ShowDialog() == DialogResult.OK)
+                {
+                    _viewModel.MultiplyBaseNote(
+                        form.Copies,
+                        form.Stride,
+                        form.Naming,
+                        form.SearchText,
+                        form.ReplaceText,
+                        form.StartNumber);
+
+                    _hasUnsavedChanges = true;
+                    UpdateStatusDisplay("New Base Addresses generated.");
+                }
+            }
         }
     }
 }

@@ -33,6 +33,8 @@
             cutToolStripMenuItem = new ToolStripMenuItem();
             copyToolStripMenuItem = new ToolStripMenuItem();
             pasteToolStripMenuItem = new ToolStripMenuItem();
+            multiplySelectedTextToolStripMenuItem = new ToolStripMenuItem();
+            multiplyCurrentAddressToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator1 = new ToolStripSeparator();
             checkSizeToolStripMenuItem = new ToolStripMenuItem();
             statusStripBottom = new StatusStrip();
@@ -205,15 +207,15 @@
             // 
             // cmsNoteContext
             // 
-            cmsNoteContext.Items.AddRange(new ToolStripItem[] { cutToolStripMenuItem, copyToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator1, checkSizeToolStripMenuItem });
+            cmsNoteContext.Items.AddRange(new ToolStripItem[] { cutToolStripMenuItem, copyToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator1, multiplySelectedTextToolStripMenuItem, multiplyCurrentAddressToolStripMenuItem, checkSizeToolStripMenuItem });
             cmsNoteContext.Name = "cmsNoteContext";
-            cmsNoteContext.Size = new Size(209, 98);
+            cmsNoteContext.Size = new Size(293, 142);
             // 
             // cutToolStripMenuItem
             // 
             cutToolStripMenuItem.Name = "cutToolStripMenuItem";
             cutToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.X;
-            cutToolStripMenuItem.Size = new Size(208, 22);
+            cutToolStripMenuItem.Size = new Size(292, 22);
             cutToolStripMenuItem.Text = "Cut";
             cutToolStripMenuItem.Click += cutToolStripMenuItem_Click;
             // 
@@ -221,7 +223,7 @@
             // 
             copyToolStripMenuItem.Name = "copyToolStripMenuItem";
             copyToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.C;
-            copyToolStripMenuItem.Size = new Size(208, 22);
+            copyToolStripMenuItem.Size = new Size(292, 22);
             copyToolStripMenuItem.Text = "Copy";
             copyToolStripMenuItem.Click += copyToolStripMenuItem_Click;
             // 
@@ -229,19 +231,33 @@
             // 
             pasteToolStripMenuItem.Name = "pasteToolStripMenuItem";
             pasteToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.V;
-            pasteToolStripMenuItem.Size = new Size(208, 22);
+            pasteToolStripMenuItem.Size = new Size(292, 22);
             pasteToolStripMenuItem.Text = "Paste";
             pasteToolStripMenuItem.Click += pasteToolStripMenuItem_Click;
             // 
             // toolStripSeparator1
             // 
             toolStripSeparator1.Name = "toolStripSeparator1";
-            toolStripSeparator1.Size = new Size(205, 6);
+            toolStripSeparator1.Size = new Size(289, 6);
+            // 
+            // multiplySelectedTextToolStripMenuItem
+            // 
+            multiplySelectedTextToolStripMenuItem.Name = "multiplySelectedTextToolStripMenuItem";
+            multiplySelectedTextToolStripMenuItem.Size = new Size(292, 22);
+            multiplySelectedTextToolStripMenuItem.Text = "Multiply Selected Text (Inside Note)...";
+            multiplySelectedTextToolStripMenuItem.Click += multiplySelectedTextToolStripMenuItem_Click;
+            // 
+            // multiplyCurrentAddressToolStripMenuItem
+            // 
+            multiplyCurrentAddressToolStripMenuItem.Name = "multiplyCurrentAddressToolStripMenuItem";
+            multiplyCurrentAddressToolStripMenuItem.Size = new Size(292, 22);
+            multiplyCurrentAddressToolStripMenuItem.Text = "Multiply Current Note (New Addresses)...";
+            multiplyCurrentAddressToolStripMenuItem.Click += multiplyCurrentAddressToolStripMenuItem_Click;
             // 
             // checkSizeToolStripMenuItem
             // 
             checkSizeToolStripMenuItem.Name = "checkSizeToolStripMenuItem";
-            checkSizeToolStripMenuItem.Size = new Size(208, 22);
+            checkSizeToolStripMenuItem.Size = new Size(292, 22);
             checkSizeToolStripMenuItem.Text = "Check for Code Note Size";
             checkSizeToolStripMenuItem.Click += checkSizeToolStripMenuItem_Click;
             // 
@@ -371,6 +387,8 @@
         private System.Windows.Forms.ToolStripMenuItem cutToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem copyToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem pasteToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem multiplySelectedTextToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem multiplyCurrentAddressToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
         private System.Windows.Forms.ToolStripMenuItem checkSizeToolStripMenuItem;
     }
