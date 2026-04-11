@@ -75,8 +75,8 @@ namespace RALogicEditor.Services
                     return segSb.ToString();
                 }
 
-                // APPLY ESCAPE TO TITLE AND DESCRIPTION
-                sb.AppendLine($"L{l.ID}:\"{GetSeg("Start")}\":\"{GetSeg("Cancel")}\":\"{GetSeg("Submit")}\":\"{GetSeg("Value")}\":{l.Format}:{EscapeUserString(l.Title)}:{EscapeUserString(l.Description)}:{l.LowerIsBetter}");
+                // APPLY ESCAPE TO TITLE AND DESCRIPTION. Convert boolean to 1/0 for integration compatibility.
+                sb.AppendLine($"L{l.ID}:\"{GetSeg("Start")}\":\"{GetSeg("Cancel")}\":\"{GetSeg("Submit")}\":\"{GetSeg("Value")}\":{l.Format}:{EscapeUserString(l.Title)}:{EscapeUserString(l.Description)}:{(l.LowerIsBetter ? "1" : "0")}");
             }
 
             // Save notes - Filter out notes that match the server data

@@ -779,6 +779,20 @@ namespace RALogicEditor.Controls
 
         private void ConditionGrid_ContextMenuStrip_Opening(object? sender, CancelEventArgs e)
         {
+            // Prevent generic menu from showing over restricted columns that have specific menus
+            Point pt = conditionGrid.PointToClient(Cursor.Position);
+            var hit = conditionGrid.HitTest(pt.X, pt.Y);
+            if (hit.Type == DataGridViewHitTestType.Cell)
+            {
+                string colName = conditionGrid.Columns[hit.ColumnIndex].Name;
+                if (colName == "ColFlag" || colName == "ColLType" || colName == "ColRType" ||
+                    colName == "ColLSize" || colName == "ColRSize" || colName == "ColCmp")
+                {
+                    e.Cancel = true;
+                    return;
+                }
+            }
+
             bool any = conditionGrid.SelectedRows.Count > 0;
             moveUpToolStripMenuItem.Enabled = any;
             moveDownToolStripMenuItem.Enabled = any;

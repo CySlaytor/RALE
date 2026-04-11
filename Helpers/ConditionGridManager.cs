@@ -267,11 +267,12 @@ namespace RALogicEditor.Helpers
                 else if (type == "Value") editingControl.MaxLength = 15;
                 else
                 {
-                    // Hex addresses limit
-                    editingControl.MaxLength = 8;
                     // Auto-strip 0x prefix for easier editing
                     if (editingControl.Text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                         editingControl.Text = editingControl.Text.Substring(2);
+
+                    // Hex addresses limit (8 hex chars + optional 0x = 10 to be safe for pasting)
+                    editingControl.MaxLength = 10;
                 }
             }
         }

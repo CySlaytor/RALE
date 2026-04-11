@@ -104,6 +104,15 @@ namespace RALogicEditor.Helpers
             Color editableColor = readOnlyMode ? SystemColors.Control : SystemColors.Window;
             Color staticColor = SystemColors.ControlLight;
 
+            // Ensure strict ReadOnly state for non-text-input columns
+            row.Cells[0].ReadOnly = true; // ID
+            row.Cells[1].ReadOnly = true; // Flag
+            row.Cells[2].ReadOnly = true; // LType
+            row.Cells[3].ReadOnly = true; // LSize
+            row.Cells[5].ReadOnly = true; // Cmp
+            row.Cells[6].ReadOnly = true; // RType
+            row.Cells[7].ReadOnly = true; // RSize
+
             // Issue Highlighting
             if (issue != null)
             {
