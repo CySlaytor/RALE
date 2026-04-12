@@ -135,9 +135,8 @@ namespace RALogicEditor.Logic
             foreach (var line in lines)
             {
                 string untrimmedLine = line.TrimEnd();
-                string trimmedLine = line.Trim();
 
-                if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("---"))
+                if (string.IsNullOrWhiteSpace(untrimmedLine) || untrimmedLine.TrimStart().StartsWith("---"))
                 {
                     lineIndex++;
                     continue;
@@ -146,7 +145,10 @@ namespace RALogicEditor.Logic
                 int indent = 0;
                 bool isNode = false;
 
-                var match = offsetRegex.Match(trimmedLine);
+                // CRITICAL FIX: Match against untrimmedLine to preserve leading spaces for indentation detection!
+                // If we match against trimmedLine, Unicode styles (e.g. "  ├─") lose their spaces and get flattened to indent=2.
+                var match = offsetRegex.Match(untrimmedLine);
+
                 if (match.Success)
                 {
                     string indentStr = match.Groups[1].Value;
@@ -195,9 +197,9 @@ namespace RALogicEditor.Logic
                 if (indent < 0) indent = 0;
 
                 bool isAttachedNote = (indent == 0) && (lastNode != null) &&
-                                      !(untrimmedLine.StartsWith("+0x", StringComparison.OrdinalIgnoreCase) ||
-                                        untrimmedLine.StartsWith("-0x", StringComparison.OrdinalIgnoreCase) ||
-                                        untrimmedLine.StartsWith("["));
+                                      !(untrimmedLine.TrimStart().StartsWith("+0x", StringComparison.OrdinalIgnoreCase) ||
+                                        untrimmedLine.TrimStart().StartsWith("-0x", StringComparison.OrdinalIgnoreCase) ||
+                                        untrimmedLine.TrimStart().StartsWith("["));
 
                 if (isAttachedNote)
                 {
@@ -281,8 +283,7 @@ namespace RALogicEditor.Logic
                 var allChildren = group.SelectMany(n => n.Children).ToList();
                 if (allChildren.Any())
                 {
-                    // FIX: Pass allChildren directly to MergeTree to recursively group AND merge subtrees!
-                    // This prevents identically offset subtrees from being discarded.
+                    // Recursively merge children to properly combine sub-branches
                     newNode.Children.AddRange(MergeTree(allChildren));
                 }
                 finalNodes.Add(newNode);

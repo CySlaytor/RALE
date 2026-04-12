@@ -37,8 +37,6 @@ namespace RALogicEditor.Helpers
                 if (Indentation == IndentStyle.Plus)
                     return new string('+', depth - 1);
 
-                // Both Dot and Mixed just output dots as the structural prefix.
-                // The mathematical sign (+ or -) is appended separately by InjectNoteContent.
                 return new string('.', depth - 1);
             }
 
@@ -47,7 +45,7 @@ namespace RALogicEditor.Helpers
                 if (depth <= 1) return "";
 
                 if (Indentation == IndentStyle.Unicode)
-                    return new string(' ', (depth - 1) * 2); // Pads cleanly under the ├─ structure
+                    return new string(' ', (depth - 1) * 2);
 
                 return new string('.', depth - 1);
             }
@@ -336,8 +334,9 @@ namespace RALogicEditor.Helpers
                 string sign = offset < 0 ? "-" : "+";
                 string hex = "0x" + Math.Abs(offset).ToString("x");
 
-                // Depth 1 = Root (no indent), Depth 2 = Child (first indent character)
-                string indent = globalStyle.GetIndentString(i + 1);
+                // Use pure '+' indent to safely pass into the parser, which calculates depth accurately.
+                // The CodeNoteLogic.FixHierarchy method will then convert this back to your chosen UI style (e.g. Unicode).
+                string indent = new string('+', i);
 
                 if (i == chainOffsets.Count - 1)
                 {
@@ -348,11 +347,9 @@ namespace RALogicEditor.Helpers
 
                     sb.AppendLine($"{indent}{sign}{hex}{sep}{title}");
 
-                    // Optional body text below the node header
-                    string bodyPadding = globalStyle.GetBodyIndentString(i + 1);
                     for (int k = 1; k < contentParts.Length; k++)
                     {
-                        sb.AppendLine($"{bodyPadding}{contentParts[k].TrimStart()}");
+                        sb.AppendLine($"{contentParts[k].TrimStart()}");
                     }
                 }
                 else
@@ -362,9 +359,12 @@ namespace RALogicEditor.Helpers
                 }
             }
 
-            // Return the raw text exactly as it was appended. 
-            // The user can visually review it and hit "Fix Hierarchy" to merge it naturally.
-            return sb.ToString().TrimEnd();
+            // Convert NoteStyle back to the string expected by CodeNoteLogic.FixHierarchy
+            string styleStr = AppSettings.Current.NoteIndentStyle;
+            bool indentDescriptions = AppSettings.Current.Notes_IndentValues;
+
+            // Merge and Format!
+            return CodeNoteLogic.FixHierarchy(sb.ToString(), styleStr, indentDescriptions);
         }
     }
 }
