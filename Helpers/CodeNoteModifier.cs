@@ -95,7 +95,22 @@ namespace RALogicEditor.Helpers
         private static string ExtractExactPrefix(string line)
         {
             var match = Regex.Match(line, @"^([.\+\s\u2500-\u257F]*)([-+]?)(0x[0-9A-Fa-f]+)", RegexOptions.IgnoreCase);
-            if (match.Success) return match.Groups[1].Value;
+            if (match.Success)
+            {
+                string indentStr = match.Groups[1].Value;
+                string sign = match.Groups[2].Value;
+
+                // Safely recover and separate the mathematical sign from the structural prefix 
+                // if the greedy regex group 1 ate it. This prevents double pluses (e.g. ++0x04) on edit.
+                if (string.IsNullOrEmpty(sign))
+                {
+                    if (indentStr.EndsWith("+") || indentStr.EndsWith("-"))
+                    {
+                        indentStr = indentStr.Substring(0, indentStr.Length - 1);
+                    }
+                }
+                return indentStr;
+            }
             return "";
         }
 
