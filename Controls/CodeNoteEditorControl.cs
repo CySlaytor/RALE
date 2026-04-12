@@ -624,53 +624,7 @@ namespace RALogicEditor.Controls
             }
         }
 
-        private void checkSizeToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            var lines = txtNoteBody.Lines;
-            var errors = new List<string>();
-            var lineRegex = new Regex(@"^([.\s]*)([-+])?(0x[0-9A-Fa-f]+)(.*)$", RegexOptions.IgnoreCase);
-
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string line = lines[i].Trim();
-                if (string.IsNullOrWhiteSpace(line)) continue;
-
-                var match = lineRegex.Match(line);
-                if (!match.Success) continue;
-
-                string indent = match.Groups[1].Value;
-                string sign = match.Groups[2].Value;
-                string rawDesc = match.Groups[4].Value.Trim();
-
-                if (!string.IsNullOrEmpty(indent) && indent.Contains(".") && string.IsNullOrEmpty(sign)) continue;
-
-                while (rawDesc.Length > 0 && (rawDesc[0] == '|' || rawDesc[0] == ':' || rawDesc[0] == '=' || rawDesc[0] == '-'))
-                    rawDesc = rawDesc.Substring(1).Trim();
-
-                if (string.IsNullOrWhiteSpace(rawDesc)) continue;
-                if (rawDesc.Contains("Pointer", StringComparison.OrdinalIgnoreCase)) continue;
-
-                var tagMatch = Regex.Match(rawDesc, @"\[(.*?)\]");
-                if (!tagMatch.Success)
-                {
-                    errors.Add($"Line {i + 1}: Missing size tag. Content: '{rawDesc}'");
-                }
-                else
-                {
-                    string tag = tagMatch.Groups[1].Value;
-                    bool isValid = RaLogicSyntax.MemorySizes.Contains(tag) ||
-                                   tag.Equals("Float", StringComparison.OrdinalIgnoreCase) ||
-                                   tag.EndsWith(" bytes");
-                    if (!isValid) errors.Add($"Line {i + 1}: Typo detected in tag '[{tag}]'.");
-                }
-            }
-
-            if (errors.Count > 0) MessageBox.Show(string.Join("\n", errors), "Code Note Issues", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            else MessageBox.Show("No size syntax errors found!", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-
-        // --- NEW FEATURE: Code Note Multiplier (Save Slots) ---
-        // Mode 1: Multiply highlighted text inside the note
+        // --- Multiplier Features ---
         private void multiplySelectedTextToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (txtNoteBody.ReadOnly) return;
@@ -683,7 +637,7 @@ namespace RALogicEditor.Controls
                 return;
             }
 
-            using (var form = new NoteMultiplierForm(MultiplierMode.Text))
+            using (var form = new NoteMultiplierForm())
             {
                 if (form.ShowDialog() == DialogResult.OK)
                 {
@@ -700,13 +654,11 @@ namespace RALogicEditor.Controls
                         form.ApplyToChildren);
 
                     // We apply via the ViewModel to ensure it tracks history properly
-                    // but we need to compute the full text to push to the VM
                     int insertPos = txtNoteBody.SelectionStart + txtNoteBody.SelectionLength;
                     string newFullText = txtNoteBody.Text.Insert(insertPos, "\r\n" + generated);
 
                     _viewModel.UpdateNoteContent(newFullText);
 
-                    // Move cursor/selection so the user can easily see what was pasted
                     txtNoteBody.SelectionStart = insertPos + 2;
                     txtNoteBody.SelectionLength = generated.Length;
 
@@ -716,25 +668,24 @@ namespace RALogicEditor.Controls
             }
         }
 
-        // Mode 2: Multiply the Entire Address to make brand new Code Notes
-        private void multiplyCurrentAddressToolStripMenuItem_Click(object sender, EventArgs e)
+        private void batchMultiplyNotesToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (_viewModel.CurrentBaseNote == null) return;
+            if (_viewModel.AllNotes.Count == 0) return;
 
-            using (var form = new NoteMultiplierForm(MultiplierMode.Address))
+            using (var form = new BatchNoteMultiplierForm(_viewModel.AllNotes))
             {
                 if (form.ShowDialog() == DialogResult.OK)
                 {
-                    _viewModel.MultiplyBaseNote(
+                    _viewModel.BatchMultiplyNotes(
+                        form.SelectedNotes,
+                        form.SearchKeyword,
+                        form.ReplacePattern,
                         form.Copies,
                         form.Stride,
-                        form.Naming,
-                        form.SearchText,
-                        form.ReplaceText,
                         form.StartNumber);
 
                     _hasUnsavedChanges = true;
-                    UpdateStatusDisplay("New Base Addresses generated.");
+                    UpdateStatusDisplay($"Batch duplicated {form.SelectedNotes.Count} note(s).");
                 }
             }
         }

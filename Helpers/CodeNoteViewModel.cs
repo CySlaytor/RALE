@@ -147,25 +147,35 @@ namespace RALogicEditor.Helpers
             NotesLoaded?.Invoke(this, EventArgs.Empty);
         }
 
-        public void MultiplyBaseNote(int copies, long stride, NamingStyle naming, string search, string replace, int startNum)
+        public void BatchMultiplyNotes(List<CodeNote> sourceNotes, string searchKeyword, string replacePattern, int copies, long stride, int startNum)
         {
-            if (CurrentBaseNote == null) return;
-
-            long baseAddr = ParseAddress(CurrentBaseNote.Address);
-            if (baseAddr == -1) return;
+            if (sourceNotes == null || sourceNotes.Count == 0) return;
 
             var newNotes = new List<CodeNote>();
 
-            for (int i = 0; i < copies; i++)
+            foreach (var baseNote in sourceNotes)
             {
-                int num = startNum + i;
-                long newAddr = baseAddr + (stride * (i + 1));
-                string newAddrStr = "0x" + newAddr.ToString("x");
+                long baseAddr = ParseAddress(baseNote.Address);
+                if (baseAddr == -1) continue;
 
-                // Use the helper to rename the text for the new Note
-                string newNoteText = CodeNoteMultiplier.ApplyNamingToNote(CurrentBaseNote.Note, naming, search, replace, num);
+                for (int i = 0; i < copies; i++)
+                {
+                    int num = startNum + i;
+                    long newAddr = baseAddr + (stride * (i + 1));
+                    string newAddrStr = "0x" + newAddr.ToString("x");
 
-                newNotes.Add(new CodeNote { Address = newAddrStr, Note = newNoteText, User = "Local" });
+                    string newNoteText = baseNote.Note;
+
+                    // Only perform text replacement if fields are provided
+                    if (!string.IsNullOrEmpty(searchKeyword))
+                    {
+                        string replacement = replacePattern.Replace("{N}", num.ToString());
+                        // Apply replacement globally inside the note text, ignoring case
+                        newNoteText = Regex.Replace(newNoteText, Regex.Escape(searchKeyword), replacement, RegexOptions.IgnoreCase);
+                    }
+
+                    newNotes.Add(new CodeNote { Address = newAddrStr, Note = newNoteText, User = "Local" });
+                }
             }
 
             AllNotes.AddRange(newNotes);
@@ -637,8 +647,6 @@ namespace RALogicEditor.Helpers
                     else
                     {
                         // BREAK OUT IMMEDIATELY if we can't find the next node as a direct child!
-                        // We NO LONGER search the rest of the descendant tree via FindNodeRecursive.
-                        // This prevents jumping into an unrelated matching offset branch.
                         break;
                     }
                 }

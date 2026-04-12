@@ -5,8 +5,6 @@ using System.Windows.Forms;
 
 namespace RALogicEditor.Forms
 {
-    public enum MultiplierMode { Text, Address }
-
     public partial class NoteMultiplierForm : Form
     {
         // Static fields to persist state across session
@@ -26,7 +24,7 @@ namespace RALogicEditor.Forms
         public int StartNumber { get; private set; }
         public bool ApplyToChildren { get; private set; }
 
-        public NoteMultiplierForm(MultiplierMode mode)
+        public NoteMultiplierForm()
         {
             InitializeComponent();
 
@@ -39,16 +37,8 @@ namespace RALogicEditor.Forms
             cmbNaming.SelectedIndex = _lastNamingIdx;
             chkApplyToChildren.Checked = _lastApplyToChildren;
 
-            if (mode == MultiplierMode.Address)
-            {
-                this.Text = "Multiply Entire Note Address";
-                chkApplyToChildren.Visible = false; // Irrelevant when creating base addresses
-            }
-            else
-            {
-                this.Text = "Multiply Selected Text";
-                chkApplyToChildren.Visible = true;
-            }
+            this.Text = "Multiply Selected Text";
+            chkApplyToChildren.Visible = true;
         }
 
         private void cmbNaming_SelectedIndexChanged(object sender, EventArgs e)
