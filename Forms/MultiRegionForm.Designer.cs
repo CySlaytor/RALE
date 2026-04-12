@@ -29,6 +29,7 @@
             this.deleteRowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.btnHelp = new System.Windows.Forms.Button();
             this.chkUpdateRP = new System.Windows.Forms.CheckBox();
+            this.chkUsePauseLocks = new System.Windows.Forms.CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.dgvMapping)).BeginInit();
             this.ctxGridActions.SuspendLayout();
             this.SuspendLayout();
@@ -142,27 +143,27 @@
             this.copyLogicToolStripMenuItem,
             this.deleteRowToolStripMenuItem});
             this.ctxGridActions.Name = "ctxGridActions";
-            this.ctxGridActions.Size = new System.Drawing.Size(181, 92);
+            this.ctxGridActions.Size = new System.Drawing.Size(133, 70);
             // 
             // pasteLogicToolStripMenuItem
             // 
             this.pasteLogicToolStripMenuItem.Name = "pasteLogicToolStripMenuItem";
             this.pasteLogicToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.V)));
-            this.pasteLogicToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.pasteLogicToolStripMenuItem.Size = new System.Drawing.Size(132, 22);
             this.pasteLogicToolStripMenuItem.Text = "Paste Logic";
             // 
             // copyLogicToolStripMenuItem
             // 
             this.copyLogicToolStripMenuItem.Name = "copyLogicToolStripMenuItem";
             this.copyLogicToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.C)));
-            this.copyLogicToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.copyLogicToolStripMenuItem.Size = new System.Drawing.Size(132, 22);
             this.copyLogicToolStripMenuItem.Text = "Copy";
             // 
             // deleteRowToolStripMenuItem
             // 
             this.deleteRowToolStripMenuItem.Name = "deleteRowToolStripMenuItem";
             this.deleteRowToolStripMenuItem.ShortcutKeys = System.Windows.Forms.Keys.Delete;
-            this.deleteRowToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.deleteRowToolStripMenuItem.Size = new System.Drawing.Size(132, 22);
             this.deleteRowToolStripMenuItem.Text = "Delete Row";
             // 
             // btnHelp
@@ -175,6 +176,19 @@
             this.btnHelp.Text = "Help";
             this.btnHelp.UseVisualStyleBackColor = true;
             this.btnHelp.Click += new System.EventHandler(this.btnHelp_Click);
+            // 
+            // chkUsePauseLocks
+            // 
+            this.chkUsePauseLocks.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.chkUsePauseLocks.AutoSize = true;
+            this.chkUsePauseLocks.Checked = true;
+            this.chkUsePauseLocks.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkUsePauseLocks.Location = new System.Drawing.Point(100, 523);
+            this.chkUsePauseLocks.Name = "chkUsePauseLocks";
+            this.chkUsePauseLocks.Size = new System.Drawing.Size(155, 19);
+            this.chkUsePauseLocks.TabIndex = 10;
+            this.chkUsePauseLocks.Text = "Generate as PauseLocks";
+            this.chkUsePauseLocks.UseVisualStyleBackColor = true;
             // 
             // chkUpdateRP
             // 
@@ -194,6 +208,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(784, 555);
+            this.Controls.Add(this.chkUsePauseLocks);
             this.Controls.Add(this.chkUpdateRP);
             this.Controls.Add(this.btnHelp);
             this.Controls.Add(this.tabControlRegions);
@@ -229,5 +244,6 @@
         private System.Windows.Forms.ToolStripMenuItem copyLogicToolStripMenuItem;
         private System.Windows.Forms.Button btnHelp;
         private System.Windows.Forms.CheckBox chkUpdateRP;
+        private System.Windows.Forms.CheckBox chkUsePauseLocks;
     }
 }

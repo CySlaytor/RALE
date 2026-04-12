@@ -22,6 +22,9 @@ namespace RALogicEditor.Forms
         // Property exposed for MainForm to check before applying RP logic
         public bool ShouldUpdateRichPresence => chkUpdateRP.Checked;
 
+        // Property exposed for MainForm to determine whether to apply PauseLocks
+        public bool UsePauseLocks => chkUsePauseLocks.Checked;
+
         public MultiRegionForm(List<CodeNote> notes)
         {
             InitializeComponent();
@@ -282,6 +285,7 @@ namespace RALogicEditor.Forms
                 this.ForeColor = Color.White;
                 StyleGrid(dgvMapping);
                 chkUpdateRP.ForeColor = Color.White;
+                chkUsePauseLocks.ForeColor = Color.White;
             }
         }
 
@@ -404,6 +408,6 @@ namespace RALogicEditor.Forms
         private void DeleteFromGrid(DataGridView grid) { if (grid.SelectedRows.Count > 0) { foreach (DataGridViewRow row in grid.SelectedRows) if (!row.IsNewRow) grid.Rows.Remove(row); } }
         private void btnOK_Click(object sender, EventArgs e) { DialogResult = DialogResult.OK; Close(); }
         private void btnCancel_Click(object sender, EventArgs e) { DialogResult = DialogResult.Cancel; Close(); }
-        private void btnHelp_Click(object sender, EventArgs e) { MessageBox.Show("Maps regions based on notes. Ensure base notes have size (e.g. [0x20 bytes]) for range mapping.", "Help"); }
+        private void btnHelp_Click(object sender, EventArgs e) { MessageBox.Show("Maps regions based on notes. Ensure base notes have size (e.g. [0x20 bytes]) for range mapping.\n\nOptionally check 'Generate as PauseLocks' to automatically apply PauseIf and invert the operators for memory checks.", "Help"); }
     }
 }

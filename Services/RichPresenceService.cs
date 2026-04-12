@@ -46,7 +46,7 @@ namespace RALogicEditor.Services
                 {
                     var newDs = new RichPresenceDisplayString();
 
-                    // A. Build Lock Logic
+                    // A. Build Lock Logic (Using positive conditions)
                     string lockLogic = BuildLockString(config.LockConditions);
 
                     // B. Combine
@@ -84,25 +84,13 @@ namespace RALogicEditor.Services
             {
                 if (sb.Length > 0) sb.Append('_');
                 var copy = c.Clone();
-                copy.Flag = "";
-                copy.Operator = InvertOperator(copy.Operator);
+                copy.Flag = ""; // RP script logic does not use flags
+
+                // Note: We deliberately do NOT invert the operator here.
+                // Rich Presence Display strings need the POSITIVE condition to show the string (e.g. ?0x1234=1?Playing USA)
                 sb.Append(LogicFormatter.ConditionToString(copy));
             }
             return sb.ToString();
-        }
-
-        private string InvertOperator(string op)
-        {
-            return op switch
-            {
-                "=" => "!=",
-                "!=" => "=",
-                "<" => ">=",
-                "<=" => ">",
-                ">" => "<=",
-                ">=" => "<",
-                _ => op
-            };
         }
 
         private string ApplyAddressMap(string input, List<AddressRangeMap> ranges)

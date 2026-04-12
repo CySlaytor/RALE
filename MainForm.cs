@@ -469,16 +469,29 @@ namespace RALogicEditor
             _projectRepo.EnsureLocalDataExists();
             PushMainUndo();
 
-            void InvertLockLogic(List<AchievementCondition> conditions)
+            // 1. GENERATE RICH PRESENCE FIRST (Using original, un-inverted positive conditions)
+            if (form.ShouldUpdateRichPresence && _projectRepo.RichPresence != null)
             {
-                foreach (var c in conditions)
-                {
-                    c.Flag = "Pause If";
-                    c.Operator = InvertOperator(c.Operator);
-                }
+                _rpMetadata.SaveBackup(_projectRepo.RichPresence.ToString());
+                var newRp = _rpService.GenerateMultiRegion(_projectRepo.RichPresence, configs);
+                _projectRepo.RichPresence = newRp;
+                MessageBox.Show("Rich Presence script updated in memory.", "RP Updated");
             }
 
-            foreach (var cfg in configs) InvertLockLogic(cfg.LockConditions);
+            // 2. INVERT LOCK LOGIC FOR ACHIEVEMENTS (If PauseLocks are enabled)
+            if (form.UsePauseLocks)
+            {
+                void InvertLockLogic(List<AchievementCondition> conditions)
+                {
+                    foreach (var c in conditions)
+                    {
+                        c.Flag = "Pause If";
+                        c.Operator = InvertOperator(c.Operator);
+                    }
+                }
+
+                foreach (var cfg in configs) InvertLockLogic(cfg.LockConditions);
+            }
 
             // Determine targets: Selected or All Filtered
             List<IAssetItem> assetsToProcess;
@@ -507,14 +520,6 @@ namespace RALogicEditor
                 // DELEGATE TO BATCH PROCESSOR
                 _batchProcessor.ApplyMultiRegionToAsset(localItem, baseConfig, targetConfigs);
                 count++;
-            }
-
-            if (form.ShouldUpdateRichPresence && _projectRepo.RichPresence != null)
-            {
-                _rpMetadata.SaveBackup(_projectRepo.RichPresence.ToString());
-                var newRp = _rpService.GenerateMultiRegion(_projectRepo.RichPresence, configs);
-                _projectRepo.RichPresence = newRp;
-                MessageBox.Show("Rich Presence script updated in memory.", "RP Updated");
             }
 
             _isDirty = true;
