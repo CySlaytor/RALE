@@ -128,9 +128,15 @@ namespace RALogicEditor.Logic
             CodeNoteNode? lastNode = null;
             int lineIndex = 0;
 
+            // Regex matching AutoCR's robust structural detection
+            var offsetRegex = new Regex(@"^([.\+\s\u2500-\u257F]*)([-+]?)(0x[0-9A-Fa-f]+)\s*([|=:])?\s*(.*)$", RegexOptions.IgnoreCase);
+            var prefixStripRegex = new Regex(@"^([.\+\s\u2500-\u257F]+)");
+
             foreach (var line in lines)
             {
+                string untrimmedLine = line.TrimEnd();
                 string trimmedLine = line.Trim();
+
                 if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("---"))
                 {
                     lineIndex++;
@@ -138,63 +144,65 @@ namespace RALogicEditor.Logic
                 }
 
                 int indent = 0;
-                string content;
+                bool isNode = false;
 
-                string untrimmedLine = line.TrimEnd();
-
-                // Count leading characters that define indentation level for traditional styles
-                int classicPrefixLength = untrimmedLine.TakeWhile(c => c == '.' || c == '+').Count();
-
-                if (classicPrefixLength > 0)
+                var match = offsetRegex.Match(trimmedLine);
+                if (match.Success)
                 {
-                    // For plus-based indents like "++0x...", the indent is one less than the count
-                    if (untrimmedLine[classicPrefixLength - 1] == '+' && untrimmedLine.Length > classicPrefixLength && untrimmedLine[classicPrefixLength] != ' ')
-                    {
-                        indent = classicPrefixLength - 1;
-                        content = untrimmedLine.Substring(indent).Trim();
-                    }
-                    else
-                    {
-                        indent = classicPrefixLength;
-                        content = untrimmedLine.Substring(indent).Trim();
-                    }
-                }
-                else
-                {
-                    // Check for Unicode tree characters so pasting existing formatted trees still works
-                    int unicodePrefixLength = untrimmedLine.TakeWhile(c => c == '│' || c == ' ' || c == '├' || c == '└' || c == '┬' || c == '─').Count();
-                    bool hasBoxChar = untrimmedLine.Substring(0, unicodePrefixLength).Any(c => c == '│' || c == '├' || c == '└' || c == '┬' || c == '─');
+                    string indentStr = match.Groups[1].Value;
+                    string sign = match.Groups[2].Value;
+                    string separator = match.Groups[4].Value;
 
-                    if (unicodePrefixLength > 0 && hasBoxChar)
+                    bool hasSign = !string.IsNullOrEmpty(sign);
+                    bool hasIndent = indentStr.Length > 0;
+
+                    if (hasSign)
                     {
-                        char lastChar = untrimmedLine[unicodePrefixLength - 1];
-                        if (lastChar == '┬' || lastChar == '─')
-                        {
-                            indent = unicodePrefixLength - 1;
-                        }
-                        else
-                        {
-                            indent = 0; // Force 0 so it attaches to lastNode as an Attached Note
-                        }
-                        content = untrimmedLine.Substring(unicodePrefixLength).Trim();
+                        isNode = true;
                     }
-                    else
+                    else if (indentStr.Contains("+"))
                     {
-                        indent = 0;
-                        content = untrimmedLine.Trim();
+                        isNode = true; // Treat any indentation with '+' as a node
+                    }
+                    else if (hasIndent)
+                    {
+                        // Indented with dots/spaces/box only, no sign (e.g. "..0x04").
+                        if (separator == "|")
+                        {
+                            isNode = true;
+                        }
+                    }
+
+                    if (isNode)
+                    {
+                        // Safely recover sign if the greedy group 1 ate it
+                        if (string.IsNullOrEmpty(sign))
+                        {
+                            if (indentStr.EndsWith("+")) { sign = "+"; indentStr = indentStr.Substring(0, indentStr.Length - 1); }
+                            else if (indentStr.EndsWith("-")) { sign = "-"; indentStr = indentStr.Substring(0, indentStr.Length - 1); }
+                        }
+
+                        indent = indentStr.Length;
+
+                        string hex = match.Groups[3].Value;
+                        string remainder = match.Groups[5].Value;
+
+                        // Overwrite untrimmed line completely to cleanly detach the payload from the visual hierarchy
+                        untrimmedLine = $"{sign}{hex} {separator} {remainder}".Trim();
                     }
                 }
 
                 if (indent < 0) indent = 0;
 
                 bool isAttachedNote = (indent == 0) && (lastNode != null) &&
-                                      !(content.StartsWith("+0x", StringComparison.OrdinalIgnoreCase) ||
-                                        content.StartsWith("-0x", StringComparison.OrdinalIgnoreCase) ||
-                                        content.StartsWith("["));
+                                      !(untrimmedLine.StartsWith("+0x", StringComparison.OrdinalIgnoreCase) ||
+                                        untrimmedLine.StartsWith("-0x", StringComparison.OrdinalIgnoreCase) ||
+                                        untrimmedLine.StartsWith("["));
 
                 if (isAttachedNote)
                 {
-                    lastNode!.Children.Add(new CodeNoteNode { Content = content, OriginalIndex = lineIndex });
+                    string cleanContentLine = prefixStripRegex.Replace(untrimmedLine, "").TrimStart();
+                    lastNode!.Children.Add(new CodeNoteNode { Content = cleanContentLine, OriginalIndex = lineIndex });
                 }
                 else
                 {
@@ -203,6 +211,7 @@ namespace RALogicEditor.Logic
                         stack.Pop();
                     }
 
+                    string content = isNode ? untrimmedLine : prefixStripRegex.Replace(untrimmedLine, "").TrimStart();
                     var node = new CodeNoteNode { Content = content, OriginalIndex = lineIndex };
                     stack.Peek().parentChildrenList.Add(node);
                     stack.Push((indent, node.Children));
@@ -272,7 +281,8 @@ namespace RALogicEditor.Logic
                 var allChildren = group.SelectMany(n => n.Children).ToList();
                 if (allChildren.Any())
                 {
-                    // Recursive merge calls ensure the whole tree is processed.
+                    // FIX: Pass allChildren directly to MergeTree to recursively group AND merge subtrees!
+                    // This prevents identically offset subtrees from being discarded.
                     newNode.Children.AddRange(MergeTree(allChildren));
                 }
                 finalNodes.Add(newNode);

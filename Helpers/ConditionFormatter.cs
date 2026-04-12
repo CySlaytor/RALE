@@ -143,6 +143,7 @@ namespace RALogicEditor.Helpers
 
                 if (chainStack.Count > 0)
                 {
+                    bool wasPointerChain = chainStack.Count > 0;
                     var baseNode = chainStack[0];
                     chainStack.RemoveAt(0);
                     string normalizedBase = LogicFormatter.NormalizeAddress(baseNode.Value);
@@ -219,9 +220,10 @@ namespace RALogicEditor.Helpers
                             }
                         }
 
-                        // Fallback: If strict chain mapping breaks due to user indentation errors,
-                        // do a flat search over the entire base note tree.
-                        if (finalMatchNode == null && targetVal != -1)
+                        // CRITICAL FIX: Only fallback to flat searching if we were NOT in a pointer chain.
+                        // Flat searching a broken array of structs will result in returning the first element
+                        // found in the file, causing a false alias to persist.
+                        if (finalMatchNode == null && targetVal != -1 && !wasPointerChain)
                         {
                             finalMatchNode = FindNodeByOffsetRecursive(workingNodes, targetVal);
                         }
@@ -253,6 +255,9 @@ namespace RALogicEditor.Helpers
                             }
                             return desc;
                         }
+
+                        // If we were in a pointer chain and failed to find the node, abort and show Hex.
+                        if (wasPointerChain && finalMatchNode == null) return "";
                     }
                 }
             }

@@ -538,7 +538,7 @@ namespace RALogicEditor.Helpers
 
             if (offsets == null || offsets.Count == 0) return;
 
-            // Re-apply Array Indexing Filter just in case it wasn't cleaned by the caller (ConditionGridManager does this now, but extra safety is good)
+            // Re-apply Array Indexing Filter just in case it wasn't cleaned by the caller
             while (offsets.Count > 1)
             {
                 long baseAddr = offsets[0];
@@ -577,28 +577,6 @@ namespace RALogicEditor.Helpers
                 return long.MinValue;
             }
 
-            // Recursive search helper to jump over broken/skipped indentation layers
-            NoteNode? FindNodeRecursive(IEnumerable<NoteNode> searchNodes, long targetOffset, out long rem)
-            {
-                rem = 0;
-                foreach (var n in searchNodes)
-                {
-                    long start = ParseOffsetString(n.Offset);
-                    if (start != long.MinValue && targetOffset >= start && targetOffset < start + n.Size)
-                    {
-                        rem = targetOffset - start;
-                        return n;
-                    }
-                    var childMatch = FindNodeRecursive(n.Children, targetOffset, out long childRem);
-                    if (childMatch != null)
-                    {
-                        rem = childRem;
-                        return childMatch;
-                    }
-                }
-                return null;
-            }
-
             var rootNodes = nodes.Where(n => n.IndentLevel == 0 || (n.Parent != null && n.Parent.IndentLevel == -1) || (n.Parent == null && n.IndentLevel != -2)).ToList();
 
             // Skip the base address since we're already at the root of its note
@@ -631,13 +609,12 @@ namespace RALogicEditor.Helpers
                 {
                     long nextOffset = offsets[matchedDepth];
 
-                    // First try direct children
+                    // Try direct children or direct range match exactly at this specific level
                     var nextNode = current.Children.FirstOrDefault(n => ParseOffsetString(n.Offset) == nextOffset);
                     long stepRemainder = 0;
 
                     if (nextNode == null)
                     {
-                        // Try range match on direct children
                         foreach (var n in current.Children)
                         {
                             long start = ParseOffsetString(n.Offset);
@@ -650,21 +627,18 @@ namespace RALogicEditor.Helpers
                         }
                     }
 
-                    // Fallback to deep recursive search (survives skipped/broken indentation like ...+0x3e)
-                    if (nextNode == null)
-                    {
-                        nextNode = FindNodeRecursive(current.Children, nextOffset, out stepRemainder);
-                    }
-
                     if (nextNode != null)
                     {
                         current = nextNode;
                         bestMatchNode = current;
                         matchedDepth++;
-                        finalRemainder += stepRemainder; // Accumulate remainders if traversing multiple range matches
+                        finalRemainder += stepRemainder;
                     }
                     else
                     {
+                        // BREAK OUT IMMEDIATELY if we can't find the next node as a direct child!
+                        // We NO LONGER search the rest of the descendant tree via FindNodeRecursive.
+                        // This prevents jumping into an unrelated matching offset branch.
                         break;
                     }
                 }
