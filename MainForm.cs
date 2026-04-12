@@ -102,6 +102,7 @@ namespace RALogicEditor
 
             // Global Events
             this.FormClosing += MainForm_FormClosing;
+            this.Load += MainForm_Load; // Apply splitters post-layout
 
             // Undo/Redo State Listeners
             _mainHistory.HistoryChanged += (s, e) => UpdateUndoRedoState();
@@ -114,6 +115,19 @@ namespace RALogicEditor
             UpdateRecentMenu();
             ToggleReviewer(AppSettings.Current.ShowLogicReviewer);
             UpdateUndoRedoState();
+        }
+
+        private void MainForm_Load(object? sender, EventArgs e)
+        {
+            // Apply splitter distances after the form has fully scaled and laid out
+            // This prevents the code reviewer pane and editor from squashing over time
+            try
+            {
+                if (AppSettings.Current.MainSplitterDistance > 0) splitMain.SplitterDistance = AppSettings.Current.MainSplitterDistance;
+                if (AppSettings.Current.EditorSplitterDistance > 0) splitEditor.SplitterDistance = AppSettings.Current.EditorSplitterDistance;
+                if (AppSettings.Current.VerticalSplitterDistance > 0) splitMiddle.SplitterDistance = AppSettings.Current.VerticalSplitterDistance;
+            }
+            catch { /* Ignore boundary exceptions if the window starts minimized or too small */ }
         }
 
         private void CodeNoteEditor_NoteUpdated(object? sender, EventArgs e)
@@ -157,6 +171,7 @@ namespace RALogicEditor
             resetAssetToolStripMenuItem.Click += ResetAsset_Click;
             moveUpAssetToolStripMenuItem.Click += MoveAssetUp_Click;
             moveDownAssetToolStripMenuItem.Click += MoveAssetDown_Click;
+            restoreOrderToolStripMenuItem.Click += RestoreOrder_Click; // Added Natural Order Revert
             renumberLocalIDsToolStripMenuItem.Click += RenumberLocalIDs_Click;
             renumberContextToolStripMenuItem.Click += RenumberLocalIDs_Click;
             clearDataResetToolStripMenuItem.Click += ClearDataResetToolStripMenuItem_Click;
@@ -308,10 +323,6 @@ namespace RALogicEditor
             }
             if (AppSettings.Current.IsMaximized) this.WindowState = FormWindowState.Maximized;
 
-            if (AppSettings.Current.MainSplitterDistance > 0) splitMain.SplitterDistance = AppSettings.Current.MainSplitterDistance;
-            if (AppSettings.Current.EditorSplitterDistance > 0) splitEditor.SplitterDistance = AppSettings.Current.EditorSplitterDistance;
-            if (AppSettings.Current.VerticalSplitterDistance > 0) splitMiddle.SplitterDistance = AppSettings.Current.VerticalSplitterDistance;
-
             triggerEditor.ShowDecimal = AppSettings.Current.Trigger_ShowDecimal;
             triggerEditor.ShowAliases = AppSettings.Current.Trigger_ShowAliases;
             triggerEditor.CollapseChains = AppSettings.Current.Trigger_CollapseChains;
@@ -342,9 +353,13 @@ namespace RALogicEditor
                 }
             }
 
-            AppSettings.Current.MainSplitterDistance = splitMain.SplitterDistance;
-            AppSettings.Current.EditorSplitterDistance = splitEditor.SplitterDistance;
-            AppSettings.Current.VerticalSplitterDistance = splitMiddle.SplitterDistance;
+            // Ensure we don't save collapsed splitter distances if the window is minimized or hidden
+            if (this.WindowState != FormWindowState.Minimized)
+            {
+                AppSettings.Current.MainSplitterDistance = splitMain.SplitterDistance;
+                AppSettings.Current.EditorSplitterDistance = splitEditor.SplitterDistance;
+                AppSettings.Current.VerticalSplitterDistance = splitMiddle.SplitterDistance;
+            }
 
             AppSettings.Current.LastAssetTypeIndex = cmbAssetType.SelectedIndex;
             AppSettings.Current.LastCategoryIndex = cmbCategory.SelectedIndex;

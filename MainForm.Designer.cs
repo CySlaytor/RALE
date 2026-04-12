@@ -22,7 +22,6 @@
             undoToolStripMenuItem = new ToolStripMenuItem();
             redoToolStripMenuItem = new ToolStripMenuItem();
             renumberLocalIDsToolStripMenuItem = new ToolStripMenuItem();
-            // New Menu Item
             clearDataResetToolStripMenuItem = new ToolStripMenuItem();
             viewToolStripMenuItem = new ToolStripMenuItem();
             viewReviewerToolStripMenuItem = new ToolStripMenuItem();
@@ -38,6 +37,8 @@
             toolStripSeparatorAsset = new ToolStripSeparator();
             moveUpAssetToolStripMenuItem = new ToolStripMenuItem();
             moveDownAssetToolStripMenuItem = new ToolStripMenuItem();
+            toolStripSeparatorOrder = new ToolStripSeparator();
+            restoreOrderToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparatorRenumber = new ToolStripSeparator();
             renumberContextToolStripMenuItem = new ToolStripMenuItem();
             viewDiffToolStripMenuItem = new ToolStripMenuItem();
@@ -49,7 +50,7 @@
             txtAssetSearch = new TextBox();
             lblAssetSearch = new Label();
             cmbSource = new ComboBox();
-            cmbCategory = new ComboBox(); // New ComboBox
+            cmbCategory = new ComboBox();
             cmbAssetType = new ComboBox();
             splitEditor = new SplitContainer();
             splitMiddle = new SplitContainer();
@@ -216,7 +217,7 @@
             // 
             // assetContextMenu
             // 
-            assetContextMenu.Items.AddRange(new ToolStripItem[] { newAssetToolStripMenuItem, cloneAssetToolStripMenuItem, deleteAssetToolStripMenuItem, resetAssetToolStripMenuItem, toolStripSeparatorAsset, moveUpAssetToolStripMenuItem, moveDownAssetToolStripMenuItem, toolStripSeparatorRenumber, renumberContextToolStripMenuItem, viewDiffToolStripMenuItem });
+            assetContextMenu.Items.AddRange(new ToolStripItem[] { newAssetToolStripMenuItem, cloneAssetToolStripMenuItem, deleteAssetToolStripMenuItem, resetAssetToolStripMenuItem, toolStripSeparatorAsset, moveUpAssetToolStripMenuItem, moveDownAssetToolStripMenuItem, toolStripSeparatorOrder, restoreOrderToolStripMenuItem, toolStripSeparatorRenumber, renumberContextToolStripMenuItem, viewDiffToolStripMenuItem });
             assetContextMenu.Name = "assetContextMenu";
             assetContextMenu.Size = new Size(200, 208);
             // 
@@ -264,6 +265,17 @@
             moveDownAssetToolStripMenuItem.ShortcutKeys = Keys.Alt | Keys.Down;
             moveDownAssetToolStripMenuItem.Size = new Size(199, 22);
             moveDownAssetToolStripMenuItem.Text = "Move Down";
+            // 
+            // toolStripSeparatorOrder
+            // 
+            toolStripSeparatorOrder.Name = "toolStripSeparatorOrder";
+            toolStripSeparatorOrder.Size = new Size(196, 6);
+            // 
+            // restoreOrderToolStripMenuItem
+            // 
+            restoreOrderToolStripMenuItem.Name = "restoreOrderToolStripMenuItem";
+            restoreOrderToolStripMenuItem.Size = new Size(199, 22);
+            restoreOrderToolStripMenuItem.Text = "Restore Default Order";
             // 
             // toolStripSeparatorRenumber
             // 
@@ -502,7 +514,7 @@
         private System.Windows.Forms.Panel panelGridTop;
         private System.Windows.Forms.ComboBox cmbAssetType;
         private System.Windows.Forms.ComboBox cmbSource;
-        private System.Windows.Forms.ComboBox cmbCategory; // New
+        private System.Windows.Forms.ComboBox cmbCategory;
         private RALogicEditor.Controls.TriggerEditorControl triggerEditor;
         private RALogicEditor.Controls.CodeNoteEditorControl codeNoteEditor;
         private RALogicEditor.Controls.CodeReviewControl codeReviewControl;
@@ -514,6 +526,8 @@
         private System.Windows.Forms.ToolStripMenuItem moveUpAssetToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem moveDownAssetToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem resetAssetToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparatorOrder;
+        private System.Windows.Forms.ToolStripMenuItem restoreOrderToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparatorRenumber;
         private System.Windows.Forms.ToolStripMenuItem renumberContextToolStripMenuItem;
         private System.Windows.Forms.Panel panelGridBottom;

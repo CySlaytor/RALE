@@ -334,6 +334,18 @@ namespace RALogicEditor
             }
         }
 
+        private void RestoreOrder_Click(object? sender, EventArgs e)
+        {
+            // Remove sort glyphs to indicate default natural order
+            foreach (DataGridViewColumn col in achievementGrid.Columns)
+            {
+                col.HeaderCell.SortGlyphDirection = SortOrder.None;
+            }
+
+            // Reload will clear rows and re-add them in natural order natively from the File
+            ReloadDataView();
+        }
+
         private void RenumberLocalIDs_Click(object? sender, EventArgs e)
         {
             if (_projectRepo.LocalData == null) return;

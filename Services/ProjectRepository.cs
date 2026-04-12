@@ -205,52 +205,54 @@ namespace RALogicEditor.Services
         }
 
         // Merges Server and Local lists based on IDs to determine Sync status
+        // Modified: Now preserves the natural reading order of the JSON files rather than forcing numerical ID sorts
         public List<T> GetMergedList<T>(bool isLeaderboard) where T : IAssetItem
         {
             var list = new List<T>();
             if (ServerData == null && LocalData == null) return list;
 
-            var serverItems = ServerData?.Sets
+            // Preserve JSON order natively
+            var serverItemsList = ServerData?.Sets
                 .SelectMany(s => isLeaderboard ? s.Leaderboards.Cast<T>() : s.Achievements.Cast<T>())
-                .ToDictionary(i => i.ID) ?? new Dictionary<int, T>();
+                .ToList() ?? new List<T>();
 
-            var localItems = (isLeaderboard ? LocalData?.Leaderboards.Cast<T>() : LocalData?.Achievements.Cast<T>())
-                             ?? Enumerable.Empty<T>();
+            var localItemsList = (isLeaderboard ? LocalData?.Leaderboards.Cast<T>() : LocalData?.Achievements.Cast<T>())?.ToList() ?? new List<T>();
 
+            var localItemsDict = localItemsList.ToDictionary(i => i.ID);
             var processedIds = new HashSet<int>();
 
-            foreach (var loc in localItems)
+            // 1. Map Server Items in their natural JSON order, tagging local modifications if they exist
+            foreach (var srv in serverItemsList)
             {
-                if (serverItems.ContainsKey(loc.ID))
+                if (localItemsDict.TryGetValue(srv.ID, out var loc))
                 {
-                    var srv = serverItems[loc.ID];
                     if (AreAssetsEqual(loc, srv))
                         loc.State = AssetState.Synced;
                     else
                         loc.State = AssetState.Modified;
 
-                    // Propagate category from server (User.txt doesn't store category info)
                     loc.Category = srv.Category;
+                    list.Add(loc);
                 }
                 else
-                {
-                    loc.State = AssetState.Local;
-                    // loc.Category defaults to "Local" in constructor
-                }
-                list.Add(loc);
-                processedIds.Add(loc.ID);
-            }
-
-            foreach (var srv in serverItems.Values)
-            {
-                if (!processedIds.Contains(srv.ID))
                 {
                     srv.State = AssetState.Synced;
                     list.Add(srv);
                 }
+                processedIds.Add(srv.ID);
             }
 
-            return list.OrderBy(x => x.ID).ToList();
+            // 2. Append Local-Only (New) items at the bottom in their natural User.txt order
+            foreach (var loc in localItemsList)
+            {
+                if (!processedIds.Contains(loc.ID))
+                {
+                    loc.State = AssetState.Local;
+                    list.Add(loc);
+                }
+            }
+
+            return list;
         }
 
         private bool AreAssetsEqual(IAssetItem a, IAssetItem b)
