@@ -87,6 +87,7 @@ namespace RALogicEditor
             codeNoteEditor.ReloadRequested += Reload_Click;
             codeNoteEditor.SaveRequested += saveToolStripMenuItem_Click;
             codeNoteEditor.NoteUpdated += CodeNoteEditor_NoteUpdated; // Real-time grid updates
+            codeNoteEditor.NoteResetRequested += CodeNoteEditor_NoteResetRequested; // Resets local note override
 
             // Main Grid
             achievementGrid.CellDoubleClick += achievementGrid_CellDoubleClick;
@@ -137,6 +138,22 @@ namespace RALogicEditor
             {
                 triggerEditor.SetNotes(_projectRepo.LocalData.Notes);
             }
+        }
+
+        private void CodeNoteEditor_NoteResetRequested(object? sender, string address)
+        {
+            // Removes a local note modification and restores the original server note logic instantly
+            if (_projectRepo.LocalData == null) return;
+
+            PushMainUndo();
+            _projectRepo.RevertNote(address);
+            _isDirty = true;
+
+            // Instantly refresh editors with the restored notes list
+            var notes = _projectRepo.LocalData.Notes;
+            codeNoteEditor.SetNotes(notes);
+            triggerEditor.SetNotes(notes);
+            RunGlobalValidation();
         }
 
         private void InitializeFilters()

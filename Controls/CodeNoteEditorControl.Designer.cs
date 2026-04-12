@@ -42,10 +42,11 @@
             statusStripBottom = new StatusStrip();
             lblOffsetChain = new ToolStripStatusLabel();
             panelBottom = new Panel();
+            cmbIndentStyle = new ComboBox();
             chkIndentValues = new CheckBox();
             btnFixHierarchy = new Button();
             btnSave = new Button();
-            btnCopyAll = new Button();
+            btnReset = new Button();
             panelTop.SuspendLayout();
             panelRowVariable.SuspendLayout();
             panelRowAddress.SuspendLayout();
@@ -63,7 +64,7 @@
             panelTop.Dock = DockStyle.Top;
             panelTop.Location = new Point(0, 0);
             panelTop.Name = "panelTop";
-            panelTop.Size = new Size(300, 96);
+            panelTop.Size = new Size(400, 96);
             panelTop.TabIndex = 0;
             // 
             // panelRowVariable
@@ -75,14 +76,14 @@
             panelRowVariable.Location = new Point(0, 64);
             panelRowVariable.Name = "panelRowVariable";
             panelRowVariable.Padding = new Padding(5, 2, 5, 2);
-            panelRowVariable.Size = new Size(300, 30);
+            panelRowVariable.Size = new Size(400, 30);
             panelRowVariable.TabIndex = 2;
             // 
             // chkShowLeafsOnly
             // 
             chkShowLeafsOnly.AutoSize = true;
             chkShowLeafsOnly.Dock = DockStyle.Right;
-            chkShowLeafsOnly.Location = new Point(177, 2);
+            chkShowLeafsOnly.Location = new Point(277, 2);
             chkShowLeafsOnly.Name = "chkShowLeafsOnly";
             chkShowLeafsOnly.Padding = new Padding(5, 0, 0, 0);
             chkShowLeafsOnly.Size = new Size(118, 26);
@@ -97,7 +98,7 @@
             cmbVariables.FormattingEnabled = true;
             cmbVariables.Location = new Point(59, 2);
             cmbVariables.Name = "cmbVariables";
-            cmbVariables.Size = new Size(236, 23);
+            cmbVariables.Size = new Size(218, 23);
             cmbVariables.TabIndex = 1;
             cmbVariables.SelectedIndexChanged += cmbVariables_SelectedIndexChanged;
             cmbVariables.Format += cmbVariables_Format;
@@ -121,7 +122,7 @@
             panelRowAddress.Location = new Point(0, 32);
             panelRowAddress.Name = "panelRowAddress";
             panelRowAddress.Padding = new Padding(5, 5, 5, 2);
-            panelRowAddress.Size = new Size(300, 32);
+            panelRowAddress.Size = new Size(400, 32);
             panelRowAddress.TabIndex = 1;
             // 
             // cmbNotes
@@ -133,7 +134,7 @@
             cmbNotes.FormattingEnabled = true;
             cmbNotes.Location = new Point(60, 5);
             cmbNotes.Name = "cmbNotes";
-            cmbNotes.Size = new Size(235, 23);
+            cmbNotes.Size = new Size(335, 23);
             cmbNotes.TabIndex = 1;
             cmbNotes.SelectedIndexChanged += cmbNotes_SelectedIndexChanged;
             cmbNotes.Format += cmbNotes_Format;
@@ -158,7 +159,7 @@
             panelRowSearch.Location = new Point(0, 0);
             panelRowSearch.Name = "panelRowSearch";
             panelRowSearch.Padding = new Padding(5, 5, 5, 2);
-            panelRowSearch.Size = new Size(300, 32);
+            panelRowSearch.Size = new Size(400, 32);
             panelRowSearch.TabIndex = 0;
             // 
             // txtSearch
@@ -166,14 +167,14 @@
             txtSearch.Dock = DockStyle.Fill;
             txtSearch.Location = new Point(53, 5);
             txtSearch.Name = "txtSearch";
-            txtSearch.Size = new Size(182, 23);
+            txtSearch.Size = new Size(282, 23);
             txtSearch.TabIndex = 1;
             txtSearch.TextChanged += txtSearch_TextChanged;
             // 
             // btnReload
             // 
             btnReload.Dock = DockStyle.Right;
-            btnReload.Location = new Point(235, 5);
+            btnReload.Location = new Point(335, 5);
             btnReload.Name = "btnReload";
             btnReload.Size = new Size(60, 25);
             btnReload.TabIndex = 2;
@@ -203,7 +204,7 @@
             txtNoteBody.Multiline = true;
             txtNoteBody.Name = "txtNoteBody";
             txtNoteBody.ScrollBars = ScrollBars.Vertical;
-            txtNoteBody.Size = new Size(300, 253);
+            txtNoteBody.Size = new Size(400, 253);
             txtNoteBody.TabIndex = 1;
             txtNoteBody.TextChanged += txtNoteBody_TextChanged;
             // 
@@ -280,7 +281,7 @@
             statusStripBottom.Items.AddRange(new ToolStripItem[] { lblOffsetChain });
             statusStripBottom.Location = new Point(0, 378);
             statusStripBottom.Name = "statusStripBottom";
-            statusStripBottom.Size = new Size(300, 22);
+            statusStripBottom.Size = new Size(400, 22);
             statusStripBottom.TabIndex = 2;
             statusStripBottom.Text = "statusStrip1";
             // 
@@ -292,16 +293,39 @@
             // 
             // panelBottom
             // 
+            panelBottom.Controls.Add(cmbIndentStyle);
             panelBottom.Controls.Add(chkIndentValues);
             panelBottom.Controls.Add(btnFixHierarchy);
             panelBottom.Controls.Add(btnSave);
-            panelBottom.Controls.Add(btnCopyAll);
+            panelBottom.Controls.Add(btnReset);
             panelBottom.Dock = DockStyle.Bottom;
             panelBottom.Location = new Point(0, 349);
             panelBottom.Name = "panelBottom";
             panelBottom.Padding = new Padding(2);
-            panelBottom.Size = new Size(300, 29);
+            panelBottom.Size = new Size(400, 29);
             panelBottom.TabIndex = 3;
+            // 
+            // btnSave
+            // 
+            btnSave.Dock = DockStyle.Left;
+            btnSave.Location = new Point(2, 2);
+            btnSave.Name = "btnSave";
+            btnSave.Size = new Size(55, 25);
+            btnSave.TabIndex = 1;
+            btnSave.Text = "Save";
+            btnSave.UseVisualStyleBackColor = true;
+            btnSave.Click += btnSave_Click;
+            // 
+            // btnFixHierarchy
+            // 
+            btnFixHierarchy.Dock = DockStyle.Left;
+            btnFixHierarchy.Location = new Point(57, 2);
+            btnFixHierarchy.Name = "btnFixHierarchy";
+            btnFixHierarchy.Size = new Size(95, 25);
+            btnFixHierarchy.TabIndex = 2;
+            btnFixHierarchy.Text = "Fix Hierarchy";
+            btnFixHierarchy.UseVisualStyleBackColor = true;
+            btnFixHierarchy.Click += btnFixHierarchy_Click;
             // 
             // chkIndentValues
             // 
@@ -317,38 +341,26 @@
             chkIndentValues.Text = "Indent";
             chkIndentValues.UseVisualStyleBackColor = true;
             // 
-            // btnFixHierarchy
+            // cmbIndentStyle
             // 
-            btnFixHierarchy.Dock = DockStyle.Left;
-            btnFixHierarchy.Location = new Point(57, 2);
-            btnFixHierarchy.Name = "btnFixHierarchy";
-            btnFixHierarchy.Size = new Size(95, 25);
-            btnFixHierarchy.TabIndex = 2;
-            btnFixHierarchy.Text = "Fix Hierarchy";
-            btnFixHierarchy.UseVisualStyleBackColor = true;
-            btnFixHierarchy.Click += btnFixHierarchy_Click;
+            cmbIndentStyle.Dock = DockStyle.Left;
+            cmbIndentStyle.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbIndentStyle.FormattingEnabled = true;
+            cmbIndentStyle.Location = new Point(217, 3);
+            cmbIndentStyle.Name = "cmbIndentStyle";
+            cmbIndentStyle.Size = new Size(100, 23);
+            cmbIndentStyle.TabIndex = 4;
             // 
-            // btnSave
+            // btnReset
             // 
-            btnSave.Dock = DockStyle.Left;
-            btnSave.Location = new Point(2, 2);
-            btnSave.Name = "btnSave";
-            btnSave.Size = new Size(55, 25);
-            btnSave.TabIndex = 1;
-            btnSave.Text = "Save";
-            btnSave.UseVisualStyleBackColor = true;
-            btnSave.Click += btnSave_Click;
-            // 
-            // btnCopyAll
-            // 
-            btnCopyAll.Dock = DockStyle.Right;
-            btnCopyAll.Location = new Point(223, 2);
-            btnCopyAll.Name = "btnCopyAll";
-            btnCopyAll.Size = new Size(75, 25);
-            btnCopyAll.TabIndex = 0;
-            btnCopyAll.Text = "Copy All";
-            btnCopyAll.UseVisualStyleBackColor = true;
-            btnCopyAll.Click += btnCopyAll_Click;
+            btnReset.Dock = DockStyle.Right;
+            btnReset.Location = new Point(323, 2);
+            btnReset.Name = "btnReset";
+            btnReset.Size = new Size(75, 25);
+            btnReset.TabIndex = 0;
+            btnReset.Text = "Reset";
+            btnReset.UseVisualStyleBackColor = true;
+            btnReset.Click += btnReset_Click;
             // 
             // CodeNoteEditorControl
             // 
@@ -359,7 +371,7 @@
             Controls.Add(statusStripBottom);
             Controls.Add(panelTop);
             Name = "CodeNoteEditorControl";
-            Size = new Size(300, 400);
+            Size = new Size(400, 400);
             panelTop.ResumeLayout(false);
             panelRowVariable.ResumeLayout(false);
             panelRowVariable.PerformLayout();
@@ -393,10 +405,11 @@
         private System.Windows.Forms.Button btnReload;
         private System.Windows.Forms.CheckBox chkShowLeafsOnly;
         private System.Windows.Forms.Panel panelBottom;
-        private System.Windows.Forms.Button btnCopyAll;
+        private System.Windows.Forms.Button btnReset;
         private System.Windows.Forms.Button btnFixHierarchy;
         private System.Windows.Forms.Button btnSave;
         private System.Windows.Forms.CheckBox chkIndentValues;
+        private System.Windows.Forms.ComboBox cmbIndentStyle;
         private System.Windows.Forms.ContextMenuStrip cmsNoteContext;
         private System.Windows.Forms.ToolStripMenuItem cutToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem copyToolStripMenuItem;

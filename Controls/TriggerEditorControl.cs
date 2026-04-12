@@ -803,6 +803,7 @@ namespace RALogicEditor.Controls
             cutToolStripMenuItem.Enabled = any; // Enabled logic for Cut
             pasteToolStripMenuItem.Enabled = Clipboard.ContainsText();
             saveAsSnippetToolStripMenuItem.Enabled = any;
+            extendSelectionToolStripMenuItem.Enabled = conditionGrid.SelectedRows.Count >= 2;
         }
 
         private void GroupsContextMenu_Opening(object? sender, CancelEventArgs e)
@@ -839,6 +840,7 @@ namespace RALogicEditor.Controls
         private void copyLogicToolStripMenuItem_Click(object? sender, EventArgs e) => _gridManager.CopySelectedLogic();
         private void cutToolStripMenuItem_Click(object? sender, EventArgs e) { _viewModel.PushUndoState(); _gridManager.CutSelected(); } // New Action
         private void pasteToolStripMenuItem_Click(object? sender, EventArgs e) { if (Clipboard.ContainsText()) GridManager_PasteRequested(sender, Clipboard.GetText()); }
+        private void extendSelectionToolStripMenuItem_Click(object? sender, EventArgs e) => _gridManager.ExtendSelectionByPattern();
 
         private void addGroupToolStripMenuItem_Click(object? sender, EventArgs e)
         {
@@ -1030,7 +1032,20 @@ namespace RALogicEditor.Controls
             if (existingDef == null && detectedCopies > 1)
                 existingDef = new GeneratorDefinition { Copies = detectedCopies };
 
-            using var form = new GeneratorConfigForm(rootItems, autoStride, existingDef);
+            // Determine pre-selected addresses based on currently selected rows in the editor grid
+            var preSelectedAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataGridViewRow row in conditionGrid.SelectedRows)
+            {
+                if (row.Tag is AchievementCondition cond)
+                {
+                    if (RaLogicSyntax.MemoryTypes.Contains(cond.LeftOperand.Type) && !string.IsNullOrWhiteSpace(cond.LeftOperand.Value))
+                        preSelectedAddresses.Add(LogicFormatter.NormalizeAddress(cond.LeftOperand.Value));
+                    if (RaLogicSyntax.MemoryTypes.Contains(cond.RightOperand.Type) && !string.IsNullOrWhiteSpace(cond.RightOperand.Value))
+                        preSelectedAddresses.Add(LogicFormatter.NormalizeAddress(cond.RightOperand.Value));
+                }
+            }
+
+            using var form = new GeneratorConfigForm(rootItems, autoStride, existingDef, preSelectedAddresses);
 
             if (form.ShowDialog() == DialogResult.OK)
             {

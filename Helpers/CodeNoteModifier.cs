@@ -21,30 +21,42 @@ namespace RALogicEditor.Helpers
 
             public string GetIndentString(int depth)
             {
-                if (depth < 1) return "";
+                if (depth <= 1) return "";
 
                 // Fully support the Unicode drawing logic
                 if (Indentation == IndentStyle.Unicode)
                 {
-                    if (depth == 1) return "├─";
-                    return new string('│', depth - 1) + "├─";
+                    if (depth == 2) return "├─";
+                    var sb = new StringBuilder();
+                    for (int i = 0; i < depth - 2; i++) sb.Append("│ ");
+                    sb.Append("├─");
+                    return sb.ToString();
                 }
 
                 if (Indentation == IndentStyle.Plus)
-                    return new string('+', depth);
+                    return new string('+', depth - 1);
 
                 if (Indentation == IndentStyle.Dot)
-                    return new string('.', depth);
+                    return new string('.', depth - 1);
 
                 // Mixed: Depth 1 is '+', Depth > 1 starts with dots and ends with +
-                // Example: +0x10 -> .+0x10 -> ..+0x10
                 if (Indentation == IndentStyle.Mixed)
                 {
-                    if (depth == 1) return "+";
-                    return new string('.', depth - 1) + "+";
+                    if (depth == 2) return "+";
+                    return new string('.', depth - 2) + "+";
                 }
 
-                return new string('+', depth);
+                return new string('+', depth - 1);
+            }
+
+            public string GetBodyIndentString(int depth)
+            {
+                if (depth < 1) return "";
+
+                if (Indentation == IndentStyle.Unicode)
+                    return new string(' ', depth * 2); // Safest padding for Unicode bodies if tree context is absent
+
+                return new string('.', depth); // Using dots for bodies is safely handled by IsNodeBoundary
             }
 
             public string GetSeparatorString()
@@ -71,6 +83,23 @@ namespace RALogicEditor.Helpers
 
             public bool HasIndent => PlusCount > 0 || MixedCount > 0 || DotCount > 0 || UnicodeCount > 0;
             public bool HasSeparator => PipeCount > 0 || EqCount > 0 || ColCount > 0;
+        }
+
+        // Safely detects exactly what is a structural node in the tree and what is just attached text
+        private static bool IsNodeBoundary(string line)
+        {
+            var match = Regex.Match(line, @"^([.\+\s\u2500-\u257F]*)([-+]?)(0x[0-9A-Fa-f]+)\s*([|=:])?\s*(.*)$", RegexOptions.IgnoreCase);
+            if (!match.Success) return false;
+
+            string indentStr = match.Groups[1].Value;
+            string sign = match.Groups[2].Value;
+            string separator = match.Groups[4].Value;
+
+            if (!string.IsNullOrEmpty(sign)) return true;
+            if (indentStr.Contains("+")) return true;
+            if (indentStr.Length > 0 && separator == "|") return true;
+
+            return false;
         }
 
         // Detects style based on the current note first, falling back to global stats if needed.
@@ -198,26 +227,36 @@ namespace RALogicEditor.Helpers
                 }
                 else if (indent.Contains("+"))
                 {
-                    // If indentation is exactly "+", it is technically compatible with both Plus and Mixed (depth 1).
-                    // If fallback is Mixed, preserve Mixed to ensure children get "." (e.g. ".+")
                     if (indent == "+" && fallbackStyle.Indentation == IndentStyle.Mixed)
                     {
                         localStyle.Indentation = IndentStyle.Mixed;
                     }
                     else if (indent.Length > 1 && !indent.Contains("."))
                     {
-                        // "++", "+++" -> Definitely Plus
                         localStyle.Indentation = IndentStyle.Plus;
                     }
                     else
                     {
-                        // Default to Plus if ambiguous and fallback isn't Mixed
                         localStyle.Indentation = IndentStyle.Plus;
                     }
                 }
             }
 
             return localStyle;
+        }
+
+        // Calculates true hierarchical depth by traversing the object model upwards
+        private static int CalculateHierarchicalDepth(NoteNode? n)
+        {
+            if (n == null) return 1;
+            int d = 0;
+            var curr = n;
+            while (curr != null && curr.IndentLevel != -1 && curr.IndentLevel != -2)
+            {
+                d++;
+                curr = curr.Parent;
+            }
+            return d + 1; // The depth of a NEW child being added under n
         }
 
         // --- NEW: INTELLIGENT DELETION ---
@@ -231,7 +270,6 @@ namespace RALogicEditor.Helpers
 
             int removeCount = 1;
             int idx = node.RawLineIndex + 1;
-            var offsetRegex = new Regex(@"^([.\+\s\u2500-\u257F]*)([-+]?)(0x[0-9A-Fa-f]+)", RegexOptions.IgnoreCase);
 
             while (idx < lines.Count)
             {
@@ -243,17 +281,13 @@ namespace RALogicEditor.Helpers
                     continue;
                 }
 
-                var match = offsetRegex.Match(line);
-                if (match.Success)
+                if (IsNodeBoundary(line))
                 {
-                    string currentPrefix = match.Groups[1].Value;
-                    string sign = match.Groups[2].Value;
-
-                    bool isStructural = !string.IsNullOrEmpty(sign) || currentPrefix.Contains("+") || currentPrefix.Contains(".") || currentPrefix.Any(c => c >= '\u2500' && c <= '\u257F');
+                    string currentPrefix = Regex.Match(line, @"^([.\+\s\u2500-\u257F]*)").Groups[1].Value;
 
                     // If current line is a structural node with an indentation level LESS THAN OR EQUAL to our target,
                     // we have reached the next sibling or an uncle node. We stop deleting.
-                    if (isStructural && currentPrefix.Length <= targetPrefix.Length)
+                    if (currentPrefix.Length <= targetPrefix.Length)
                     {
                         break;
                     }
@@ -287,11 +321,56 @@ namespace RALogicEditor.Helpers
             // Detect style from the line itself to preserve indentation format of the node being edited
             var style = DetectLocalStyle(lines[node.RawLineIndex], globalStyle);
 
-            // Calculate depth based on indent level. 
-            // Level 0 = Depth 1 (e.g. +), Level 1 = Depth 2 (e.g. ++)
-            int depth = node.IndentLevel + 1;
+            // Extract the EXACT prefix used in the original line so we don't accidentally overwrite it with a regenerated one
+            string originalPrefix = Regex.Match(lines[node.RawLineIndex], @"^([.\+\s\u2500-\u257F]*?)([-+]?)(0x[0-9A-Fa-f]+)", RegexOptions.IgnoreCase).Groups[1].Value;
 
-            ReplaceNodeContent(lines, node, newContent, style, depth);
+            int removeCount = 1;
+            int idx = node.RawLineIndex + 1;
+
+            while (idx < lines.Count)
+            {
+                string line = lines[idx];
+
+                // If blank line, assume part of content
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    idx++; removeCount++; continue;
+                }
+
+                // Strictly rely on the node boundary check to prevent deleting sibling logic
+                if (IsNodeBoundary(line)) break;
+
+                // Safety fallback: if line looks like absolute root offset +0x..
+                if (line.TrimStart().StartsWith("+0x") || line.TrimStart().StartsWith("-0x")) break;
+
+                idx++;
+                removeCount++;
+            }
+
+            lines.RemoveRange(node.RawLineIndex, removeCount);
+
+            // Rebuild Header using the exact original prefix
+            string offsetHex = node.Offset.TrimStart('+', '-');
+            if (!offsetHex.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) offsetHex = "0x" + offsetHex;
+            string sign = node.Offset.StartsWith("-") ? "-" : "+";
+
+            string sep = style.GetSeparatorString();
+
+            string[] contentParts = newContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            string title = contentParts.Length > 0 ? contentParts[0] : "";
+
+            string header = $"{originalPrefix}{sign}{offsetHex}{sep}{title}";
+            lines.Insert(node.RawLineIndex, header);
+
+            // Calculate a safe, space-based padding for the body lines so they align nicely under the pointer
+            // Using spaces ensures we don't accidentally create new pointer nodes when parsing.
+            string bodyPadding = new string(' ', originalPrefix.Length + 1);
+
+            for (int k = 1; k < contentParts.Length; k++)
+            {
+                string bodyLine = contentParts[k].TrimStart();
+                lines.Insert(node.RawLineIndex + k, bodyPadding + bodyLine);
+            }
 
             return string.Join("\r\n", lines);
         }
@@ -374,13 +453,17 @@ namespace RALogicEditor.Helpers
                         {
                             // Strict Match - Update Existing Node
                             var childStyle = DetectLocalStyle(lines[child.RawLineIndex], effectiveStyle);
-                            ReplaceNodeContent(lines, child, newContent, childStyle, child.IndentLevel + 1);
+
+                            // Re-route to our robust UpdateRealNode logic
+                            string updatedFileText = UpdateRealNode(string.Join("\r\n", lines), child, newContent, childStyle);
+                            return updatedFileText;
                         }
                         else
                         {
                             // Range Match - Insert as New Child of the Range Coverage Node
                             int insertIndex = GetInsertionIndex(lines, child, rootNodes);
-                            int insertionDepth = child.IndentLevel + 2;
+                            int insertionDepth = CalculateHierarchicalDepth(child);
+
                             string indent = effectiveStyle.GetIndentString(insertionDepth);
                             string offsetHex = "0x" + targetOffset.ToString("x");
                             if (targetOffset < 0) offsetHex = "-0x" + Math.Abs(targetOffset).ToString("x");
@@ -392,9 +475,10 @@ namespace RALogicEditor.Helpers
 
                             lines.Insert(insertIndex, header);
 
+                            string bodyPadding = new string(' ', indent.Length + 1);
                             for (int k = 1; k < contentParts.Length; k++)
                             {
-                                lines.Insert(insertIndex + k, contentParts[k]);
+                                lines.Insert(insertIndex + k, bodyPadding + contentParts[k].TrimStart());
                             }
                         }
                     }
@@ -407,8 +491,7 @@ namespace RALogicEditor.Helpers
                     string offsetHex = "0x" + targetOffset.ToString("x");
                     if (targetOffset < 0) offsetHex = "-0x" + Math.Abs(targetOffset).ToString("x");
 
-                    int insertionDepth = (currentNode == null) ? 1 : currentNode.IndentLevel + 2;
-
+                    int insertionDepth = CalculateHierarchicalDepth(currentNode);
                     string indent = effectiveStyle.GetIndentString(insertionDepth);
 
                     if (i == chainOffsets.Count - 1)
@@ -422,10 +505,11 @@ namespace RALogicEditor.Helpers
 
                         lines.Insert(insertIndex, header);
 
-                        // Insert remaining lines as body
+                        // Use safe space padding to avoid creating structural elements accidentally
+                        string bodyPadding = new string(' ', indent.Length + 1);
                         for (int k = 1; k < contentParts.Length; k++)
                         {
-                            lines.Insert(insertIndex + k, contentParts[k]);
+                            lines.Insert(insertIndex + k, bodyPadding + contentParts[k].TrimStart());
                         }
                     }
                     else
@@ -455,55 +539,6 @@ namespace RALogicEditor.Helpers
             }
 
             return string.Join("\r\n", lines);
-        }
-
-        private static void ReplaceNodeContent(List<string> lines, NoteNode node, string newContent, NoteStyle style, int depth)
-        {
-            // Determine range to replace (Header + Body lines)
-            int removeCount = 1;
-            int idx = node.RawLineIndex + 1;
-
-            var nodeStructureRegex = new Regex(@"^\s*[.\+\u2500-\u257F]+0x", RegexOptions.IgnoreCase);
-
-            while (idx < lines.Count)
-            {
-                string line = lines[idx];
-
-                // If blank line, assume part of content
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    idx++; removeCount++; continue;
-                }
-
-                // If we hit a line that starts with indent AND 0x, it's a new structural node -> Stop removing
-                if (nodeStructureRegex.IsMatch(line)) break;
-
-                // Safety: If we hit something that looks like a root pointer "+0x...", stop
-                if (line.TrimStart().StartsWith("+0x")) break;
-
-                idx++;
-                removeCount++;
-            }
-
-            lines.RemoveRange(node.RawLineIndex, removeCount);
-
-            // Rebuild Header
-            string offsetHex = node.Offset.TrimStart('+', '.');
-            if (!offsetHex.StartsWith("-") && !offsetHex.StartsWith("0x")) offsetHex = "0x" + offsetHex;
-
-            string indent = style.GetIndentString(depth);
-
-            string[] contentParts = newContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            string title = contentParts.Length > 0 ? contentParts[0] : "";
-
-            string sep = style.GetSeparatorString();
-            string header = $"{indent}{offsetHex}{sep}{title}";
-
-            lines.Insert(node.RawLineIndex, header);
-            for (int k = 1; k < contentParts.Length; k++)
-            {
-                lines.Insert(node.RawLineIndex + k, contentParts[k]);
-            }
         }
 
         private static int GetInsertionIndex(List<string> lines, NoteNode? parent, List<NoteNode> allNodes)
@@ -537,16 +572,15 @@ namespace RALogicEditor.Helpers
             // Start searching *after* the node's header line
             int idx = node.RawLineIndex + 1;
 
-            var nodeStructureRegex = new Regex(@"^\s*[.\+\u2500-\u257F]+0x", RegexOptions.IgnoreCase);
-
             while (idx < lines.Count)
             {
                 string line = lines[idx];
                 if (string.IsNullOrWhiteSpace(line)) { idx++; continue; }
 
-                // If we hit a line that looks like a node, we stop.
-                if (nodeStructureRegex.IsMatch(line)) return idx;
-                if (line.TrimStart().StartsWith("+0x")) return idx;
+                // If we hit a line that strictly parses as a node boundary, we stop.
+                if (IsNodeBoundary(line)) return idx;
+
+                if (line.TrimStart().StartsWith("+0x") || line.TrimStart().StartsWith("-0x")) return idx;
 
                 idx++;
             }

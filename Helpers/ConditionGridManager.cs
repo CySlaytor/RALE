@@ -522,6 +522,113 @@ namespace RALogicEditor.Helpers
             return expanded;
         }
 
+        // Generates new selections by recognizing strides between the last two selected rows
+        public void ExtendSelectionByPattern()
+        {
+            if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
+
+            // Ordered by visual row index to ensure we grab the correct last two items selected by the user
+            var selectedRows = _grid.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index).ToList();
+            if (selectedRows.Count < 2)
+            {
+                MessageBox.Show("Please select at least two sequential rows to establish a pattern.", "Extend Selection", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var r1 = selectedRows[selectedRows.Count - 2];
+            var r2 = selectedRows[selectedRows.Count - 1];
+
+            if (r1.Tag is not AchievementCondition c1 || r2.Tag is not AchievementCondition c2) return;
+
+            int rowStride = r2.Index - r1.Index;
+            if (rowStride <= 0) return; // Should be positive since ordered
+
+            // Helper for extracting a numeric delta from an Operand
+            long ParseNumeric(Operand op)
+            {
+                if (string.IsNullOrWhiteSpace(op.Value)) return 0;
+                string val = op.Value.Trim();
+                if (val.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                    return long.TryParse(val.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long v) ? v : 0;
+                return long.TryParse(val, out long vDec) ? vDec : 0;
+            }
+
+            bool IsFloatOrRecall(Operand op) => op.Type == "Float" || op.Type == "Recall";
+
+            long leftDelta = ParseNumeric(c2.LeftOperand) - ParseNumeric(c1.LeftOperand);
+            long rightDelta = ParseNumeric(c2.RightOperand) - ParseNumeric(c1.RightOperand);
+            long hitsDelta = (long)c2.RequiredHits - c1.RequiredHits;
+
+            int currentIndex = r2.Index;
+            var cPrev = c2;
+            int selectedCount = 0;
+
+            while (true)
+            {
+                int nextIndex = currentIndex + rowStride;
+                if (nextIndex >= _grid.Rows.Count) break;
+
+                var nextRow = _grid.Rows[nextIndex];
+                if (nextRow.Tag is not AchievementCondition cNext) break;
+
+                // Verify exact structural and type matches
+                if (cNext.Flag != cPrev.Flag || cNext.Operator != cPrev.Operator ||
+                    cNext.LeftOperand.Type != cPrev.LeftOperand.Type || cNext.LeftOperand.Size != cPrev.LeftOperand.Size ||
+                    cNext.RightOperand.Type != cPrev.RightOperand.Type || cNext.RightOperand.Size != cPrev.RightOperand.Size)
+                {
+                    break;
+                }
+
+                // Verify Left Operand follows the stride
+                if (IsFloatOrRecall(cPrev.LeftOperand))
+                {
+                    if (cNext.LeftOperand.Value != cPrev.LeftOperand.Value) break;
+                }
+                else
+                {
+                    if (ParseNumeric(cNext.LeftOperand) != ParseNumeric(cPrev.LeftOperand) + leftDelta) break;
+                }
+
+                // Verify Right Operand follows the stride
+                if (IsFloatOrRecall(cPrev.RightOperand))
+                {
+                    if (cNext.RightOperand.Value != cPrev.RightOperand.Value) break;
+                }
+                else
+                {
+                    if (ParseNumeric(cNext.RightOperand) != ParseNumeric(cPrev.RightOperand) + rightDelta) break;
+                }
+
+                // Verify Hits follows the stride
+                if ((long)cNext.RequiredHits != (long)cPrev.RequiredHits + hitsDelta) break;
+
+                // All checks passed, extend selection!
+                nextRow.Selected = true;
+                currentIndex = nextIndex;
+                cPrev = cNext;
+                selectedCount++;
+            }
+
+            if (selectedCount > 0)
+            {
+                // Ensure the last newly selected item is scrolled into view smoothly
+                if (currentIndex >= 0 && currentIndex < _grid.Rows.Count)
+                {
+                    int firstVisible = _grid.FirstDisplayedScrollingRowIndex;
+                    int displayed = _grid.DisplayedRowCount(false);
+                    if (currentIndex < firstVisible || currentIndex >= firstVisible + displayed)
+                    {
+                        try { _grid.FirstDisplayedScrollingRowIndex = Math.Max(0, currentIndex - displayed + 2); } catch { }
+                    }
+                }
+                StatusUpdateRequested?.Invoke(this, $"Extended selection by {selectedCount} row(s).");
+            }
+            else
+            {
+                StatusUpdateRequested?.Invoke(this, "No matching pattern found to extend.");
+            }
+        }
+
         // Copies selected rows with Fixed-Width spacing to ensure visual alignment in text editors
         // Replaces simple TSV to satisfy QoL request for "pure line up"
         public void CopySelectedRows()

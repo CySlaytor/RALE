@@ -1,11 +1,11 @@
 ﻿#nullable enable
 using RALogicEditor.Definitions;
 using RALogicEditor.Helpers;
-using RALogicEditor.Logic; // Added for CodeNoteLogic
+using RALogicEditor.Logic;
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Utilities;
-using RALogicEditor.Forms; // Added for NoteMultiplierForm
+using RALogicEditor.Forms;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -22,7 +22,10 @@ namespace RALogicEditor.Controls
     {
         public event EventHandler? ReloadRequested;
         public event EventHandler? SaveRequested;
-        public event EventHandler? NoteUpdated; // New Event for real-time grid refresh
+        public event EventHandler? NoteUpdated;
+
+        // Fired when the user clicks Reset to delete local override
+        public event EventHandler<string>? NoteResetRequested;
 
         // The ViewModel handles the heavy logic (Moved out of View)
         private readonly CodeNoteViewModel _viewModel;
@@ -73,6 +76,31 @@ namespace RALogicEditor.Controls
             cmsNoteContext.Opening += (s, e) =>
             {
                 deleteNodeToolStripMenuItem.Enabled = !_viewModel.EditState.IsVirtual;
+            };
+
+            // Setup Indent Style Dropdown
+            cmbIndentStyle.Items.AddRange(new object[] {
+                "Unicode Tree (├─)",
+                "Auto Detect (. or +)",
+                "Dots (.)",
+                "Plusses (+)"
+            });
+
+            // Set Dropdown Value from Settings safely
+            string savedStyle = AppSettings.Current.NoteIndentStyle;
+            if (cmbIndentStyle.Items.Contains(savedStyle))
+            {
+                cmbIndentStyle.SelectedItem = savedStyle;
+            }
+            else
+            {
+                cmbIndentStyle.SelectedIndex = 0; // Default to Unicode
+            }
+
+            cmbIndentStyle.SelectedIndexChanged += (s, e) =>
+            {
+                AppSettings.Current.NoteIndentStyle = cmbIndentStyle.SelectedItem?.ToString() ?? "Unicode Tree (├─)";
+                AppSettings.Save();
             };
         }
 
@@ -126,6 +154,23 @@ namespace RALogicEditor.Controls
             UpdateStatusDisplay("Notes saved.");
         }
 
+        private void btnReset_Click(object sender, EventArgs e)
+        {
+            if (cmbNotes.SelectedItem is CodeNote note)
+            {
+                var result = MessageBox.Show(
+                    $"Are you sure you want to reset the note for {note.Address} to its original state?\n\nThis will delete your local modifications and reload the file.",
+                    "Reset Note",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (result == DialogResult.Yes)
+                {
+                    NoteResetRequested?.Invoke(this, note.Address);
+                }
+            }
+        }
+
         private void btnFixHierarchy_Click(object sender, EventArgs e)
         {
             if (txtNoteBody.ReadOnly) return;
@@ -136,16 +181,17 @@ namespace RALogicEditor.Controls
             _viewModel.PushUndoState();
 
             // Use the ported Logic helper to fix indentation, sort, and merge
-            // Pass the indentation prefix from settings and the indentation preference
+            // Pass the indentation prefix from the new dropdown and the indentation preference
             string fixedText = CodeNoteLogic.FixHierarchy(
                 currentText,
-                AppSettings.Current.NotePrefix,
+                cmbIndentStyle.SelectedItem?.ToString() ?? "Unicode Tree (├─)",
                 chkIndentValues.Checked
             );
 
             // Update text box (will trigger TextChanged -> ViewModel buffering)
             if (txtNoteBody.Text != fixedText)
             {
+                txtNoteBody.Text = fixedText;
                 _viewModel.UpdateNoteContent(fixedText);
                 _hasUnsavedChanges = true;
                 UpdateStatusDisplay("Hierarchy fixed.");
@@ -575,17 +621,6 @@ namespace RALogicEditor.Controls
                 string normalized = raw.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
                 Clipboard.SetText(normalized);
                 lblOffsetChain.Text = "Copied selection to clipboard.";
-            }
-        }
-
-        private void btnCopyAll_Click(object sender, EventArgs e)
-        {
-            if (!string.IsNullOrEmpty(txtNoteBody.Text))
-            {
-                string raw = txtNoteBody.Text;
-                string normalized = raw.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
-                Clipboard.SetText(normalized);
-                lblOffsetChain.Text = "Copied full note to clipboard.";
             }
         }
 

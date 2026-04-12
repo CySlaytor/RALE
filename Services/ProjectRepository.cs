@@ -204,6 +204,23 @@ namespace RALogicEditor.Services
             return serverNote.Note == note.Note;
         }
 
+        // Safely deletes the local note modification and restores the pristine server copy
+        public void RevertNote(string address)
+        {
+            if (LocalData == null) return;
+
+            var localNote = LocalData.Notes.FirstOrDefault(n => n.Address == address);
+            if (localNote != null) LocalData.Notes.Remove(localNote);
+
+            var serverNote = _serverNotes.FirstOrDefault(n => n.Address == address);
+            if (serverNote != null)
+            {
+                // Put it back in the active merged list so the UI receives the original
+                LocalData.Notes.Add(new CodeNote { Address = serverNote.Address, Note = serverNote.Note, User = serverNote.User });
+                LocalData.Notes = LocalData.Notes.OrderBy(n => n.Address).ToList();
+            }
+        }
+
         // Merges Server and Local lists based on IDs to determine Sync status
         // Modified: Now preserves the natural reading order of the JSON files rather than forcing numerical ID sorts
         public List<T> GetMergedList<T>(bool isLeaderboard) where T : IAssetItem

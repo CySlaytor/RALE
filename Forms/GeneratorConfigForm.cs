@@ -15,6 +15,7 @@ namespace RALogicEditor.Forms
         private static string _lastCopies = "1";
         private static string _lastStride = "0x0";
         private static bool _lastIsArray = false;
+        private static bool _userModifiedStride = false; // Tracks if the user has explicitly set a stride this session
 
         public int Copies { get; private set; }
         public int Stride { get; private set; }
@@ -42,8 +43,8 @@ namespace RALogicEditor.Forms
             }
         }
 
-        // Constructor now accepts a hierarchical list of items
-        public GeneratorConfigForm(List<GeneratorItemViewModel> rootItems, int defaultStride = 0, GeneratorDefinition? existingDef = null)
+        // Constructor now accepts a hierarchical list of items and pre-selected addresses
+        public GeneratorConfigForm(List<GeneratorItemViewModel> rootItems, int defaultStride = 0, GeneratorDefinition? existingDef = null, HashSet<string>? preSelectedAddresses = null)
         {
             InitializeComponent();
             InitializeTreeView(rootItems);
@@ -53,15 +54,16 @@ namespace RALogicEditor.Forms
             txtStride.Text = _lastStride;
             chkGenerateAsArray.Checked = _lastIsArray;
 
-            // 2. Pre-fill Stride if auto-detected (Overrides session default)
-            if (defaultStride > 0)
+            // 2. Pre-fill Stride if auto-detected (Only override if the user hasn't explicitly customized it this session)
+            if (defaultStride > 0 && !_userModifiedStride)
             {
                 txtStride.Text = "0x" + defaultStride.ToString("X");
             }
 
-            // 3. If we have existing rules, try to pre-fill the form checks (Overrides everything)
+            // 3. Determine Checkbox States
             if (existingDef != null)
             {
+                // If we are editing an existing generator, override with its stored definition
                 txtCopies.Text = existingDef.Copies.ToString();
                 chkGenerateAsArray.Checked = existingDef.IsArray;
 
@@ -75,9 +77,14 @@ namespace RALogicEditor.Forms
                     CheckNodesRecursive(tvAddresses.Nodes, rulesSet);
                 }
             }
+            else if (preSelectedAddresses != null && preSelectedAddresses.Count > 0)
+            {
+                // Pre-check nodes based on what the user had selected in the Editor Grid
+                CheckNodesRecursive(tvAddresses.Nodes, preSelectedAddresses);
+            }
             else if (tvAddresses.Nodes.Count == 1)
             {
-                // Select single root item by default for convenience
+                // Select single root item by default for convenience if nothing else guides us
                 tvAddresses.Nodes[0].Checked = true;
                 // Propagate check to children
                 SetChildrenChecked(tvAddresses.Nodes[0], true);
@@ -110,15 +117,29 @@ namespace RALogicEditor.Forms
         {
             foreach (TreeNode node in nodes)
             {
-                if (node.Tag is string addr && addressesToCheck.Contains(addr))
+                if (node.Tag is string addr)
                 {
-                    node.Checked = true;
-                    // Ensure parents are expanded to show checked items
-                    TreeNode parent = node.Parent;
-                    while (parent != null)
+                    // Normalize both sides to ensure matches (e.g. 0x1234 vs 0x001234)
+                    string normAddr = addr.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? addr.Substring(2).TrimStart('0') : addr;
+                    if (string.IsNullOrEmpty(normAddr)) normAddr = "0";
+
+                    bool match = addressesToCheck.Any(checkAddr =>
                     {
-                        parent.Expand();
-                        parent = parent.Parent;
+                        string normCheck = checkAddr.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? checkAddr.Substring(2).TrimStart('0') : checkAddr;
+                        if (string.IsNullOrEmpty(normCheck)) normCheck = "0";
+                        return normAddr.Equals(normCheck, StringComparison.OrdinalIgnoreCase);
+                    });
+
+                    if (match)
+                    {
+                        node.Checked = true;
+                        // Ensure parents are expanded to show checked items
+                        TreeNode parent = node.Parent;
+                        while (parent != null)
+                        {
+                            parent.Expand();
+                            parent = parent.Parent;
+                        }
                     }
                 }
                 CheckNodesRecursive(node.Nodes, addressesToCheck);
@@ -130,7 +151,6 @@ namespace RALogicEditor.Forms
         {
             // Only process user actions or code triggers, avoid infinite recursion loops by checking strict action if needed
             // But simple recursion is fine here as long as we don't re-trigger for same state
-            // Added null check for e.Node
             if (e.Action != TreeViewAction.Unknown && e.Node != null)
             {
                 SetChildrenChecked(e.Node, e.Node.Checked);
@@ -190,6 +210,7 @@ namespace RALogicEditor.Forms
             _lastCopies = txtCopies.Text;
             _lastStride = txtStride.Text;
             _lastIsArray = chkGenerateAsArray.Checked;
+            _userModifiedStride = true; // Mark as explicitly set by user
 
             this.DialogResult = DialogResult.OK;
             this.Close();

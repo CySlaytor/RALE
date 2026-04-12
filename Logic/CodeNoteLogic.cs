@@ -71,42 +71,59 @@ namespace RALogicEditor.Logic
     }
 
     // Ported from Pointer Finder 2.0
-    // This is the "Better" logic that merges duplicate nodes correctly.
+    // A tool to parse, merge, and clean up complex code notes with hierarchical pointer chains.
     public static class CodeNoteLogic
     {
+        // Represents a single line/node in the code note's hierarchy.
         private class CodeNoteNode
         {
+            // The content of the line without leading indentation, used as the key for merging.
             public string Content { get; set; } = "";
+            // Child nodes in the hierarchy.
             public List<CodeNoteNode> Children { get; } = new List<CodeNoteNode>();
+            // The original index, used to maintain order for non-mergeable items.
             public int OriginalIndex { get; set; }
         }
 
         // Logic: Parses raw code note text, merges duplicate offsets, fixes hierarchy indentation, and sorts results.
-        public static string FixHierarchy(string inputText, string indentCharPref, bool indentValues)
+        public static string FixHierarchy(string inputText, string indentStylePref, bool indentDescriptions)
         {
             if (string.IsNullOrWhiteSpace(inputText)) return string.Empty;
 
             var lines = inputText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
-            // Auto-detect style if user pastes mixed content, though usually we pass the pref
-            string style = "Dots (.)";
-            if (indentCharPref.StartsWith("├")) style = "Unicode Tree (├─)";
-            else if (lines.Any(line => line.TrimStart().StartsWith("++")) || indentCharPref.StartsWith("+")) style = "Plusses (+)";
+            string style = indentStylePref;
+            if (style.StartsWith("Auto Detect") || string.IsNullOrEmpty(style))
+            {
+                char detectedIndent = DetectIndentStyle(lines);
+                style = detectedIndent == '+' ? "Plusses (+)" : "Dots (.)";
+            }
 
+            // 1. Parse the flat text into a tree structure.
             var parsedTree = ParseLinesToTree(lines);
+
+            // 2. Recursively merge AND sort nodes.
             var mergedTree = MergeTree(parsedTree);
 
-            // Sort: Non-offsets first, then offsets numerically (Handled inside MergeTree now)
+            // 3. Rebuild the text from the cleaned tree structure, using the detected style and user preference.
+            return RebuildTextFromTree(mergedTree, 0, style, indentDescriptions).Trim();
+        }
 
-            return RebuildTextFromTree(mergedTree, 0, style, indentValues).Trim();
+        private static char DetectIndentStyle(string[] lines)
+        {
+            // If any line uses multiple '+' for indentation, prefer that style.
+            if (lines.Any(line => line.TrimStart().StartsWith("++")))
+            {
+                return '+';
+            }
+            // Otherwise, default to dots.
+            return '.';
         }
 
         private static List<CodeNoteNode> ParseLinesToTree(string[] lines)
         {
             var rootNodes = new List<CodeNoteNode>();
-            // Stack keeps track of current hierarchy depth
             var stack = new Stack<(int indent, List<CodeNoteNode> parentChildrenList)>();
-            // Initialize stack with root level (indent -1)
             stack.Push((-1, rootNodes));
             CodeNoteNode? lastNode = null;
             int lineIndex = 0;
@@ -114,11 +131,15 @@ namespace RALogicEditor.Logic
             foreach (var line in lines)
             {
                 string trimmedLine = line.Trim();
-                // Skip empty lines or separators
-                if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("---")) { lineIndex++; continue; }
+                if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("---"))
+                {
+                    lineIndex++;
+                    continue;
+                }
 
                 int indent = 0;
                 string content;
+
                 string untrimmedLine = line.TrimEnd();
 
                 // Count leading characters that define indentation level for traditional styles
@@ -126,7 +147,6 @@ namespace RALogicEditor.Logic
 
                 if (classicPrefixLength > 0)
                 {
-                    // Handle specific edge case for '+' style (e.g. "++0x...")
                     // For plus-based indents like "++0x...", the indent is one less than the count
                     if (untrimmedLine[classicPrefixLength - 1] == '+' && untrimmedLine.Length > classicPrefixLength && untrimmedLine[classicPrefixLength] != ' ')
                     {
@@ -167,8 +187,6 @@ namespace RALogicEditor.Logic
 
                 if (indent < 0) indent = 0;
 
-                // Heuristic: Is this line a note attached to the previous pointer?
-                // Logic: It has 0 indent, there was a previous node, and it DOESN'T look like a new pointer offset.
                 bool isAttachedNote = (indent == 0) && (lastNode != null) &&
                                       !(content.StartsWith("+0x", StringComparison.OrdinalIgnoreCase) ||
                                         content.StartsWith("-0x", StringComparison.OrdinalIgnoreCase) ||
@@ -176,17 +194,17 @@ namespace RALogicEditor.Logic
 
                 if (isAttachedNote)
                 {
-                    // Add it as a child of the previous node regardless of hierarchy
                     lastNode!.Children.Add(new CodeNoteNode { Content = content, OriginalIndex = lineIndex });
                 }
                 else
                 {
-                    // Pop stack until we find the correct parent level
-                    while (stack.Peek().indent >= indent) stack.Pop();
+                    while (stack.Peek().indent >= indent)
+                    {
+                        stack.Pop();
+                    }
+
                     var node = new CodeNoteNode { Content = content, OriginalIndex = lineIndex };
-                    // Add to the current parent's children list
                     stack.Peek().parentChildrenList.Add(node);
-                    // Push this node onto stack as the new potential parent for deeper indentation
                     stack.Push((indent, node.Children));
                     lastNode = node;
                 }
@@ -200,21 +218,24 @@ namespace RALogicEditor.Logic
             var finalNodes = new List<CodeNoteNode>();
             var mergeableGroups = new Dictionary<string, List<CodeNoteNode>>();
             var nonMergeableNodes = new List<CodeNoteNode>();
-            // Regex to identify pointer offsets (e.g., +0x1A, -0x4)
             var offsetRegex = new Regex(@"^([\+\-]0x[0-9a-fA-F]+)", RegexOptions.IgnoreCase);
 
-            // 1. Group nodes by their offset value
+            // First pass: Group all mergeable nodes by their normalized offset key.
             foreach (var node in nodes)
             {
                 var match = offsetRegex.Match(node.Content);
                 if (match.Success)
                 {
-                    // Normalize Key: "+0x4" and "+0x04" become same key "+0x4"
+                    // Normalize the key to handle case (+0xAB vs +0xab) and padding (+0x4 vs +0x04).
                     string rawKey = match.Groups[1].Value;
                     string sign = rawKey.Substring(0, 1);
                     long offsetValue = Convert.ToInt64(rawKey.Substring(3), 16);
                     string key = $"{sign}0x{offsetValue:x}";
-                    if (!mergeableGroups.ContainsKey(key)) mergeableGroups[key] = new List<CodeNoteNode>();
+
+                    if (!mergeableGroups.ContainsKey(key))
+                    {
+                        mergeableGroups[key] = new List<CodeNoteNode>();
+                    }
                     mergeableGroups[key].Add(node);
                 }
                 else
@@ -223,16 +244,19 @@ namespace RALogicEditor.Logic
                 }
             }
 
-            // 2. Process the grouped (mergeable) nodes
+            // Process mergeable groups.
             var contentRegex = new Regex(@"^([\+\-]0x)([0-9a-fA-F]+)(.*)", RegexOptions.IgnoreCase);
             foreach (var group in mergeableGroups.Values)
             {
-                // We pick the node that appeared earliest as the "base" for index
                 var representative = group.OrderBy(n => n.OriginalIndex).First();
-                // Intelligence: Keep the description text from the node that has the LONGEST string.
-                string bestContent = group.Select(n => n.Content).OrderByDescending(c => c.Length).FirstOrDefault() ?? representative.Content;
 
-                // Normalize the text format (ensure lowercase hex)
+                // Select the content with the longest description to preserve information.
+                string bestContent = group
+                    .Select(n => n.Content)
+                    .OrderByDescending(c => c.Length)
+                    .FirstOrDefault() ?? representative.Content;
+
+                // Normalize the chosen content for consistent output format (e.g., +0x0, lowercase hex).
                 var contentMatch = contentRegex.Match(bestContent);
                 if (contentMatch.Success)
                 {
@@ -244,22 +268,17 @@ namespace RALogicEditor.Logic
 
                 var newNode = new CodeNoteNode { Content = bestContent, OriginalIndex = representative.OriginalIndex };
 
-                // Recursively merge all children from all nodes in this group
+                // Combine all children from all nodes in the group.
                 var allChildren = group.SelectMany(n => n.Children).ToList();
                 if (allChildren.Any())
                 {
-                    // FIX: Deduplicate child nodes by content before merging to prevent doubling up on enums/descriptions
-                    var uniqueChildren = allChildren
-                        .GroupBy(c => c.Content.Trim())
-                        .Select(g => g.First())
-                        .ToList();
-
-                    newNode.Children.AddRange(MergeTree(uniqueChildren));
+                    // Recursive merge calls ensure the whole tree is processed.
+                    newNode.Children.AddRange(MergeTree(allChildren));
                 }
                 finalNodes.Add(newNode);
             }
 
-            // 3. Process non-mergeable nodes (comments, headers, values)
+            // Process non-mergeable nodes, which just pass through but have their children merged.
             foreach (var node in nonMergeableNodes)
             {
                 if (node.Children.Any())
@@ -298,6 +317,8 @@ namespace RALogicEditor.Logic
                         }).ToList();
         }
 
+        // Integrated spacing logic directly into the rebuild function.
+        // Now supports robust Unicode box-drawing Tree generations.
         private static string RebuildTextFromTree(List<CodeNoteNode> nodes, int indentLevel, string style, bool indentDescriptions, List<bool>? ancestorIsLast = null)
         {
             if (ancestorIsLast == null) ancestorIsLast = new List<bool>();
@@ -311,13 +332,12 @@ namespace RALogicEditor.Logic
                 // Check if any actual pointer descendants exist to know whether to draw a "┬" or "─"
                 bool hasPointerChildren = node.Children.Any(c => c.Content.StartsWith("+0x", StringComparison.OrdinalIgnoreCase) || c.Content.StartsWith("-0x", StringComparison.OrdinalIgnoreCase));
 
-                // Formatting: Add a blank line before top-level nodes (except the first) for readability
+                // Add a blank line before any top-level node except the very first one.
                 if (indentLevel == 0 && sb.Length > 0)
                 {
                     sb.AppendLine();
                 }
 
-                // Identify if this node is a pointer/struct offset or a value/comment
                 bool isPointerOffset = node.Content.StartsWith("+0x", StringComparison.OrdinalIgnoreCase) || node.Content.StartsWith("-0x", StringComparison.OrdinalIgnoreCase);
                 bool isAttachedNote = !isPointerOffset;
 
@@ -329,7 +349,10 @@ namespace RALogicEditor.Logic
                     {
                         if (indentDescriptions && indentLevel > 0)
                         {
-                            for (int a = 0; a < indentLevel - 1; a++) prefix += ancestorIsLast[a] ? " " : "│";
+                            for (int a = 0; a < indentLevel - 1; a++)
+                            {
+                                prefix += ancestorIsLast[a] ? " " : "│";
+                            }
                             prefix += " "; // Fixed: Use a blank space for notes so they align cleanly under the parent text
                         }
                     }
@@ -337,7 +360,10 @@ namespace RALogicEditor.Logic
                     {
                         if (indentLevel > 0)
                         {
-                            for (int a = 0; a < indentLevel - 1; a++) prefix += ancestorIsLast[a] ? " " : "│";
+                            for (int a = 0; a < indentLevel - 1; a++)
+                            {
+                                prefix += ancestorIsLast[a] ? " " : "│";
+                            }
                             prefix += isLastChild ? "└" : "├";
                             prefix += hasPointerChildren ? "┬" : "─";
                         }
@@ -349,8 +375,10 @@ namespace RALogicEditor.Logic
 
                     if (isAttachedNote)
                     {
-                        // For values/comments (children that aren't pointers)
-                        if (indentDescriptions) prefix = indentLevel > 0 ? new string('.', indentLevel) : "";
+                        if (indentDescriptions)
+                        {
+                            prefix = indentLevel > 0 ? new string('.', indentLevel) : "";
+                        }
                     }
                     else
                     {
@@ -362,7 +390,15 @@ namespace RALogicEditor.Logic
 
                 if (node.Children.Any())
                 {
-                    List<bool> newAncestorIsLast = indentLevel == 0 ? new List<bool>() : new List<bool>(ancestorIsLast) { isLastChild };
+                    List<bool> newAncestorIsLast;
+                    if (indentLevel == 0)
+                    {
+                        newAncestorIsLast = new List<bool>();
+                    }
+                    else
+                    {
+                        newAncestorIsLast = new List<bool>(ancestorIsLast) { isLastChild };
+                    }
                     sb.Append(RebuildTextFromTree(node.Children, indentLevel + 1, style, indentDescriptions, newAncestorIsLast));
                 }
             }

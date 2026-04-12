@@ -61,6 +61,7 @@
             toolStripSeparator2 = new ToolStripSeparator();
 
             // New / Reordered Logic Items
+            extendSelectionToolStripMenuItem = new ToolStripMenuItem(); // NEW Item
             cutToolStripMenuItem = new ToolStripMenuItem();
             copyLogicToolStripMenuItem = new ToolStripMenuItem();
             copyRowToolStripMenuItem = new ToolStripMenuItem();
@@ -434,9 +435,16 @@
             conditionGrid.Size = new Size(634, 293);
             conditionGrid.TabIndex = 0;
             // 
+            // extendSelectionToolStripMenuItem
+            // 
+            extendSelectionToolStripMenuItem.Name = "extendSelectionToolStripMenuItem";
+            extendSelectionToolStripMenuItem.Size = new Size(208, 22);
+            extendSelectionToolStripMenuItem.Text = "Extend Selection by Pattern";
+            extendSelectionToolStripMenuItem.Click += extendSelectionToolStripMenuItem_Click;
+            // 
             // gridContextMenu
             // 
-            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, cutToolStripMenuItem, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
+            gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, extendSelectionToolStripMenuItem, cutToolStripMenuItem, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
             gridContextMenu.Name = "gridContextMenu";
             gridContextMenu.Size = new Size(209, 270);
             // 
@@ -680,5 +688,6 @@
         private System.Windows.Forms.Label lblFormat = null!;
         private System.Windows.Forms.ComboBox cmbFormat = null!;
         private System.Windows.Forms.CheckBox chkLowerIsBetter = null!;
+        private System.Windows.Forms.ToolStripMenuItem extendSelectionToolStripMenuItem = null!;
     }
 }
