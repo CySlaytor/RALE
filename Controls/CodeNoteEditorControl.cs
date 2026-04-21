@@ -641,8 +641,6 @@ namespace RALogicEditor.Controls
             {
                 if (form.ShowDialog() == DialogResult.OK)
                 {
-                    _viewModel.PushUndoState(); // Store undo state before applying the multiplier
-
                     string generated = CodeNoteMultiplier.GenerateText(
                         targetText,
                         form.Copies,
@@ -651,14 +649,17 @@ namespace RALogicEditor.Controls
                         form.SearchText,
                         form.ReplaceText,
                         form.StartNumber,
-                        form.ApplyToChildren);
+                        form.TargetMode);
 
                     // We apply via the ViewModel to ensure it tracks history properly
                     int insertPos = txtNoteBody.SelectionStart + txtNoteBody.SelectionLength;
+
+                    _viewModel.PushUndoState(); // Custom undo point
                     string newFullText = txtNoteBody.Text.Insert(insertPos, "\r\n" + generated);
+                    txtNoteBody.Text = newFullText; // Triggers buffer update
+                    _viewModel.CommitEditState();   // Commits and refreshes the dropdown tree instantly!
 
-                    _viewModel.UpdateNoteContent(newFullText);
-
+                    // Restore selection to show exactly what was generated
                     txtNoteBody.SelectionStart = insertPos + 2;
                     txtNoteBody.SelectionLength = generated.Length;
 
@@ -668,26 +669,13 @@ namespace RALogicEditor.Controls
             }
         }
 
-        private void batchMultiplyNotesToolStripMenuItem_Click(object sender, EventArgs e)
+        // Executed by MainForm routing from TriggerEditor's Tools menu
+        public void ExecuteBatchMultiply(List<CodeNote> selectedNotes, string searchKeyword, string replacePattern, int copies, long stride, int startNum)
         {
-            if (_viewModel.AllNotes.Count == 0) return;
-
-            using (var form = new BatchNoteMultiplierForm(_viewModel.AllNotes))
-            {
-                if (form.ShowDialog() == DialogResult.OK)
-                {
-                    _viewModel.BatchMultiplyNotes(
-                        form.SelectedNotes,
-                        form.SearchKeyword,
-                        form.ReplacePattern,
-                        form.Copies,
-                        form.Stride,
-                        form.StartNumber);
-
-                    _hasUnsavedChanges = true;
-                    UpdateStatusDisplay($"Batch duplicated {form.SelectedNotes.Count} note(s).");
-                }
-            }
+            _viewModel.PushUndoState(); // So we can undo this inside Code Note Editor too
+            _viewModel.BatchMultiplyNotes(selectedNotes, searchKeyword, replacePattern, copies, stride, startNum);
+            _hasUnsavedChanges = true;
+            UpdateStatusDisplay($"Batch duplicated {selectedNotes.Count} note(s).");
         }
 
         private void deleteNodeToolStripMenuItem_Click(object sender, EventArgs e)

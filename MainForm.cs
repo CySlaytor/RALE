@@ -80,6 +80,9 @@ namespace RALogicEditor
                 if (e.Offsets.Count > 0) codeNoteEditor.HighlightVariable(e.Offsets);
             };
 
+            // Trigger Editor -> MainForm Bridge for Multiplier
+            triggerEditor.BatchMultiplyNotesRequested += TriggerEditor_BatchMultiplyNotesRequested;
+
             // Code Reviewer
             codeReviewControl.IssueSelected += CodeReviewControl_IssueSelected;
 
@@ -152,6 +155,28 @@ namespace RALogicEditor
             // Instantly refresh editors with the restored notes list
             var notes = _projectRepo.LocalData.Notes;
             codeNoteEditor.SetNotes(notes);
+            triggerEditor.SetNotes(notes);
+            RunGlobalValidation();
+        }
+
+        private void TriggerEditor_BatchMultiplyNotesRequested(object? sender, Forms.BatchNoteMultiplierForm form)
+        {
+            _projectRepo.EnsureLocalDataExists();
+            PushMainUndo();
+
+            // Pass execution to code note editor which handles its internal UI formatting
+            codeNoteEditor.ExecuteBatchMultiply(
+                form.SelectedNotes,
+                form.SearchKeyword,
+                form.ReplacePattern,
+                form.Copies,
+                form.Stride,
+                form.StartNumber);
+
+            _isDirty = true;
+
+            // Instantly refresh logic editors with the restored/modified notes list
+            var notes = _projectRepo.LocalData!.Notes;
             triggerEditor.SetNotes(notes);
             RunGlobalValidation();
         }

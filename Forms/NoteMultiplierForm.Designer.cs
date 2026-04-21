@@ -26,7 +26,8 @@
             this.lblReplace = new System.Windows.Forms.Label();
             this.txtReplace = new System.Windows.Forms.TextBox();
             this.lblHelp = new System.Windows.Forms.Label();
-            this.chkApplyToChildren = new System.Windows.Forms.CheckBox();
+            this.lblStrideTarget = new System.Windows.Forms.Label();
+            this.cmbStrideTarget = new System.Windows.Forms.ComboBox();
             this.btnOK = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
             this.pnlCustom.SuspendLayout();
@@ -162,17 +163,27 @@
             this.lblHelp.TabIndex = 4;
             this.lblHelp.Text = "Tip: Use {N} for the target slot/player number.";
             // 
-            // chkApplyToChildren
+            // lblStrideTarget
             // 
-            this.chkApplyToChildren.AutoSize = true;
-            this.chkApplyToChildren.Checked = true;
-            this.chkApplyToChildren.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.chkApplyToChildren.Location = new System.Drawing.Point(12, 220);
-            this.chkApplyToChildren.Name = "chkApplyToChildren";
-            this.chkApplyToChildren.Size = new System.Drawing.Size(359, 19);
-            this.chkApplyToChildren.TabIndex = 9;
-            this.chkApplyToChildren.Text = "Apply stride to indented child offsets (Uncheck for Pointer Arrays)";
-            this.chkApplyToChildren.UseVisualStyleBackColor = true;
+            this.lblStrideTarget.AutoSize = true;
+            this.lblStrideTarget.Location = new System.Drawing.Point(12, 220);
+            this.lblStrideTarget.Name = "lblStrideTarget";
+            this.lblStrideTarget.Size = new System.Drawing.Size(90, 15);
+            this.lblStrideTarget.TabIndex = 9;
+            this.lblStrideTarget.Text = "Apply Stride To:";
+            // 
+            // cmbStrideTarget
+            // 
+            this.cmbStrideTarget.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbStrideTarget.FormattingEnabled = true;
+            this.cmbStrideTarget.Items.AddRange(new object[] {
+            "All Offsets (Array of Structs)",
+            "Parent Offsets Only (Array of Pointers)",
+            "Child Offsets Only (Array inside a Struct)"});
+            this.cmbStrideTarget.Location = new System.Drawing.Point(140, 217);
+            this.cmbStrideTarget.Name = "cmbStrideTarget";
+            this.cmbStrideTarget.Size = new System.Drawing.Size(252, 23);
+            this.cmbStrideTarget.TabIndex = 10;
             // 
             // btnOK
             // 
@@ -180,7 +191,7 @@
             this.btnOK.Location = new System.Drawing.Point(236, 256);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(75, 23);
-            this.btnOK.TabIndex = 10;
+            this.btnOK.TabIndex = 11;
             this.btnOK.Text = "OK";
             this.btnOK.UseVisualStyleBackColor = true;
             this.btnOK.Click += new System.EventHandler(this.btnOK_Click);
@@ -191,7 +202,7 @@
             this.btnCancel.Location = new System.Drawing.Point(317, 256);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
-            this.btnCancel.TabIndex = 11;
+            this.btnCancel.TabIndex = 12;
             this.btnCancel.Text = "Cancel";
             this.btnCancel.UseVisualStyleBackColor = true;
             this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
@@ -205,7 +216,8 @@
             this.ClientSize = new System.Drawing.Size(404, 291);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnOK);
-            this.Controls.Add(this.chkApplyToChildren);
+            this.Controls.Add(this.cmbStrideTarget);
+            this.Controls.Add(this.lblStrideTarget);
             this.Controls.Add(this.pnlCustom);
             this.Controls.Add(this.cmbNaming);
             this.Controls.Add(this.lblNaming);
@@ -242,7 +254,8 @@
         private System.Windows.Forms.Label lblReplace;
         private System.Windows.Forms.TextBox txtReplace;
         private System.Windows.Forms.Label lblHelp;
-        private System.Windows.Forms.CheckBox chkApplyToChildren;
+        private System.Windows.Forms.Label lblStrideTarget;
+        private System.Windows.Forms.ComboBox cmbStrideTarget;
         private System.Windows.Forms.Button btnOK;
         private System.Windows.Forms.Button btnCancel;
     }

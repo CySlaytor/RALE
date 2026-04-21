@@ -14,7 +14,7 @@ namespace RALogicEditor.Forms
         private static int _lastNamingIdx = 1;
         private static string _lastSearch = "";
         private static string _lastReplace = "";
-        private static bool _lastApplyToChildren = true;
+        private static int _lastTargetIdx = 0;
 
         public int Copies { get; private set; }
         public long Stride { get; private set; }
@@ -22,7 +22,7 @@ namespace RALogicEditor.Forms
         public string SearchText { get; private set; } = "";
         public string ReplaceText { get; private set; } = "";
         public int StartNumber { get; private set; }
-        public bool ApplyToChildren { get; private set; }
+        public StrideTarget TargetMode { get; private set; }
 
         public NoteMultiplierForm()
         {
@@ -35,10 +35,9 @@ namespace RALogicEditor.Forms
             txtSearch.Text = _lastSearch;
             txtReplace.Text = _lastReplace;
             cmbNaming.SelectedIndex = _lastNamingIdx;
-            chkApplyToChildren.Checked = _lastApplyToChildren;
+            cmbStrideTarget.SelectedIndex = _lastTargetIdx;
 
             this.Text = "Multiply Selected Text";
-            chkApplyToChildren.Visible = true;
         }
 
         private void cmbNaming_SelectedIndexChanged(object sender, EventArgs e)
@@ -79,7 +78,7 @@ namespace RALogicEditor.Forms
             SearchText = txtSearch.Text;
             ReplaceText = txtReplace.Text;
             StartNumber = startNum;
-            ApplyToChildren = chkApplyToChildren.Checked;
+            TargetMode = (StrideTarget)cmbStrideTarget.SelectedIndex;
 
             // Save state for next use
             _lastCopies = Copies;
@@ -88,7 +87,7 @@ namespace RALogicEditor.Forms
             _lastNamingIdx = cmbNaming.SelectedIndex;
             _lastSearch = SearchText;
             _lastReplace = ReplaceText;
-            _lastApplyToChildren = ApplyToChildren;
+            _lastTargetIdx = cmbStrideTarget.SelectedIndex;
 
             this.DialogResult = DialogResult.OK;
             this.Close();

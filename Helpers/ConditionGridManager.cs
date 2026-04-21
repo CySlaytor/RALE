@@ -671,12 +671,45 @@ namespace RALogicEditor.Helpers
             StatusUpdateRequested?.Invoke(this, "Rows copied to clipboard (aligned).");
         }
 
-        // Copies logic as RA Logic String (e.g. 0x123=1) to Clipboard
-        // Updated to include hidden chains if collapsed.
-        public void CopySelectedLogic()
+        public void AddCondition()
+        {
+            if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
+
+            var newCond = new AchievementCondition { LeftOperand = { Type = "Value", Value = "0" }, Operator = "=", RightOperand = { Type = "Value", Value = "1" } };
+
+            int insertIdx = group.Conditions.Count;
+            if (_grid.SelectedRows.Count > 0)
+            {
+                var lastRow = _grid.SelectedRows.Cast<DataGridViewRow>().OrderByDescending(r => r.Index).First();
+                if (lastRow.Tag is AchievementCondition c)
+                {
+                    insertIdx = group.Conditions.IndexOf(c) + 1;
+                }
+            }
+
+            group.Conditions.Insert(insertIdx, newCond);
+
+            // Updated to use ConditionGridRenderer with Guard
+            _isUpdating = true;
+            try
+            {
+                ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
+            }
+            finally
+            {
+                _isUpdating = false;
+            }
+
+            RestoreSelection(new List<AchievementCondition> { newCond });
+
+            LogicChanged?.Invoke(this, EventArgs.Empty);
+            StatusUpdateRequested?.Invoke(this, "Condition added.");
+        }
+
+        public string GetSelectedLogicString()
         {
             var conditionsToCopy = GetEffectiveSelection();
-            if (conditionsToCopy.Count == 0) return;
+            if (conditionsToCopy.Count == 0) return "";
 
             var sb = new StringBuilder();
             foreach (var cond in conditionsToCopy)
@@ -684,7 +717,15 @@ namespace RALogicEditor.Helpers
                 if (sb.Length > 0) sb.Append('_');
                 sb.Append(LogicFormatter.ConditionToString(cond));
             }
-            Clipboard.SetText(sb.ToString());
+            return sb.ToString();
+        }
+
+        public void CopySelectedLogic()
+        {
+            string logic = GetSelectedLogicString();
+            if (string.IsNullOrEmpty(logic)) return;
+
+            Clipboard.SetText(logic);
             StatusUpdateRequested?.Invoke(this, "Logic string copied to clipboard.");
         }
 
@@ -972,40 +1013,6 @@ namespace RALogicEditor.Helpers
 
             LogicChanged?.Invoke(this, EventArgs.Empty);
             StatusUpdateRequested?.Invoke(this, "Conditions moved.");
-        }
-
-        public void AddCondition()
-        {
-            if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
-
-            var newCond = new AchievementCondition { LeftOperand = { Type = "Value", Value = "0" }, Operator = "=", RightOperand = { Type = "Value", Value = "1" } };
-
-            int insertIdx = group.Conditions.Count;
-            if (_grid.SelectedRows.Count > 0)
-            {
-                var lastRow = _grid.SelectedRows.Cast<DataGridViewRow>().OrderByDescending(r => r.Index).First();
-                if (lastRow.Tag is AchievementCondition c)
-                {
-                    insertIdx = group.Conditions.IndexOf(c) + 1;
-                }
-            }
-
-            group.Conditions.Insert(insertIdx, newCond);
-
-            // Updated to use ConditionGridRenderer with Guard
-            _isUpdating = true;
-            try
-            {
-                ConditionGridRenderer.PopulateGridRows(_grid, group, _grid.ReadOnly, ShowDecimal, ShowAliases, NotesLookup, RangeCache, null, CollapseChains);
-            }
-            finally
-            {
-                _isUpdating = false;
-            }
-
-            RestoreSelection(new List<AchievementCondition> { newCond });
-
-            LogicChanged?.Invoke(this, EventArgs.Empty);
         }
 
         // Detects if a cell contains a memory address and attempts to resolve pointer chains

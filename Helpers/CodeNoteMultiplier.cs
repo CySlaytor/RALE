@@ -13,9 +13,16 @@ namespace RALogicEditor.Helpers
         Custom
     }
 
+    public enum StrideTarget
+    {
+        All,
+        ParentsOnly,
+        ChildrenOnly
+    }
+
     public static class CodeNoteMultiplier
     {
-        public static string GenerateText(string templateText, int copies, long stride, NamingStyle naming, string search, string replace, int startNumber, bool applyToChildren)
+        public static string GenerateText(string templateText, int copies, long stride, NamingStyle naming, string search, string replace, int startNumber, StrideTarget target)
         {
             var sb = new StringBuilder();
             string[] lines = templateText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
@@ -59,7 +66,10 @@ namespace RALogicEditor.Helpers
 
                         // If the line is indented further than the root selection, it's a child.
                         bool isChild = indent.Length > minIndent;
-                        long appliedStride = (isChild && !applyToChildren) ? 0 : currentStride;
+                        long appliedStride = currentStride;
+
+                        if (target == StrideTarget.ParentsOnly && isChild) appliedStride = 0;
+                        if (target == StrideTarget.ChildrenOnly && !isChild) appliedStride = 0;
 
                         if (long.TryParse(hexStr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long baseVal))
                         {

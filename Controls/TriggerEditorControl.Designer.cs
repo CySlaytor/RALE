@@ -38,6 +38,7 @@
             commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
             multiRegionToolStripMenuItem = new ToolStripMenuItem();
             logicOptimizerToolStripMenuItem = new ToolStripMenuItem();
+            batchMultiplyNotesToolStripMenuItem = new ToolStripMenuItem();
 
             splitGroups = new SplitContainer();
             groupsList = new ListView();
@@ -280,9 +281,9 @@
             // 
             // toolsContextMenu
             // 
-            toolsContextMenu.Items.AddRange(new ToolStripItem[] { createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, multiRegionToolStripMenuItem, logicOptimizerToolStripMenuItem });
+            toolsContextMenu.Items.AddRange(new ToolStripItem[] { createGeneratorToolStripMenuItem, commitGeneratorToolStripMenuItem, multiRegionToolStripMenuItem, logicOptimizerToolStripMenuItem, batchMultiplyNotesToolStripMenuItem });
             toolsContextMenu.Name = "toolsContextMenu";
-            toolsContextMenu.Size = new Size(221, 92);
+            toolsContextMenu.Size = new Size(221, 114);
             // 
             // createGeneratorToolStripMenuItem
             // 
@@ -311,6 +312,13 @@
             logicOptimizerToolStripMenuItem.Size = new Size(220, 22);
             logicOptimizerToolStripMenuItem.Text = "Logic Optimizer (Length)...";
             logicOptimizerToolStripMenuItem.Click += logicOptimizerToolStripMenuItem_Click;
+            // 
+            // batchMultiplyNotesToolStripMenuItem
+            // 
+            batchMultiplyNotesToolStripMenuItem.Name = "batchMultiplyNotesToolStripMenuItem";
+            batchMultiplyNotesToolStripMenuItem.Size = new Size(220, 22);
+            batchMultiplyNotesToolStripMenuItem.Text = "Batch Multiply Notes...";
+            batchMultiplyNotesToolStripMenuItem.Click += batchMultiplyNotesToolStripMenuItem_Click;
             // 
             // splitGroups
             // 
@@ -689,5 +697,6 @@
         private System.Windows.Forms.ComboBox cmbFormat = null!;
         private System.Windows.Forms.CheckBox chkLowerIsBetter = null!;
         private System.Windows.Forms.ToolStripMenuItem extendSelectionToolStripMenuItem = null!;
+        private System.Windows.Forms.ToolStripMenuItem batchMultiplyNotesToolStripMenuItem = null!;
     }
 }

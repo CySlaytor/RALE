@@ -37,7 +37,6 @@
             deleteNodeToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator2 = new ToolStripSeparator();
             multiplySelectedTextToolStripMenuItem = new ToolStripMenuItem();
-            batchMultiplyNotesToolStripMenuItem = new ToolStripMenuItem();
             statusStripBottom = new StatusStrip();
             lblOffsetChain = new ToolStripStatusLabel();
             panelBottom = new Panel();
@@ -209,7 +208,7 @@
             // 
             // cmsNoteContext
             // 
-            cmsNoteContext.Items.AddRange(new ToolStripItem[] { cutToolStripMenuItem, copyToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator1, deleteNodeToolStripMenuItem, toolStripSeparator2, multiplySelectedTextToolStripMenuItem, batchMultiplyNotesToolStripMenuItem });
+            cmsNoteContext.Items.AddRange(new ToolStripItem[] { cutToolStripMenuItem, copyToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator1, deleteNodeToolStripMenuItem, toolStripSeparator2, multiplySelectedTextToolStripMenuItem });
             cmsNoteContext.Name = "cmsNoteContext";
             cmsNoteContext.Size = new Size(286, 148);
             // 
@@ -260,13 +259,6 @@
             multiplySelectedTextToolStripMenuItem.Size = new Size(285, 22);
             multiplySelectedTextToolStripMenuItem.Text = "Multiply Selected Text (Inside Note)...";
             multiplySelectedTextToolStripMenuItem.Click += multiplySelectedTextToolStripMenuItem_Click;
-            // 
-            // batchMultiplyNotesToolStripMenuItem
-            // 
-            batchMultiplyNotesToolStripMenuItem.Name = "batchMultiplyNotesToolStripMenuItem";
-            batchMultiplyNotesToolStripMenuItem.Size = new Size(285, 22);
-            batchMultiplyNotesToolStripMenuItem.Text = "Batch Multiply Notes...";
-            batchMultiplyNotesToolStripMenuItem.Click += batchMultiplyNotesToolStripMenuItem_Click;
             // 
             // statusStripBottom
             // 
@@ -408,7 +400,6 @@
         private System.Windows.Forms.ToolStripMenuItem pasteToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem deleteNodeToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem multiplySelectedTextToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem batchMultiplyNotesToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
     }

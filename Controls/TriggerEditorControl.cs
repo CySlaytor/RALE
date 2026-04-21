@@ -91,6 +91,8 @@ namespace RALogicEditor.Controls
         public event EventHandler<MultiRegionForm>? MultiRegionLogicRequested;
         // Event to request Logic Optimization in MainForm
         public event EventHandler? LogicOptimizationRequested;
+        // Event to request Batch Multiply in MainForm
+        public event EventHandler<BatchNoteMultiplierForm>? BatchMultiplyNotesRequested;
 
         public bool CanUndo => _viewModel.CanUndo;
         public bool CanRedo => _viewModel.CanRedo;
@@ -704,7 +706,14 @@ namespace RALogicEditor.Controls
 
             if (_currentIssues.Any(i => i.Severity >= FeedbackSeverity.Error)) SetStatus("❌ Error(s) found in logic.");
             else if (_currentIssues.Any(i => i.Severity >= FeedbackSeverity.Warning)) SetStatus("⚠️ Warning(s) found in logic.");
-            else SetStatus("Ready");
+            else
+            {
+                // Only clear the error/warning status; don't overwrite valid action logs (e.g., "Conditions moved.")
+                if (lblEditorStatus.Text.StartsWith("❌") || lblEditorStatus.Text.StartsWith("⚠️"))
+                {
+                    SetStatus("Ready");
+                }
+            }
 
             RefreshCurrentGridDisplay();
         }
@@ -827,6 +836,7 @@ namespace RALogicEditor.Controls
 
             // Enable Multi-Region if active groups exist and notes are loaded
             multiRegionToolStripMenuItem.Enabled = _viewModel.ActiveGroups.Count > 0 && _rawNotes.Count > 0;
+            batchMultiplyNotesToolStripMenuItem.Enabled = _rawNotes.Count > 0;
         }
 
         // Context Menu Actions - Delegated to ViewModel or GridManager
@@ -1151,7 +1161,26 @@ namespace RALogicEditor.Controls
 
         private void saveAsSnippetToolStripMenuItem_Click(object? sender, EventArgs e)
         {
-            _gridManager.CopySelectedLogic();
+            string logic = _gridManager.GetSelectedLogicString();
+            if (string.IsNullOrEmpty(logic)) return;
+
+            using (Form prompt = new Form() { Width = 400, Height = 150, FormBorderStyle = FormBorderStyle.FixedDialog, Text = "Save Snippet", StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false })
+            {
+                Label textLabel = new Label() { Left = 15, Top = 15, Text = "Snippet Name:" };
+                TextBox textBox = new TextBox() { Left = 15, Top = 40, Width = 350 };
+                Button confirmation = new Button() { Text = "Save", Left = 290, Top = 70, Width = 75, DialogResult = DialogResult.OK };
+
+                prompt.Controls.Add(textLabel);
+                prompt.Controls.Add(textBox);
+                prompt.Controls.Add(confirmation);
+                prompt.AcceptButton = confirmation;
+
+                if (prompt.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(textBox.Text))
+                {
+                    SnippetManager.SaveSnippet(textBox.Text.Trim(), logic);
+                    SetStatus($"Snippet '{textBox.Text.Trim()}' saved.");
+                }
+            }
         }
 
         private void insertSnippetToolStripMenuItem_Click(object? sender, EventArgs e)
@@ -1424,6 +1453,19 @@ namespace RALogicEditor.Controls
         private void logicOptimizerToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             LogicOptimizationRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void batchMultiplyNotesToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            if (_rawNotes.Count == 0) return;
+
+            using (var form = new BatchNoteMultiplierForm(_rawNotes))
+            {
+                if (form.ShowDialog() == DialogResult.OK)
+                {
+                    BatchMultiplyNotesRequested?.Invoke(this, form);
+                }
+            }
         }
     }
 }
