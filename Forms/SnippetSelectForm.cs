@@ -1,4 +1,5 @@
-﻿using RALogicEditor.Services;
+﻿using RALogicEditor.Models;
+using RALogicEditor.Services;
 using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
@@ -37,7 +38,7 @@ namespace RALogicEditor.Forms
         {
             if (lstSnippets.SelectedItem is Snippet s)
             {
-                txtPreview.Text = s.LogicCode;
+                txtPreview.Text = s.Logic;
                 btnInsert.Enabled = true;
                 btnDelete.Enabled = true;
             }

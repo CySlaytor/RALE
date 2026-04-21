@@ -1,17 +1,11 @@
-﻿using System.Collections.Generic;
+﻿using RALogicEditor.Models;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Windows.Forms;
 
 namespace RALogicEditor.Services
 {
-    public class Snippet
-    {
-        public string Name { get; set; } = "";
-        public string Description { get; set; } = "";
-        public string LogicCode { get; set; } = "";
-    }
-
     public static class SnippetManager
     {
         private static readonly string SnippetPath = Path.Combine(Application.StartupPath, "snippets.json");
@@ -37,7 +31,7 @@ namespace RALogicEditor.Services
             // Ensure loaded
             if (_cache.Count == 0 && File.Exists(SnippetPath)) Load();
 
-            var newSnippet = new Snippet { Name = name, LogicCode = logic };
+            var newSnippet = new Snippet { Name = name, Logic = logic };
             _cache.Add(newSnippet);
             SaveDisk();
         }

@@ -797,11 +797,12 @@ namespace RALogicEditor.Helpers
             }
         }
 
-        // Pastes logic string from Clipboard into Grid
-        public void PasteLogic()
+        // Pastes logic string into Grid
+        public void PasteLogic(string? logicToPaste = null)
         {
-            if (!Clipboard.ContainsText() || _grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
-            string txt = Clipboard.GetText().Trim().Replace("\r", "").Replace("\n", "");
+            if (_grid.ReadOnly || _grid.Tag is not AchievementConditionGroup group) return;
+            string txt = logicToPaste ?? (Clipboard.ContainsText() ? Clipboard.GetText() : "");
+            txt = txt.Trim().Replace("\r", "").Replace("\n", "");
             if (string.IsNullOrWhiteSpace(txt)) return;
 
             int insertIdx = group.Conditions.Count;

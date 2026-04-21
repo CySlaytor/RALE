@@ -1,6 +1,4 @@
-﻿#nullable enable
-using RALogicEditor.Helpers;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,68 +6,6 @@ using System.Text.RegularExpressions;
 
 namespace RALogicEditor.Logic
 {
-    // Ported from Pointer Finder 2.0
-    // This is used for the "Live Preview" and generating new notes based on prefs.
-    public static class CodeNoteFormatter
-    {
-        public static string BuildCodeNote(List<int> offsets, string prefixPref, string suffixPref, bool alignSuffixes, bool lastLineOnly, string? finalMemorySize = null, string? finalDescription = null)
-        {
-            if (offsets == null || offsets.Count == 0) return string.Empty;
-
-            var lines = new List<string>();
-
-            // 1. Generate the base lines for each offset.
-            for (int i = 0; i < offsets.Count; i++)
-            {
-                int offset = offsets[i];
-                string prefix = (i == 0) ? "" : string.Concat(Enumerable.Repeat(prefixPref, i));
-                string sign = "+"; // Assuming positive for simple display, logic handles negatives if passed raw
-                string offsetHex = $"{Math.Abs(offset):X}";
-                if (offset < 0) sign = "-";
-
-                lines.Add($"{prefix}{sign}0x{offsetHex}");
-            }
-
-            // 2. Apply alignment and suffixes.
-            int maxLength = alignSuffixes ? lines.Max(l => l.Length) : 0;
-            var finalLines = new List<string>();
-
-            for (int i = 0; i < lines.Count; i++)
-            {
-                string line = lines[i];
-                string currentSuffix = "";
-
-                // Logic: Apply suffix if it's NOT "Last Line Only" OR if it IS the last line
-                if (!lastLineOnly || (i == lines.Count - 1))
-                {
-                    currentSuffix = suffixPref;
-                }
-
-                string padding = alignSuffixes ? new string(' ', maxLength - line.Length) : "";
-                finalLines.Add($"{line}{padding}{currentSuffix}");
-            }
-
-            // 3. Handle the final line description.
-            if (finalLines.Count != 0 && (!string.IsNullOrEmpty(finalMemorySize) || !string.IsNullOrEmpty(finalDescription)))
-            {
-                int lastIndex = finalLines.Count - 1;
-                var sb = new StringBuilder(finalLines[lastIndex]);
-
-                if (!string.IsNullOrEmpty(finalMemorySize) && finalMemorySize != "N/A")
-                {
-                    sb.Append($"[{finalMemorySize}] ");
-                }
-                if (!string.IsNullOrEmpty(finalDescription))
-                {
-                    sb.Append(finalDescription);
-                }
-                finalLines[lastIndex] = sb.ToString().TrimEnd();
-            }
-
-            return string.Join(Environment.NewLine, finalLines);
-        }
-    }
-
     // Ported from Pointer Finder 2.0
     // A tool to parse, merge, and clean up complex code notes with hierarchical pointer chains.
     public static class CodeNoteLogic

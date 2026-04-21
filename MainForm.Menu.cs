@@ -120,10 +120,20 @@ namespace RALogicEditor
             _projectRepo.EnsureLocalDataExists();
             PushMainUndo();
 
-            // Auto-increment ID based on highest existing ID
+            // Auto-increment ID based on highest existing LOCAL ID, not visual grid
             int newId = 111000001;
-            var allIds = _currentDisplayList.Select(x => x.ID).ToList();
-            if (allIds.Any()) { int max = allIds.Max(); newId = (max < 111000000) ? 111000001 : max + 1; }
+            if (_projectRepo.LocalData != null)
+            {
+                var localIds = _projectRepo.LocalData.Achievements.Select(a => a.ID)
+                               .Concat(_projectRepo.LocalData.Leaderboards.Select(l => l.ID))
+                               .ToList();
+
+                if (localIds.Any())
+                {
+                    int max = localIds.Max();
+                    newId = (max < 111000000) ? 111000001 : max + 1;
+                }
+            }
 
             bool leaderboard = cmbAssetType.SelectedIndex == 1;
             if (leaderboard)
@@ -159,9 +169,21 @@ namespace RALogicEditor
             PushMainUndo();
 
             var selectedRows = achievementGrid.SelectedRows.Cast<DataGridViewRow>().Where(r => r.Tag is IAssetItem).OrderBy(r => r.Index).ToList();
+
+            // FIX: Auto-increment ID based on highest existing LOCAL ID, not visual grid
             int nextId = 111000001;
-            var allIds = _currentDisplayList.Select(x => x.ID).ToList();
-            if (allIds.Any()) { int max = allIds.Max(); nextId = (max >= 111000000) ? max + 1 : 111000001; }
+            if (_projectRepo.LocalData != null)
+            {
+                var localIds = _projectRepo.LocalData.Achievements.Select(a => a.ID)
+                               .Concat(_projectRepo.LocalData.Leaderboards.Select(l => l.ID))
+                               .ToList();
+
+                if (localIds.Any())
+                {
+                    int max = localIds.Max();
+                    nextId = (max >= 111000000) ? max + 1 : 111000001;
+                }
+            }
 
             List<int> newIds = new List<int>();
             foreach (var row in selectedRows)

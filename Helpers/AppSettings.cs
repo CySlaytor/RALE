@@ -38,12 +38,6 @@ namespace RALogicEditor.Helpers
         public bool Notes_ShowLeafsOnly { get; set; } = false;
         public bool Notes_IndentValues { get; set; } = true;
         public string NoteIndentStyle { get; set; } = "Unicode Tree (├─)";
-
-        // --- Ported Formatting Settings ---
-        public string NotePrefix { get; set; } = ".";
-        public string NoteSuffix { get; set; } = " |";
-        public bool NoteAlignSuffixes { get; set; } = true;
-        public bool NoteSuffixOnLastLineOnly { get; set; } = false;
     }
 
     public static class AppSettings

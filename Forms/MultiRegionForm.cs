@@ -211,7 +211,7 @@ namespace RALogicEditor.Forms
 
                 foreach (TabPage page in tabControlRegions.TabPages)
                 {
-                    if ((string)page.Tag == regionName && page.Text.Contains("(Base)"))
+                    if (page.Tag as string == regionName && page.Text.Contains("(Base)"))
                     {
                         isBase = true;
                         break;

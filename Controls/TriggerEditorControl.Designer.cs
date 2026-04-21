@@ -27,19 +27,15 @@
             txtDescription = new TextBox();
             txtTitle = new TextBox();
             pbBadge = new PictureBox();
-
-            // New Leaderboard Controls
             lblFormat = new Label();
             cmbFormat = new ComboBox();
             chkLowerIsBetter = new CheckBox();
-
             toolsContextMenu = new ContextMenuStrip(components);
             createGeneratorToolStripMenuItem = new ToolStripMenuItem();
             commitGeneratorToolStripMenuItem = new ToolStripMenuItem();
             multiRegionToolStripMenuItem = new ToolStripMenuItem();
             logicOptimizerToolStripMenuItem = new ToolStripMenuItem();
             batchMultiplyNotesToolStripMenuItem = new ToolStripMenuItem();
-
             splitGroups = new SplitContainer();
             groupsList = new ListView();
             colGroups = new ColumnHeader();
@@ -60,14 +56,11 @@
             duplicateToolStripMenuItem = new ToolStripMenuItem();
             deleteToolStripMenuItem = new ToolStripMenuItem();
             toolStripSeparator2 = new ToolStripSeparator();
-
-            // New / Reordered Logic Items
-            extendSelectionToolStripMenuItem = new ToolStripMenuItem(); // NEW Item
+            extendSelectionToolStripMenuItem = new ToolStripMenuItem();
             cutToolStripMenuItem = new ToolStripMenuItem();
             copyLogicToolStripMenuItem = new ToolStripMenuItem();
             copyRowToolStripMenuItem = new ToolStripMenuItem();
             pasteToolStripMenuItem = new ToolStripMenuItem();
-
             toolStripSeparator3 = new ToolStripSeparator();
             saveAsSnippetToolStripMenuItem = new ToolStripMenuItem();
             insertSnippetToolStripMenuItem = new ToolStripMenuItem();
@@ -253,7 +246,7 @@
             lblFormat.AutoSize = true;
             lblFormat.Location = new Point(5, 63);
             lblFormat.Name = "lblFormat";
-            lblFormat.Size = new System.Drawing.Size(48, 15);
+            lblFormat.Size = new Size(48, 15);
             lblFormat.TabIndex = 12;
             lblFormat.Text = "Format:";
             lblFormat.Visible = false;
@@ -446,7 +439,7 @@
             // extendSelectionToolStripMenuItem
             // 
             extendSelectionToolStripMenuItem.Name = "extendSelectionToolStripMenuItem";
-            extendSelectionToolStripMenuItem.Size = new Size(208, 22);
+            extendSelectionToolStripMenuItem.Size = new Size(270, 22);
             extendSelectionToolStripMenuItem.Text = "Extend Selection by Pattern";
             extendSelectionToolStripMenuItem.Click += extendSelectionToolStripMenuItem_Click;
             // 
@@ -454,13 +447,13 @@
             // 
             gridContextMenu.Items.AddRange(new ToolStripItem[] { moveUpToolStripMenuItem, moveDownToolStripMenuItem, toolStripSeparator1, addConditionToolStripMenuItem, duplicateToolStripMenuItem, deleteToolStripMenuItem, toolStripSeparator2, extendSelectionToolStripMenuItem, cutToolStripMenuItem, copyLogicToolStripMenuItem, copyRowToolStripMenuItem, pasteToolStripMenuItem, toolStripSeparator3, saveAsSnippetToolStripMenuItem, insertSnippetToolStripMenuItem });
             gridContextMenu.Name = "gridContextMenu";
-            gridContextMenu.Size = new Size(209, 270);
+            gridContextMenu.Size = new Size(271, 286);
             // 
             // moveUpToolStripMenuItem
             // 
             moveUpToolStripMenuItem.Name = "moveUpToolStripMenuItem";
             moveUpToolStripMenuItem.ShortcutKeys = Keys.Alt | Keys.Up;
-            moveUpToolStripMenuItem.Size = new Size(208, 22);
+            moveUpToolStripMenuItem.Size = new Size(270, 22);
             moveUpToolStripMenuItem.Text = "Move Up";
             moveUpToolStripMenuItem.Click += moveUpToolStripMenuItem_Click;
             // 
@@ -468,19 +461,19 @@
             // 
             moveDownToolStripMenuItem.Name = "moveDownToolStripMenuItem";
             moveDownToolStripMenuItem.ShortcutKeys = Keys.Alt | Keys.Down;
-            moveDownToolStripMenuItem.Size = new Size(208, 22);
+            moveDownToolStripMenuItem.Size = new Size(270, 22);
             moveDownToolStripMenuItem.Text = "Move Down";
             moveDownToolStripMenuItem.Click += moveDownToolStripMenuItem_Click;
             // 
             // toolStripSeparator1
             // 
             toolStripSeparator1.Name = "toolStripSeparator1";
-            toolStripSeparator1.Size = new Size(205, 6);
+            toolStripSeparator1.Size = new Size(267, 6);
             // 
             // addConditionToolStripMenuItem
             // 
             addConditionToolStripMenuItem.Name = "addConditionToolStripMenuItem";
-            addConditionToolStripMenuItem.Size = new Size(208, 22);
+            addConditionToolStripMenuItem.Size = new Size(270, 22);
             addConditionToolStripMenuItem.Text = "Add Condition";
             addConditionToolStripMenuItem.Click += addConditionToolStripMenuItem_Click;
             // 
@@ -488,7 +481,7 @@
             // 
             duplicateToolStripMenuItem.Name = "duplicateToolStripMenuItem";
             duplicateToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.D;
-            duplicateToolStripMenuItem.Size = new Size(208, 22);
+            duplicateToolStripMenuItem.Size = new Size(270, 22);
             duplicateToolStripMenuItem.Text = "Duplicate";
             duplicateToolStripMenuItem.Click += duplicateToolStripMenuItem_Click;
             // 
@@ -496,20 +489,20 @@
             // 
             deleteToolStripMenuItem.Name = "deleteToolStripMenuItem";
             deleteToolStripMenuItem.ShortcutKeys = Keys.Delete;
-            deleteToolStripMenuItem.Size = new Size(208, 22);
+            deleteToolStripMenuItem.Size = new Size(270, 22);
             deleteToolStripMenuItem.Text = "Delete";
             deleteToolStripMenuItem.Click += deleteToolStripMenuItem_Click;
             // 
             // toolStripSeparator2
             // 
             toolStripSeparator2.Name = "toolStripSeparator2";
-            toolStripSeparator2.Size = new Size(205, 6);
+            toolStripSeparator2.Size = new Size(267, 6);
             // 
             // cutToolStripMenuItem
             // 
             cutToolStripMenuItem.Name = "cutToolStripMenuItem";
             cutToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.X;
-            cutToolStripMenuItem.Size = new Size(208, 22);
+            cutToolStripMenuItem.Size = new Size(270, 22);
             cutToolStripMenuItem.Text = "Cut Logic";
             cutToolStripMenuItem.Click += cutToolStripMenuItem_Click;
             // 
@@ -517,7 +510,7 @@
             // 
             copyLogicToolStripMenuItem.Name = "copyLogicToolStripMenuItem";
             copyLogicToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.C;
-            copyLogicToolStripMenuItem.Size = new Size(208, 22);
+            copyLogicToolStripMenuItem.Size = new Size(270, 22);
             copyLogicToolStripMenuItem.Text = "Copy Logic";
             copyLogicToolStripMenuItem.Click += copyLogicToolStripMenuItem_Click;
             // 
@@ -525,7 +518,7 @@
             // 
             copyRowToolStripMenuItem.Name = "copyRowToolStripMenuItem";
             copyRowToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Shift | Keys.C;
-            copyRowToolStripMenuItem.Size = new Size(208, 22);
+            copyRowToolStripMenuItem.Size = new Size(270, 22);
             copyRowToolStripMenuItem.Text = "Copy Row";
             copyRowToolStripMenuItem.Click += copyRowToolStripMenuItem_Click;
             // 
@@ -533,28 +526,28 @@
             // 
             pasteToolStripMenuItem.Name = "pasteToolStripMenuItem";
             pasteToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.V;
-            pasteToolStripMenuItem.Size = new Size(208, 22);
+            pasteToolStripMenuItem.Size = new Size(270, 22);
             pasteToolStripMenuItem.Text = "Paste Logic";
             pasteToolStripMenuItem.Click += pasteToolStripMenuItem_Click;
             // 
             // toolStripSeparator3
             // 
             toolStripSeparator3.Name = "toolStripSeparator3";
-            toolStripSeparator3.Size = new Size(205, 6);
+            toolStripSeparator3.Size = new Size(267, 6);
             // 
             // saveAsSnippetToolStripMenuItem
             // 
             saveAsSnippetToolStripMenuItem.Name = "saveAsSnippetToolStripMenuItem";
-            saveAsSnippetToolStripMenuItem.Size = new Size(208, 22);
-            saveAsSnippetToolStripMenuItem.Text = "Save Selection as Snippet";
+            saveAsSnippetToolStripMenuItem.Size = new Size(270, 22);
+            saveAsSnippetToolStripMenuItem.Text = "Save Selected Rows to Snippet Library...";
             saveAsSnippetToolStripMenuItem.Click += saveAsSnippetToolStripMenuItem_Click;
             // 
             // insertSnippetToolStripMenuItem
             // 
             insertSnippetToolStripMenuItem.Name = "insertSnippetToolStripMenuItem";
             insertSnippetToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.I;
-            insertSnippetToolStripMenuItem.Size = new Size(208, 22);
-            insertSnippetToolStripMenuItem.Text = "Insert Snippet...";
+            insertSnippetToolStripMenuItem.Size = new Size(270, 22);
+            insertSnippetToolStripMenuItem.Text = "Insert Snippet from Library...";
             insertSnippetToolStripMenuItem.Click += insertSnippetToolStripMenuItem_Click;
             // 
             // statusStripEditor

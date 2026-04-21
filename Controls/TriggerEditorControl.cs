@@ -1162,7 +1162,11 @@ namespace RALogicEditor.Controls
         private void saveAsSnippetToolStripMenuItem_Click(object? sender, EventArgs e)
         {
             string logic = _gridManager.GetSelectedLogicString();
-            if (string.IsNullOrEmpty(logic)) return;
+            if (string.IsNullOrEmpty(logic))
+            {
+                MessageBox.Show("Please select at least one row to save as a snippet.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
 
             using (Form prompt = new Form() { Width = 400, Height = 150, FormBorderStyle = FormBorderStyle.FixedDialog, Text = "Save Snippet", StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false })
             {
@@ -1185,7 +1189,7 @@ namespace RALogicEditor.Controls
 
         private void insertSnippetToolStripMenuItem_Click(object? sender, EventArgs e)
         {
-            using (var form = new SnippetSelectForm()) { if (form.ShowDialog() == DialogResult.OK) GridManager_PasteRequested(sender, form.SelectedSnippet.LogicCode); }
+            using (var form = new SnippetSelectForm()) { if (form.ShowDialog() == DialogResult.OK && form.SelectedSnippet != null) GridManager_PasteRequested(sender, form.SelectedSnippet.Logic); }
         }
 
         private void GridManager_PasteRequested(object? sender, string clipboardText)
@@ -1200,7 +1204,7 @@ namespace RALogicEditor.Controls
                 }
             }
             _viewModel.PushUndoState();
-            _gridManager.PasteLogic();
+            _gridManager.PasteLogic(clipboardText);
             _viewModel.UpdateLogic(false);
         }
 

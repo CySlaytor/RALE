@@ -1,4 +1,5 @@
-﻿#nullable enable
+﻿// --- START OF FILE ProjectRepository.cs ---
+#nullable enable
 using RALogicEditor.Models;
 using RALogicEditor.Parsers;
 using RALogicEditor.Services; // Added for Metadata
@@ -235,7 +236,14 @@ namespace RALogicEditor.Services
 
             var localItemsList = (isLeaderboard ? LocalData?.Leaderboards.Cast<T>() : LocalData?.Achievements.Cast<T>())?.ToList() ?? new List<T>();
 
-            var localItemsDict = localItemsList.ToDictionary(i => i.ID);
+            // Safely convert to dictionary ignoring duplicate user manual errors
+            var localItemsDict = new Dictionary<int, T>();
+            foreach (var item in localItemsList)
+            {
+                if (!localItemsDict.ContainsKey(item.ID))
+                    localItemsDict[item.ID] = item;
+            }
+
             var processedIds = new HashSet<int>();
 
             // 1. Map Server Items in their natural JSON order, tagging local modifications if they exist
@@ -311,3 +319,4 @@ namespace RALogicEditor.Services
         }
     }
 }
+// --- END OF FILE ProjectRepository.cs ---
