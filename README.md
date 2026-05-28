@@ -80,7 +80,3 @@ To fully reset the application to its default state, select **Edit -> Clear Data
 ## Contributing
 
 Contributions, bug reports, and feature suggestions are welcome. Please open an issue to discuss proposed modifications before submitting pull requests.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
