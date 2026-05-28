@@ -18,6 +18,7 @@
 
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(TextDiffForm));
             splitContainer1 = new SplitContainer();
             rtbLeft = new RichTextBox();
             lblLeft = new Label();
@@ -118,6 +119,7 @@
             ClientSize = new Size(900, 500);
             Controls.Add(splitContainer1);
             Controls.Add(lblStats);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "TextDiffForm";
             StartPosition = FormStartPosition.CenterParent;
             Text = "Text Diff Viewer";

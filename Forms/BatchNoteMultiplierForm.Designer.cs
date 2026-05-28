@@ -12,288 +12,284 @@
 
         private void InitializeComponent()
         {
-            this.splitMain = new System.Windows.Forms.SplitContainer();
-            this.clbNotes = new System.Windows.Forms.CheckedListBox();
-            this.panelFilter = new System.Windows.Forms.Panel();
-            this.btnSelectNone = new System.Windows.Forms.Button();
-            this.btnSelectAll = new System.Windows.Forms.Button();
-            this.txtFilter = new System.Windows.Forms.TextBox();
-            this.lblFilter = new System.Windows.Forms.Label();
-            this.groupBoxSettings = new System.Windows.Forms.GroupBox();
-            this.lblStartNum = new System.Windows.Forms.Label();
-            this.txtStartNum = new System.Windows.Forms.TextBox();
-            this.lblReplaceHint = new System.Windows.Forms.Label();
-            this.txtReplacePattern = new System.Windows.Forms.TextBox();
-            this.lblReplacePattern = new System.Windows.Forms.Label();
-            this.txtSearchKeyword = new System.Windows.Forms.TextBox();
-            this.lblSearchKeyword = new System.Windows.Forms.Label();
-            this.txtStride = new System.Windows.Forms.TextBox();
-            this.lblStride = new System.Windows.Forms.Label();
-            this.txtCopies = new System.Windows.Forms.TextBox();
-            this.lblCopies = new System.Windows.Forms.Label();
-            this.btnCancel = new System.Windows.Forms.Button();
-            this.btnOK = new System.Windows.Forms.Button();
-            ((System.ComponentModel.ISupportInitialize)(this.splitMain)).BeginInit();
-            this.splitMain.Panel1.SuspendLayout();
-            this.splitMain.Panel2.SuspendLayout();
-            this.splitMain.SuspendLayout();
-            this.panelFilter.SuspendLayout();
-            this.groupBoxSettings.SuspendLayout();
-            this.SuspendLayout();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(BatchNoteMultiplierForm));
+            splitMain = new SplitContainer();
+            clbNotes = new CheckedListBox();
+            panelFilter = new Panel();
+            btnSelectNone = new Button();
+            btnSelectAll = new Button();
+            txtFilter = new TextBox();
+            lblFilter = new Label();
+            groupBoxSettings = new GroupBox();
+            lblStartNum = new Label();
+            txtStartNum = new TextBox();
+            lblReplaceHint = new Label();
+            txtReplacePattern = new TextBox();
+            lblReplacePattern = new Label();
+            txtSearchKeyword = new TextBox();
+            lblSearchKeyword = new Label();
+            txtStride = new TextBox();
+            lblStride = new Label();
+            txtCopies = new TextBox();
+            lblCopies = new Label();
+            btnCancel = new Button();
+            btnOK = new Button();
+            ((System.ComponentModel.ISupportInitialize)splitMain).BeginInit();
+            splitMain.Panel1.SuspendLayout();
+            splitMain.Panel2.SuspendLayout();
+            splitMain.SuspendLayout();
+            panelFilter.SuspendLayout();
+            groupBoxSettings.SuspendLayout();
+            SuspendLayout();
             // 
             // splitMain
             // 
-            this.splitMain.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.splitMain.FixedPanel = System.Windows.Forms.FixedPanel.Panel2;
-            this.splitMain.Location = new System.Drawing.Point(0, 0);
-            this.splitMain.Name = "splitMain";
+            splitMain.Dock = DockStyle.Fill;
+            splitMain.FixedPanel = FixedPanel.Panel2;
+            splitMain.Location = new Point(0, 0);
+            splitMain.Name = "splitMain";
             // 
             // splitMain.Panel1
             // 
-            this.splitMain.Panel1.Controls.Add(this.clbNotes);
-            this.splitMain.Panel1.Controls.Add(this.panelFilter);
-            this.splitMain.Panel1.Padding = new System.Windows.Forms.Padding(5);
+            splitMain.Panel1.Controls.Add(clbNotes);
+            splitMain.Panel1.Controls.Add(panelFilter);
+            splitMain.Panel1.Padding = new Padding(5);
             // 
             // splitMain.Panel2
             // 
-            this.splitMain.Panel2.Controls.Add(this.groupBoxSettings);
-            this.splitMain.Panel2.Controls.Add(this.btnCancel);
-            this.splitMain.Panel2.Controls.Add(this.btnOK);
-            this.splitMain.Panel2.Padding = new System.Windows.Forms.Padding(5);
-            this.splitMain.Size = new System.Drawing.Size(684, 361);
-            this.splitMain.SplitterDistance = 384;
-            this.splitMain.TabIndex = 0;
+            splitMain.Panel2.Controls.Add(groupBoxSettings);
+            splitMain.Panel2.Controls.Add(btnCancel);
+            splitMain.Panel2.Controls.Add(btnOK);
+            splitMain.Panel2.Padding = new Padding(5);
+            splitMain.Size = new Size(684, 361);
+            splitMain.SplitterDistance = 384;
+            splitMain.TabIndex = 0;
             // 
             // clbNotes
             // 
-            this.clbNotes.CheckOnClick = true;
-            this.clbNotes.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.clbNotes.FormattingEnabled = true;
-            this.clbNotes.Location = new System.Drawing.Point(5, 60);
-            this.clbNotes.Name = "clbNotes";
-            this.clbNotes.Size = new System.Drawing.Size(374, 296);
-            this.clbNotes.TabIndex = 1;
+            clbNotes.CheckOnClick = true;
+            clbNotes.Dock = DockStyle.Fill;
+            clbNotes.FormattingEnabled = true;
+            clbNotes.Location = new Point(5, 60);
+            clbNotes.Name = "clbNotes";
+            clbNotes.Size = new Size(374, 296);
+            clbNotes.TabIndex = 1;
             // 
             // panelFilter
             // 
-            this.panelFilter.Controls.Add(this.btnSelectNone);
-            this.panelFilter.Controls.Add(this.btnSelectAll);
-            this.panelFilter.Controls.Add(this.txtFilter);
-            this.panelFilter.Controls.Add(this.lblFilter);
-            this.panelFilter.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelFilter.Location = new System.Drawing.Point(5, 5);
-            this.panelFilter.Name = "panelFilter";
-            this.panelFilter.Size = new System.Drawing.Size(374, 55);
-            this.panelFilter.TabIndex = 0;
+            panelFilter.Controls.Add(btnSelectNone);
+            panelFilter.Controls.Add(btnSelectAll);
+            panelFilter.Controls.Add(txtFilter);
+            panelFilter.Controls.Add(lblFilter);
+            panelFilter.Dock = DockStyle.Top;
+            panelFilter.Location = new Point(5, 5);
+            panelFilter.Name = "panelFilter";
+            panelFilter.Size = new Size(374, 55);
+            panelFilter.TabIndex = 0;
             // 
             // btnSelectNone
             // 
-            this.btnSelectNone.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnSelectNone.Location = new System.Drawing.Point(286, 26);
-            this.btnSelectNone.Name = "btnSelectNone";
-            this.btnSelectNone.Size = new System.Drawing.Size(85, 23);
-            this.btnSelectNone.TabIndex = 3;
-            this.btnSelectNone.Text = "Select None";
-            this.btnSelectNone.UseVisualStyleBackColor = true;
-            this.btnSelectNone.Click += new System.EventHandler(this.btnSelectNone_Click);
+            btnSelectNone.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnSelectNone.Location = new Point(286, 26);
+            btnSelectNone.Name = "btnSelectNone";
+            btnSelectNone.Size = new Size(85, 23);
+            btnSelectNone.TabIndex = 3;
+            btnSelectNone.Text = "Select None";
+            btnSelectNone.UseVisualStyleBackColor = true;
+            btnSelectNone.Click += btnSelectNone_Click;
             // 
             // btnSelectAll
             // 
-            this.btnSelectAll.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnSelectAll.Location = new System.Drawing.Point(205, 26);
-            this.btnSelectAll.Name = "btnSelectAll";
-            this.btnSelectAll.Size = new System.Drawing.Size(75, 23);
-            this.btnSelectAll.TabIndex = 2;
-            this.btnSelectAll.Text = "Select All";
-            this.btnSelectAll.UseVisualStyleBackColor = true;
-            this.btnSelectAll.Click += new System.EventHandler(this.btnSelectAll_Click);
+            btnSelectAll.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnSelectAll.Location = new Point(205, 26);
+            btnSelectAll.Name = "btnSelectAll";
+            btnSelectAll.Size = new Size(75, 23);
+            btnSelectAll.TabIndex = 2;
+            btnSelectAll.Text = "Select All";
+            btnSelectAll.UseVisualStyleBackColor = true;
+            btnSelectAll.Click += btnSelectAll_Click;
             // 
             // txtFilter
             // 
-            this.txtFilter.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtFilter.Location = new System.Drawing.Point(82, 3);
-            this.txtFilter.Name = "txtFilter";
-            this.txtFilter.Size = new System.Drawing.Size(289, 23);
-            this.txtFilter.TabIndex = 1;
-            this.txtFilter.TextChanged += new System.EventHandler(this.txtFilter_TextChanged);
+            txtFilter.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtFilter.Location = new Point(82, 3);
+            txtFilter.Name = "txtFilter";
+            txtFilter.Size = new Size(289, 23);
+            txtFilter.TabIndex = 1;
+            txtFilter.TextChanged += txtFilter_TextChanged;
             // 
             // lblFilter
             // 
-            this.lblFilter.AutoSize = true;
-            this.lblFilter.Location = new System.Drawing.Point(3, 6);
-            this.lblFilter.Name = "lblFilter";
-            this.lblFilter.Size = new System.Drawing.Size(73, 15);
-            this.lblFilter.TabIndex = 0;
-            this.lblFilter.Text = "Filter Notes:";
+            lblFilter.AutoSize = true;
+            lblFilter.Location = new Point(3, 6);
+            lblFilter.Name = "lblFilter";
+            lblFilter.Size = new Size(70, 15);
+            lblFilter.TabIndex = 0;
+            lblFilter.Text = "Filter Notes:";
             // 
             // groupBoxSettings
             // 
-            this.groupBoxSettings.Controls.Add(this.lblStartNum);
-            this.groupBoxSettings.Controls.Add(this.txtStartNum);
-            this.groupBoxSettings.Controls.Add(this.lblReplaceHint);
-            this.groupBoxSettings.Controls.Add(this.txtReplacePattern);
-            this.groupBoxSettings.Controls.Add(this.lblReplacePattern);
-            this.groupBoxSettings.Controls.Add(this.txtSearchKeyword);
-            this.groupBoxSettings.Controls.Add(this.lblSearchKeyword);
-            this.groupBoxSettings.Controls.Add(this.txtStride);
-            this.groupBoxSettings.Controls.Add(this.lblStride);
-            this.groupBoxSettings.Controls.Add(this.txtCopies);
-            this.groupBoxSettings.Controls.Add(this.lblCopies);
-            this.groupBoxSettings.Dock = System.Windows.Forms.DockStyle.Top;
-            this.groupBoxSettings.Location = new System.Drawing.Point(5, 5);
-            this.groupBoxSettings.Name = "groupBoxSettings";
-            this.groupBoxSettings.Size = new System.Drawing.Size(286, 230);
-            this.groupBoxSettings.TabIndex = 0;
-            this.groupBoxSettings.TabStop = false;
-            this.groupBoxSettings.Text = "Multiplication Settings";
+            groupBoxSettings.Controls.Add(lblStartNum);
+            groupBoxSettings.Controls.Add(txtStartNum);
+            groupBoxSettings.Controls.Add(lblReplaceHint);
+            groupBoxSettings.Controls.Add(txtReplacePattern);
+            groupBoxSettings.Controls.Add(lblReplacePattern);
+            groupBoxSettings.Controls.Add(txtSearchKeyword);
+            groupBoxSettings.Controls.Add(lblSearchKeyword);
+            groupBoxSettings.Controls.Add(txtStride);
+            groupBoxSettings.Controls.Add(lblStride);
+            groupBoxSettings.Controls.Add(txtCopies);
+            groupBoxSettings.Controls.Add(lblCopies);
+            groupBoxSettings.Dock = DockStyle.Top;
+            groupBoxSettings.Location = new Point(5, 5);
+            groupBoxSettings.Name = "groupBoxSettings";
+            groupBoxSettings.Size = new Size(286, 230);
+            groupBoxSettings.TabIndex = 0;
+            groupBoxSettings.TabStop = false;
+            groupBoxSettings.Text = "Multiplication Settings";
             // 
             // lblStartNum
             // 
-            this.lblStartNum.AutoSize = true;
-            this.lblStartNum.Location = new System.Drawing.Point(15, 87);
-            this.lblStartNum.Name = "lblStartNum";
-            this.lblStartNum.Size = new System.Drawing.Size(99, 15);
-            this.lblStartNum.TabIndex = 4;
-            this.lblStartNum.Text = "Starting Number:";
+            lblStartNum.AutoSize = true;
+            lblStartNum.Location = new Point(15, 87);
+            lblStartNum.Name = "lblStartNum";
+            lblStartNum.Size = new Size(98, 15);
+            lblStartNum.TabIndex = 4;
+            lblStartNum.Text = "Starting Number:";
             // 
             // txtStartNum
             // 
-            this.txtStartNum.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtStartNum.Location = new System.Drawing.Point(120, 84);
-            this.txtStartNum.Name = "txtStartNum";
-            this.txtStartNum.Size = new System.Drawing.Size(150, 23);
-            this.txtStartNum.TabIndex = 5;
-            this.txtStartNum.Text = "2";
+            txtStartNum.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtStartNum.Location = new Point(120, 84);
+            txtStartNum.Name = "txtStartNum";
+            txtStartNum.Size = new Size(150, 23);
+            txtStartNum.TabIndex = 5;
+            txtStartNum.Text = "2";
             // 
             // lblReplaceHint
             // 
-            this.lblReplaceHint.AutoSize = true;
-            this.lblReplaceHint.ForeColor = System.Drawing.SystemColors.GrayText;
-            this.lblReplaceHint.Location = new System.Drawing.Point(120, 199);
-            this.lblReplaceHint.Name = "lblReplaceHint";
-            this.lblReplaceHint.Size = new System.Drawing.Size(147, 15);
-            this.lblReplaceHint.TabIndex = 10;
-            this.lblReplaceHint.Text = "(Use {N} for slot number)";
+            lblReplaceHint.AutoSize = true;
+            lblReplaceHint.ForeColor = SystemColors.GrayText;
+            lblReplaceHint.Location = new Point(120, 199);
+            lblReplaceHint.Name = "lblReplaceHint";
+            lblReplaceHint.Size = new Size(139, 15);
+            lblReplaceHint.TabIndex = 10;
+            lblReplaceHint.Text = "(Use {N} for slot number)";
             // 
             // txtReplacePattern
             // 
-            this.txtReplacePattern.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtReplacePattern.Location = new System.Drawing.Point(120, 173);
-            this.txtReplacePattern.Name = "txtReplacePattern";
-            this.txtReplacePattern.Size = new System.Drawing.Size(150, 23);
-            this.txtReplacePattern.TabIndex = 9;
+            txtReplacePattern.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtReplacePattern.Location = new Point(120, 173);
+            txtReplacePattern.Name = "txtReplacePattern";
+            txtReplacePattern.Size = new Size(150, 23);
+            txtReplacePattern.TabIndex = 9;
             // 
             // lblReplacePattern
             // 
-            this.lblReplacePattern.AutoSize = true;
-            this.lblReplacePattern.Location = new System.Drawing.Point(15, 176);
-            this.lblReplacePattern.Name = "lblReplacePattern";
-            this.lblReplacePattern.Size = new System.Drawing.Size(78, 15);
-            this.lblReplacePattern.TabIndex = 8;
-            this.lblReplacePattern.Text = "Replace With:";
+            lblReplacePattern.AutoSize = true;
+            lblReplacePattern.Location = new Point(15, 176);
+            lblReplacePattern.Name = "lblReplacePattern";
+            lblReplacePattern.Size = new Size(79, 15);
+            lblReplacePattern.TabIndex = 8;
+            lblReplacePattern.Text = "Replace With:";
             // 
             // txtSearchKeyword
             // 
-            this.txtSearchKeyword.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtSearchKeyword.Location = new System.Drawing.Point(120, 144);
-            this.txtSearchKeyword.Name = "txtSearchKeyword";
-            this.txtSearchKeyword.Size = new System.Drawing.Size(150, 23);
-            this.txtSearchKeyword.TabIndex = 7;
+            txtSearchKeyword.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtSearchKeyword.Location = new Point(120, 144);
+            txtSearchKeyword.Name = "txtSearchKeyword";
+            txtSearchKeyword.Size = new Size(150, 23);
+            txtSearchKeyword.TabIndex = 7;
             // 
             // lblSearchKeyword
             // 
-            this.lblSearchKeyword.AutoSize = true;
-            this.lblSearchKeyword.Location = new System.Drawing.Point(15, 147);
-            this.lblSearchKeyword.Name = "lblSearchKeyword";
-            this.lblSearchKeyword.Size = new System.Drawing.Size(100, 15);
-            this.lblSearchKeyword.TabIndex = 6;
-            this.lblSearchKeyword.Text = "Search Keyword:";
+            lblSearchKeyword.AutoSize = true;
+            lblSearchKeyword.Location = new Point(15, 147);
+            lblSearchKeyword.Name = "lblSearchKeyword";
+            lblSearchKeyword.Size = new Size(94, 15);
+            lblSearchKeyword.TabIndex = 6;
+            lblSearchKeyword.Text = "Search Keyword:";
             // 
             // txtStride
             // 
-            this.txtStride.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtStride.Location = new System.Drawing.Point(120, 55);
-            this.txtStride.Name = "txtStride";
-            this.txtStride.Size = new System.Drawing.Size(150, 23);
-            this.txtStride.TabIndex = 3;
-            this.txtStride.Text = "0x0";
+            txtStride.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtStride.Location = new Point(120, 55);
+            txtStride.Name = "txtStride";
+            txtStride.Size = new Size(150, 23);
+            txtStride.TabIndex = 3;
+            txtStride.Text = "0x0";
             // 
             // lblStride
             // 
-            this.lblStride.AutoSize = true;
-            this.lblStride.Location = new System.Drawing.Point(15, 58);
-            this.lblStride.Name = "lblStride";
-            this.lblStride.Size = new System.Drawing.Size(73, 15);
-            this.lblStride.TabIndex = 2;
-            this.lblStride.Text = "Stride (Hex):";
+            lblStride.AutoSize = true;
+            lblStride.Location = new Point(15, 58);
+            lblStride.Name = "lblStride";
+            lblStride.Size = new Size(72, 15);
+            lblStride.TabIndex = 2;
+            lblStride.Text = "Stride (Hex):";
             // 
             // txtCopies
             // 
-            this.txtCopies.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtCopies.Location = new System.Drawing.Point(120, 26);
-            this.txtCopies.Name = "txtCopies";
-            this.txtCopies.Size = new System.Drawing.Size(150, 23);
-            this.txtCopies.TabIndex = 1;
-            this.txtCopies.Text = "1";
+            txtCopies.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtCopies.Location = new Point(120, 26);
+            txtCopies.Name = "txtCopies";
+            txtCopies.Size = new Size(150, 23);
+            txtCopies.TabIndex = 1;
+            txtCopies.Text = "1";
             // 
             // lblCopies
             // 
-            this.lblCopies.AutoSize = true;
-            this.lblCopies.Location = new System.Drawing.Point(15, 29);
-            this.lblCopies.Name = "lblCopies";
-            this.lblCopies.Size = new System.Drawing.Size(46, 15);
-            this.lblCopies.TabIndex = 0;
-            this.lblCopies.Text = "Copies:";
+            lblCopies.AutoSize = true;
+            lblCopies.Location = new Point(15, 29);
+            lblCopies.Name = "lblCopies";
+            lblCopies.Size = new Size(46, 15);
+            lblCopies.TabIndex = 0;
+            lblCopies.Text = "Copies:";
             // 
             // btnCancel
             // 
-            this.btnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnCancel.Location = new System.Drawing.Point(206, 326);
-            this.btnCancel.Name = "btnCancel";
-            this.btnCancel.Size = new System.Drawing.Size(75, 25);
-            this.btnCancel.TabIndex = 2;
-            this.btnCancel.Text = "Cancel";
-            this.btnCancel.UseVisualStyleBackColor = true;
-            this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
+            btnCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btnCancel.Location = new Point(206, 326);
+            btnCancel.Name = "btnCancel";
+            btnCancel.Size = new Size(75, 25);
+            btnCancel.TabIndex = 2;
+            btnCancel.Text = "Cancel";
+            btnCancel.UseVisualStyleBackColor = true;
+            btnCancel.Click += btnCancel_Click;
             // 
             // btnOK
             // 
-            this.btnOK.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnOK.Location = new System.Drawing.Point(125, 326);
-            this.btnOK.Name = "btnOK";
-            this.btnOK.Size = new System.Drawing.Size(75, 25);
-            this.btnOK.TabIndex = 1;
-            this.btnOK.Text = "OK";
-            this.btnOK.UseVisualStyleBackColor = true;
-            this.btnOK.Click += new System.EventHandler(this.btnOK_Click);
+            btnOK.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btnOK.Location = new Point(125, 326);
+            btnOK.Name = "btnOK";
+            btnOK.Size = new Size(75, 25);
+            btnOK.TabIndex = 1;
+            btnOK.Text = "OK";
+            btnOK.UseVisualStyleBackColor = true;
+            btnOK.Click += btnOK_Click;
             // 
             // BatchNoteMultiplierForm
             // 
-            this.AcceptButton = this.btnOK;
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.CancelButton = this.btnCancel;
-            this.ClientSize = new System.Drawing.Size(684, 361);
-            this.Controls.Add(this.splitMain);
-            this.MinimumSize = new System.Drawing.Size(600, 350);
-            this.Name = "BatchNoteMultiplierForm";
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.Text = "Batch Note Multiplier";
-            this.splitMain.Panel1.ResumeLayout(false);
-            this.splitMain.Panel2.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.splitMain)).EndInit();
-            this.splitMain.ResumeLayout(false);
-            this.panelFilter.ResumeLayout(false);
-            this.panelFilter.PerformLayout();
-            this.groupBoxSettings.ResumeLayout(false);
-            this.groupBoxSettings.PerformLayout();
-            this.ResumeLayout(false);
+            AcceptButton = btnOK;
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            CancelButton = btnCancel;
+            ClientSize = new Size(684, 361);
+            Controls.Add(splitMain);
+            Icon = (Icon)resources.GetObject("$this.Icon");
+            MinimumSize = new Size(600, 350);
+            Name = "BatchNoteMultiplierForm";
+            StartPosition = FormStartPosition.CenterParent;
+            Text = "Batch Note Multiplier";
+            splitMain.Panel1.ResumeLayout(false);
+            splitMain.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)splitMain).EndInit();
+            splitMain.ResumeLayout(false);
+            panelFilter.ResumeLayout(false);
+            panelFilter.PerformLayout();
+            groupBoxSettings.ResumeLayout(false);
+            groupBoxSettings.PerformLayout();
+            ResumeLayout(false);
 
         }
 

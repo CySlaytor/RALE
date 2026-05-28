@@ -12,121 +12,123 @@
 
         private void InitializeComponent()
         {
-            this.splitDiff = new System.Windows.Forms.SplitContainer();
-            this.rtbServer = new System.Windows.Forms.RichTextBox();
-            this.lblServer = new System.Windows.Forms.Label();
-            this.rtbLocal = new System.Windows.Forms.RichTextBox();
-            this.lblLocal = new System.Windows.Forms.Label();
-            this.lblStats = new System.Windows.Forms.Label();
-            ((System.ComponentModel.ISupportInitialize)(this.splitDiff)).BeginInit();
-            this.splitDiff.Panel1.SuspendLayout();
-            this.splitDiff.Panel2.SuspendLayout();
-            this.splitDiff.SuspendLayout();
-            this.SuspendLayout();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(AssetDiffForm));
+            splitDiff = new SplitContainer();
+            rtbServer = new RichTextBox();
+            lblServer = new Label();
+            rtbLocal = new RichTextBox();
+            lblLocal = new Label();
+            lblStats = new Label();
+            ((System.ComponentModel.ISupportInitialize)splitDiff).BeginInit();
+            splitDiff.Panel1.SuspendLayout();
+            splitDiff.Panel2.SuspendLayout();
+            splitDiff.SuspendLayout();
+            SuspendLayout();
             // 
             // splitDiff
             // 
-            this.splitDiff.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.splitDiff.Location = new System.Drawing.Point(0, 0);
-            this.splitDiff.Name = "splitDiff";
+            splitDiff.Dock = DockStyle.Fill;
+            splitDiff.Location = new Point(0, 0);
+            splitDiff.Name = "splitDiff";
             // 
             // splitDiff.Panel1
             // 
-            this.splitDiff.Panel1.Controls.Add(this.rtbServer);
-            this.splitDiff.Panel1.Controls.Add(this.lblServer);
-            this.splitDiff.Panel1.Padding = new System.Windows.Forms.Padding(5);
+            splitDiff.Panel1.Controls.Add(rtbServer);
+            splitDiff.Panel1.Controls.Add(lblServer);
+            splitDiff.Panel1.Padding = new Padding(5);
             // 
             // splitDiff.Panel2
             // 
-            this.splitDiff.Panel2.Controls.Add(this.rtbLocal);
-            this.splitDiff.Panel2.Controls.Add(this.lblLocal);
-            this.splitDiff.Panel2.Padding = new System.Windows.Forms.Padding(5);
-            this.splitDiff.Size = new System.Drawing.Size(900, 500);
-            this.splitDiff.SplitterDistance = 448;
-            this.splitDiff.TabIndex = 0;
+            splitDiff.Panel2.Controls.Add(rtbLocal);
+            splitDiff.Panel2.Controls.Add(lblLocal);
+            splitDiff.Panel2.Padding = new Padding(5);
+            splitDiff.Size = new Size(900, 500);
+            splitDiff.SplitterDistance = 446;
+            splitDiff.TabIndex = 0;
             // 
             // rtbServer
             // 
-            this.rtbServer.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(30)))), ((int)(((byte)(30)))));
-            this.rtbServer.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.rtbServer.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.rtbServer.Font = new System.Drawing.Font("Consolas", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            this.rtbServer.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.rtbServer.Location = new System.Drawing.Point(5, 20);
-            this.rtbServer.Name = "rtbServer";
-            this.rtbServer.ReadOnly = true;
-            this.rtbServer.Size = new System.Drawing.Size(438, 475);
-            this.rtbServer.TabIndex = 1;
-            this.rtbServer.Text = "";
-            this.rtbServer.WordWrap = false;
+            rtbServer.BackColor = Color.FromArgb(30, 30, 30);
+            rtbServer.BorderStyle = BorderStyle.None;
+            rtbServer.Dock = DockStyle.Fill;
+            rtbServer.Font = new Font("Consolas", 10F);
+            rtbServer.ForeColor = Color.WhiteSmoke;
+            rtbServer.Location = new Point(5, 20);
+            rtbServer.Name = "rtbServer";
+            rtbServer.ReadOnly = true;
+            rtbServer.Size = new Size(436, 475);
+            rtbServer.TabIndex = 1;
+            rtbServer.Text = "";
+            rtbServer.WordWrap = false;
             // 
             // lblServer
             // 
-            this.lblServer.AutoSize = true;
-            this.lblServer.Dock = System.Windows.Forms.DockStyle.Top;
-            this.lblServer.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
-            this.lblServer.Location = new System.Drawing.Point(5, 5);
-            this.lblServer.Name = "lblServer";
-            this.lblServer.Size = new System.Drawing.Size(73, 15);
-            this.lblServer.TabIndex = 0;
-            this.lblServer.Text = "Server Data";
+            lblServer.AutoSize = true;
+            lblServer.Dock = DockStyle.Top;
+            lblServer.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            lblServer.Location = new Point(5, 5);
+            lblServer.Name = "lblServer";
+            lblServer.Size = new Size(74, 15);
+            lblServer.TabIndex = 0;
+            lblServer.Text = "Server Data";
             // 
             // rtbLocal
             // 
-            this.rtbLocal.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(30)))), ((int)(((byte)(30)))));
-            this.rtbLocal.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.rtbLocal.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.rtbLocal.Font = new System.Drawing.Font("Consolas", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            this.rtbLocal.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.rtbLocal.Location = new System.Drawing.Point(5, 20);
-            this.rtbLocal.Name = "rtbLocal";
-            this.rtbLocal.ReadOnly = true;
-            this.rtbLocal.Size = new System.Drawing.Size(438, 475);
-            this.rtbLocal.TabIndex = 1;
-            this.rtbLocal.Text = "";
-            this.rtbLocal.WordWrap = false;
+            rtbLocal.BackColor = Color.FromArgb(30, 30, 30);
+            rtbLocal.BorderStyle = BorderStyle.None;
+            rtbLocal.Dock = DockStyle.Fill;
+            rtbLocal.Font = new Font("Consolas", 10F);
+            rtbLocal.ForeColor = Color.WhiteSmoke;
+            rtbLocal.Location = new Point(5, 20);
+            rtbLocal.Name = "rtbLocal";
+            rtbLocal.ReadOnly = true;
+            rtbLocal.Size = new Size(440, 475);
+            rtbLocal.TabIndex = 1;
+            rtbLocal.Text = "";
+            rtbLocal.WordWrap = false;
             // 
             // lblLocal
             // 
-            this.lblLocal.AutoSize = true;
-            this.lblLocal.Dock = System.Windows.Forms.DockStyle.Top;
-            this.lblLocal.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
-            this.lblLocal.Location = new System.Drawing.Point(5, 5);
-            this.lblLocal.Name = "lblLocal";
-            this.lblLocal.Size = new System.Drawing.Size(64, 15);
-            this.lblLocal.TabIndex = 0;
-            this.lblLocal.Text = "Local Data";
+            lblLocal.AutoSize = true;
+            lblLocal.Dock = DockStyle.Top;
+            lblLocal.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            lblLocal.Location = new Point(5, 5);
+            lblLocal.Name = "lblLocal";
+            lblLocal.Size = new Size(64, 15);
+            lblLocal.TabIndex = 0;
+            lblLocal.Text = "Local Data";
             // 
             // lblStats
             // 
-            this.lblStats.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.lblStats.AutoSize = true;
-            this.lblStats.BackColor = System.Drawing.Color.Transparent;
-            this.lblStats.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            this.lblStats.Location = new System.Drawing.Point(12, 476);
-            this.lblStats.Name = "lblStats";
-            this.lblStats.Size = new System.Drawing.Size(99, 15);
-            this.lblStats.TabIndex = 2;
-            this.lblStats.Text = "Changes: +0 / -0";
+            lblStats.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            lblStats.AutoSize = true;
+            lblStats.BackColor = Color.Transparent;
+            lblStats.Font = new Font("Segoe UI", 9F);
+            lblStats.Location = new Point(12, 476);
+            lblStats.Name = "lblStats";
+            lblStats.Size = new Size(95, 15);
+            lblStats.TabIndex = 2;
+            lblStats.Text = "Changes: +0 / -0";
             // 
             // AssetDiffForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(900, 500);
-            this.Controls.Add(this.lblStats);
-            this.Controls.Add(this.splitDiff);
-            this.Name = "AssetDiffForm";
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.Text = "Asset Diff Viewer";
-            this.splitDiff.Panel1.ResumeLayout(false);
-            this.splitDiff.Panel1.PerformLayout();
-            this.splitDiff.Panel2.ResumeLayout(false);
-            this.splitDiff.Panel2.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.splitDiff)).EndInit();
-            this.splitDiff.ResumeLayout(false);
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(900, 500);
+            Controls.Add(lblStats);
+            Controls.Add(splitDiff);
+            Icon = (Icon)resources.GetObject("$this.Icon");
+            Name = "AssetDiffForm";
+            StartPosition = FormStartPosition.CenterParent;
+            Text = "Asset Diff Viewer";
+            splitDiff.Panel1.ResumeLayout(false);
+            splitDiff.Panel1.PerformLayout();
+            splitDiff.Panel2.ResumeLayout(false);
+            splitDiff.Panel2.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)splitDiff).EndInit();
+            splitDiff.ResumeLayout(false);
+            ResumeLayout(false);
+            PerformLayout();
 
         }
 

@@ -13,6 +13,7 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             mainMenu = new MenuStrip();
             fileToolStripMenuItem = new ToolStripMenuItem();
             openToolStripMenuItem = new ToolStripMenuItem();
@@ -115,7 +116,7 @@
             // 
             // editToolStripMenuItem
             // 
-            editToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { undoToolStripMenuItem, redoToolStripMenuItem, new ToolStripSeparator(), renumberLocalIDsToolStripMenuItem, new ToolStripSeparator(), clearDataResetToolStripMenuItem });
+            editToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { undoToolStripMenuItem, redoToolStripMenuItem, renumberLocalIDsToolStripMenuItem, clearDataResetToolStripMenuItem });
             editToolStripMenuItem.Name = "editToolStripMenuItem";
             editToolStripMenuItem.Size = new Size(39, 20);
             editToolStripMenuItem.Text = "&Edit";
@@ -124,7 +125,7 @@
             // 
             undoToolStripMenuItem.Name = "undoToolStripMenuItem";
             undoToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Z;
-            undoToolStripMenuItem.Size = new Size(180, 22);
+            undoToolStripMenuItem.Size = new Size(179, 22);
             undoToolStripMenuItem.Text = "Undo";
             undoToolStripMenuItem.Click += Undo_Click;
             // 
@@ -132,20 +133,20 @@
             // 
             redoToolStripMenuItem.Name = "redoToolStripMenuItem";
             redoToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.Y;
-            redoToolStripMenuItem.Size = new Size(180, 22);
+            redoToolStripMenuItem.Size = new Size(179, 22);
             redoToolStripMenuItem.Text = "Redo";
             redoToolStripMenuItem.Click += Redo_Click;
             // 
             // renumberLocalIDsToolStripMenuItem
             // 
             renumberLocalIDsToolStripMenuItem.Name = "renumberLocalIDsToolStripMenuItem";
-            renumberLocalIDsToolStripMenuItem.Size = new Size(180, 22);
+            renumberLocalIDsToolStripMenuItem.Size = new Size(179, 22);
             renumberLocalIDsToolStripMenuItem.Text = "Renumber Local IDs";
             // 
             // clearDataResetToolStripMenuItem
             // 
             clearDataResetToolStripMenuItem.Name = "clearDataResetToolStripMenuItem";
-            clearDataResetToolStripMenuItem.Size = new Size(180, 22);
+            clearDataResetToolStripMenuItem.Size = new Size(179, 22);
             clearDataResetToolStripMenuItem.Text = "Clear Data / Reset...";
             // 
             // viewToolStripMenuItem
@@ -159,7 +160,7 @@
             // 
             viewReviewerToolStripMenuItem.Name = "viewReviewerToolStripMenuItem";
             viewReviewerToolStripMenuItem.ShortcutKeys = Keys.F8;
-            viewReviewerToolStripMenuItem.Size = new Size(180, 22);
+            viewReviewerToolStripMenuItem.Size = new Size(172, 22);
             viewReviewerToolStripMenuItem.Text = "Logic Reviewer";
             // 
             // splitMain
@@ -219,7 +220,7 @@
             // 
             assetContextMenu.Items.AddRange(new ToolStripItem[] { newAssetToolStripMenuItem, cloneAssetToolStripMenuItem, deleteAssetToolStripMenuItem, resetAssetToolStripMenuItem, toolStripSeparatorAsset, moveUpAssetToolStripMenuItem, moveDownAssetToolStripMenuItem, toolStripSeparatorOrder, restoreOrderToolStripMenuItem, toolStripSeparatorRenumber, renumberContextToolStripMenuItem, viewDiffToolStripMenuItem });
             assetContextMenu.Name = "assetContextMenu";
-            assetContextMenu.Size = new Size(200, 208);
+            assetContextMenu.Size = new Size(200, 220);
             // 
             // newAssetToolStripMenuItem
             // 
@@ -436,9 +437,12 @@
             // 
             // triggerEditor
             // 
+            triggerEditor.CollapseChains = false;
             triggerEditor.Dock = DockStyle.Fill;
             triggerEditor.Location = new Point(0, 0);
             triggerEditor.Name = "triggerEditor";
+            triggerEditor.ShowAliases = false;
+            triggerEditor.ShowDecimal = false;
             triggerEditor.Size = new Size(703, 400);
             triggerEditor.TabIndex = 0;
             // 
@@ -453,8 +457,10 @@
             // codeNoteEditor
             // 
             codeNoteEditor.Dock = DockStyle.Fill;
+            codeNoteEditor.IndentValues = true;
             codeNoteEditor.Location = new Point(0, 0);
             codeNoteEditor.Name = "codeNoteEditor";
+            codeNoteEditor.ShowLeafsOnly = false;
             codeNoteEditor.Size = new Size(229, 650);
             codeNoteEditor.TabIndex = 0;
             // 
@@ -465,6 +471,7 @@
             ClientSize = new Size(1200, 674);
             Controls.Add(splitMain);
             Controls.Add(mainMenu);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             MainMenuStrip = mainMenu;
             MinimumSize = new Size(1000, 650);
             Name = "MainForm";

@@ -12,219 +12,211 @@
 
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
-            this.dgvMapping = new System.Windows.Forms.DataGridView();
-            this.colBaseAddr = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colMappedAddr = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colMappedRegion = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colDesc = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.lblMapping = new System.Windows.Forms.Label();
-            this.btnOK = new System.Windows.Forms.Button();
-            this.btnCancel = new System.Windows.Forms.Button();
-            this.lblInstruction = new System.Windows.Forms.Label();
-            this.tabControlRegions = new System.Windows.Forms.TabControl();
-            this.ctxGridActions = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.pasteLogicToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.copyLogicToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.deleteRowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.btnHelp = new System.Windows.Forms.Button();
-            this.chkUpdateRP = new System.Windows.Forms.CheckBox();
-            this.chkUsePauseLocks = new System.Windows.Forms.CheckBox();
-            ((System.ComponentModel.ISupportInitialize)(this.dgvMapping)).BeginInit();
-            this.ctxGridActions.SuspendLayout();
-            this.SuspendLayout();
+            components = new System.ComponentModel.Container();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MultiRegionForm));
+            dgvMapping = new DataGridView();
+            colBaseAddr = new DataGridViewTextBoxColumn();
+            colMappedAddr = new DataGridViewTextBoxColumn();
+            colMappedRegion = new DataGridViewTextBoxColumn();
+            colDesc = new DataGridViewTextBoxColumn();
+            lblMapping = new Label();
+            btnOK = new Button();
+            btnCancel = new Button();
+            lblInstruction = new Label();
+            tabControlRegions = new TabControl();
+            ctxGridActions = new ContextMenuStrip(components);
+            pasteLogicToolStripMenuItem = new ToolStripMenuItem();
+            copyLogicToolStripMenuItem = new ToolStripMenuItem();
+            deleteRowToolStripMenuItem = new ToolStripMenuItem();
+            btnHelp = new Button();
+            chkUpdateRP = new CheckBox();
+            chkUsePauseLocks = new CheckBox();
+            ((System.ComponentModel.ISupportInitialize)dgvMapping).BeginInit();
+            ctxGridActions.SuspendLayout();
+            SuspendLayout();
             // 
             // dgvMapping
             // 
-            this.dgvMapping.AllowUserToAddRows = false;
-            this.dgvMapping.AllowUserToDeleteRows = false;
-            this.dgvMapping.AllowUserToResizeRows = false;
-            this.dgvMapping.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.dgvMapping.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.dgvMapping.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
-            this.colBaseAddr,
-            this.colMappedAddr,
-            this.colMappedRegion,
-            this.colDesc});
-            this.dgvMapping.Location = new System.Drawing.Point(12, 45);
-            this.dgvMapping.Name = "dgvMapping";
-            this.dgvMapping.ReadOnly = true;
-            this.dgvMapping.RowHeadersVisible = false;
-            this.dgvMapping.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.dgvMapping.Size = new System.Drawing.Size(760, 200);
-            this.dgvMapping.TabIndex = 0;
+            dgvMapping.AllowUserToAddRows = false;
+            dgvMapping.AllowUserToDeleteRows = false;
+            dgvMapping.AllowUserToResizeRows = false;
+            dgvMapping.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            dgvMapping.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dgvMapping.Columns.AddRange(new DataGridViewColumn[] { colBaseAddr, colMappedAddr, colMappedRegion, colDesc });
+            dgvMapping.Location = new Point(12, 45);
+            dgvMapping.Name = "dgvMapping";
+            dgvMapping.ReadOnly = true;
+            dgvMapping.RowHeadersVisible = false;
+            dgvMapping.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            dgvMapping.Size = new Size(760, 200);
+            dgvMapping.TabIndex = 0;
             // 
             // colBaseAddr
             // 
-            this.colBaseAddr.HeaderText = "Base Addr (Active)";
-            this.colBaseAddr.Name = "colBaseAddr";
-            this.colBaseAddr.ReadOnly = true;
-            this.colBaseAddr.Width = 120;
+            colBaseAddr.HeaderText = "Base Addr (Active)";
+            colBaseAddr.Name = "colBaseAddr";
+            colBaseAddr.ReadOnly = true;
+            colBaseAddr.Width = 120;
             // 
             // colMappedAddr
             // 
-            this.colMappedAddr.HeaderText = "Mapped Addr";
-            this.colMappedAddr.Name = "colMappedAddr";
-            this.colMappedAddr.ReadOnly = true;
-            this.colMappedAddr.Width = 120;
+            colMappedAddr.HeaderText = "Mapped Addr";
+            colMappedAddr.Name = "colMappedAddr";
+            colMappedAddr.ReadOnly = true;
+            colMappedAddr.Width = 120;
             // 
             // colMappedRegion
             // 
-            this.colMappedRegion.HeaderText = "Region";
-            this.colMappedRegion.Name = "colMappedRegion";
-            this.colMappedRegion.ReadOnly = true;
-            this.colMappedRegion.Width = 80;
+            colMappedRegion.HeaderText = "Region";
+            colMappedRegion.Name = "colMappedRegion";
+            colMappedRegion.ReadOnly = true;
+            colMappedRegion.Width = 80;
             // 
             // colDesc
             // 
-            this.colDesc.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.Fill;
-            this.colDesc.HeaderText = "Note Description";
-            this.colDesc.Name = "colDesc";
-            this.colDesc.ReadOnly = true;
+            colDesc.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            colDesc.HeaderText = "Note Description";
+            colDesc.Name = "colDesc";
+            colDesc.ReadOnly = true;
             // 
             // lblMapping
             // 
-            this.lblMapping.AutoSize = true;
-            this.lblMapping.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
-            this.lblMapping.Location = new System.Drawing.Point(12, 27);
-            this.lblMapping.Name = "lblMapping";
-            this.lblMapping.Size = new System.Drawing.Size(263, 15);
-            this.lblMapping.TabIndex = 1;
-            this.lblMapping.Text = "Detected Address Mappings (from Code Notes)";
+            lblMapping.AutoSize = true;
+            lblMapping.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            lblMapping.Location = new Point(12, 27);
+            lblMapping.Name = "lblMapping";
+            lblMapping.Size = new Size(269, 15);
+            lblMapping.TabIndex = 1;
+            lblMapping.Text = "Detected Address Mappings (from Code Notes)";
             // 
             // btnOK
             // 
-            this.btnOK.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnOK.Location = new System.Drawing.Point(616, 520);
-            this.btnOK.Name = "btnOK";
-            this.btnOK.Size = new System.Drawing.Size(75, 23);
-            this.btnOK.TabIndex = 4;
-            this.btnOK.Text = "Apply";
-            this.btnOK.UseVisualStyleBackColor = true;
-            this.btnOK.Click += new System.EventHandler(this.btnOK_Click);
+            btnOK.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btnOK.Location = new Point(616, 520);
+            btnOK.Name = "btnOK";
+            btnOK.Size = new Size(75, 23);
+            btnOK.TabIndex = 4;
+            btnOK.Text = "Apply";
+            btnOK.UseVisualStyleBackColor = true;
+            btnOK.Click += btnOK_Click;
             // 
             // btnCancel
             // 
-            this.btnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnCancel.Location = new System.Drawing.Point(697, 520);
-            this.btnCancel.Name = "btnCancel";
-            this.btnCancel.Size = new System.Drawing.Size(75, 23);
-            this.btnCancel.TabIndex = 5;
-            this.btnCancel.Text = "Cancel";
-            this.btnCancel.UseVisualStyleBackColor = true;
-            this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
+            btnCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btnCancel.Location = new Point(697, 520);
+            btnCancel.Name = "btnCancel";
+            btnCancel.Size = new Size(75, 23);
+            btnCancel.TabIndex = 5;
+            btnCancel.Text = "Cancel";
+            btnCancel.UseVisualStyleBackColor = true;
+            btnCancel.Click += btnCancel_Click;
             // 
             // lblInstruction
             // 
-            this.lblInstruction.AutoSize = true;
-            this.lblInstruction.ForeColor = System.Drawing.Color.DimGray;
-            this.lblInstruction.Location = new System.Drawing.Point(12, 9);
-            this.lblInstruction.Name = "lblInstruction";
-            this.lblInstruction.Size = new System.Drawing.Size(437, 15);
-            this.lblInstruction.TabIndex = 6;
-            this.lblInstruction.Text = "Detects regions from notes. Define specific locks for each region in the tabs below.";
+            lblInstruction.AutoSize = true;
+            lblInstruction.ForeColor = Color.DimGray;
+            lblInstruction.Location = new Point(12, 9);
+            lblInstruction.Name = "lblInstruction";
+            lblInstruction.Size = new Size(441, 15);
+            lblInstruction.TabIndex = 6;
+            lblInstruction.Text = "Detects regions from notes. Define specific locks for each region in the tabs below.";
             // 
             // tabControlRegions
             // 
-            this.tabControlRegions.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.tabControlRegions.Location = new System.Drawing.Point(12, 260);
-            this.tabControlRegions.Name = "tabControlRegions";
-            this.tabControlRegions.SelectedIndex = 0;
-            this.tabControlRegions.Size = new System.Drawing.Size(760, 250);
-            this.tabControlRegions.TabIndex = 7;
+            tabControlRegions.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            tabControlRegions.Location = new Point(12, 260);
+            tabControlRegions.Name = "tabControlRegions";
+            tabControlRegions.SelectedIndex = 0;
+            tabControlRegions.Size = new Size(760, 250);
+            tabControlRegions.TabIndex = 7;
             // 
             // ctxGridActions
             // 
-            this.ctxGridActions.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.pasteLogicToolStripMenuItem,
-            this.copyLogicToolStripMenuItem,
-            this.deleteRowToolStripMenuItem});
-            this.ctxGridActions.Name = "ctxGridActions";
-            this.ctxGridActions.Size = new System.Drawing.Size(133, 70);
+            ctxGridActions.Items.AddRange(new ToolStripItem[] { pasteLogicToolStripMenuItem, copyLogicToolStripMenuItem, deleteRowToolStripMenuItem });
+            ctxGridActions.Name = "ctxGridActions";
+            ctxGridActions.Size = new Size(176, 70);
             // 
             // pasteLogicToolStripMenuItem
             // 
-            this.pasteLogicToolStripMenuItem.Name = "pasteLogicToolStripMenuItem";
-            this.pasteLogicToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.V)));
-            this.pasteLogicToolStripMenuItem.Size = new System.Drawing.Size(132, 22);
-            this.pasteLogicToolStripMenuItem.Text = "Paste Logic";
+            pasteLogicToolStripMenuItem.Name = "pasteLogicToolStripMenuItem";
+            pasteLogicToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.V;
+            pasteLogicToolStripMenuItem.Size = new Size(175, 22);
+            pasteLogicToolStripMenuItem.Text = "Paste Logic";
             // 
             // copyLogicToolStripMenuItem
             // 
-            this.copyLogicToolStripMenuItem.Name = "copyLogicToolStripMenuItem";
-            this.copyLogicToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.C)));
-            this.copyLogicToolStripMenuItem.Size = new System.Drawing.Size(132, 22);
-            this.copyLogicToolStripMenuItem.Text = "Copy";
+            copyLogicToolStripMenuItem.Name = "copyLogicToolStripMenuItem";
+            copyLogicToolStripMenuItem.ShortcutKeys = Keys.Control | Keys.C;
+            copyLogicToolStripMenuItem.Size = new Size(175, 22);
+            copyLogicToolStripMenuItem.Text = "Copy";
             // 
             // deleteRowToolStripMenuItem
             // 
-            this.deleteRowToolStripMenuItem.Name = "deleteRowToolStripMenuItem";
-            this.deleteRowToolStripMenuItem.ShortcutKeys = System.Windows.Forms.Keys.Delete;
-            this.deleteRowToolStripMenuItem.Size = new System.Drawing.Size(132, 22);
-            this.deleteRowToolStripMenuItem.Text = "Delete Row";
+            deleteRowToolStripMenuItem.Name = "deleteRowToolStripMenuItem";
+            deleteRowToolStripMenuItem.ShortcutKeys = Keys.Delete;
+            deleteRowToolStripMenuItem.Size = new Size(175, 22);
+            deleteRowToolStripMenuItem.Text = "Delete Row";
             // 
             // btnHelp
             // 
-            this.btnHelp.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.btnHelp.Location = new System.Drawing.Point(12, 520);
-            this.btnHelp.Name = "btnHelp";
-            this.btnHelp.Size = new System.Drawing.Size(75, 23);
-            this.btnHelp.TabIndex = 8;
-            this.btnHelp.Text = "Help";
-            this.btnHelp.UseVisualStyleBackColor = true;
-            this.btnHelp.Click += new System.EventHandler(this.btnHelp_Click);
-            // 
-            // chkUsePauseLocks
-            // 
-            this.chkUsePauseLocks.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.chkUsePauseLocks.AutoSize = true;
-            this.chkUsePauseLocks.Checked = true;
-            this.chkUsePauseLocks.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.chkUsePauseLocks.Location = new System.Drawing.Point(100, 523);
-            this.chkUsePauseLocks.Name = "chkUsePauseLocks";
-            this.chkUsePauseLocks.Size = new System.Drawing.Size(155, 19);
-            this.chkUsePauseLocks.TabIndex = 10;
-            this.chkUsePauseLocks.Text = "Generate as PauseLocks";
-            this.chkUsePauseLocks.UseVisualStyleBackColor = true;
+            btnHelp.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            btnHelp.Location = new Point(12, 520);
+            btnHelp.Name = "btnHelp";
+            btnHelp.Size = new Size(75, 23);
+            btnHelp.TabIndex = 8;
+            btnHelp.Text = "Help";
+            btnHelp.UseVisualStyleBackColor = true;
+            btnHelp.Click += btnHelp_Click;
             // 
             // chkUpdateRP
             // 
-            this.chkUpdateRP.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.chkUpdateRP.AutoSize = true;
-            this.chkUpdateRP.Checked = true;
-            this.chkUpdateRP.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.chkUpdateRP.Location = new System.Drawing.Point(460, 523);
-            this.chkUpdateRP.Name = "chkUpdateRP";
-            this.chkUpdateRP.Size = new System.Drawing.Size(143, 19);
-            this.chkUpdateRP.TabIndex = 9;
-            this.chkUpdateRP.Text = "Update Rich Presence";
-            this.chkUpdateRP.UseVisualStyleBackColor = true;
+            chkUpdateRP.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            chkUpdateRP.AutoSize = true;
+            chkUpdateRP.Checked = true;
+            chkUpdateRP.CheckState = CheckState.Checked;
+            chkUpdateRP.Location = new Point(463, 523);
+            chkUpdateRP.Name = "chkUpdateRP";
+            chkUpdateRP.Size = new Size(140, 19);
+            chkUpdateRP.TabIndex = 9;
+            chkUpdateRP.Text = "Update Rich Presence";
+            chkUpdateRP.UseVisualStyleBackColor = true;
+            // 
+            // chkUsePauseLocks
+            // 
+            chkUsePauseLocks.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            chkUsePauseLocks.AutoSize = true;
+            chkUsePauseLocks.Checked = true;
+            chkUsePauseLocks.CheckState = CheckState.Checked;
+            chkUsePauseLocks.Location = new Point(100, 523);
+            chkUsePauseLocks.Name = "chkUsePauseLocks";
+            chkUsePauseLocks.Size = new Size(151, 19);
+            chkUsePauseLocks.TabIndex = 10;
+            chkUsePauseLocks.Text = "Generate as PauseLocks";
+            chkUsePauseLocks.UseVisualStyleBackColor = true;
             // 
             // MultiRegionForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(784, 555);
-            this.Controls.Add(this.chkUsePauseLocks);
-            this.Controls.Add(this.chkUpdateRP);
-            this.Controls.Add(this.btnHelp);
-            this.Controls.Add(this.tabControlRegions);
-            this.Controls.Add(this.lblInstruction);
-            this.Controls.Add(this.btnCancel);
-            this.Controls.Add(this.btnOK);
-            this.Controls.Add(this.lblMapping);
-            this.Controls.Add(this.dgvMapping);
-            this.MinimumSize = new System.Drawing.Size(800, 600);
-            this.Name = "MultiRegionForm";
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.Text = "Multi-Region Logic Generator";
-            ((System.ComponentModel.ISupportInitialize)(this.dgvMapping)).EndInit();
-            this.ctxGridActions.ResumeLayout(false);
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(784, 561);
+            Controls.Add(chkUsePauseLocks);
+            Controls.Add(chkUpdateRP);
+            Controls.Add(btnHelp);
+            Controls.Add(tabControlRegions);
+            Controls.Add(lblInstruction);
+            Controls.Add(btnCancel);
+            Controls.Add(btnOK);
+            Controls.Add(lblMapping);
+            Controls.Add(dgvMapping);
+            Icon = (Icon)resources.GetObject("$this.Icon");
+            MinimumSize = new Size(800, 600);
+            Name = "MultiRegionForm";
+            StartPosition = FormStartPosition.CenterParent;
+            Text = "Multi-Region Logic Generator";
+            ((System.ComponentModel.ISupportInitialize)dgvMapping).EndInit();
+            ctxGridActions.ResumeLayout(false);
+            ResumeLayout(false);
+            PerformLayout();
 
         }
 
