@@ -1,0 +1,58 @@
+name: Build and Release RALogicEditor
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Restore Dependencies
+      run: dotnet restore
+
+    - name: Publish Small Single File EXE
+      # We point directly to the .csproj to avoid the "Solution output" warning
+      # We use -p:SelfContained=false to ensure the runtime is NOT included
+      run: >
+        dotnet publish RALogicEditor.csproj -c Release -r win-x64 
+        -p:PublishSingleFile=true 
+        -p:PublishReadyToRun=false 
+        -p:SelfContained=false 
+        -o ./publish
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: RALogicEditor-v-Latest-Small
+        path: ./publish/RALogicEditor.exe
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ./publish/RALogicEditor.exe
+        name: Release ${{ github.ref_name }}
+        tag_name: ${{ github.ref }}
+        body: |
+          ### RALogicEditor - Version ${{ github.ref_name }}
+          
+          **Requirements:**
+          This is a **Framework Dependent** build (~2.5MB).
+          You must have the [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) installed to run this.
+        draft: false
+        prerelease: false
