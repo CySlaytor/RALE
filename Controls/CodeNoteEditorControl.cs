@@ -48,6 +48,18 @@ namespace RALogicEditor.Controls
             set => chkIndentValues.Checked = value;
         }
 
+        public string NoteIndentStyle
+        {
+            get => cmbIndentStyle.SelectedItem?.ToString() ?? "Unicode Tree (├─)";
+            set
+            {
+                if (cmbIndentStyle.Items.Contains(value))
+                {
+                    cmbIndentStyle.SelectedItem = value;
+                }
+            }
+        }
+
         public CodeNoteEditorControl()
         {
             InitializeComponent();

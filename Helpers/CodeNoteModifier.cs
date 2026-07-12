@@ -19,7 +19,7 @@ namespace RALogicEditor.Helpers
         public class NoteStyle
         {
             public IndentStyle Indentation { get; set; } = IndentStyle.Plus;
-            public SeparatorStyle Separator { get; set; } = SeparatorStyle.Space;
+            public SeparatorStyle Separator { get; set; } = SeparatorStyle.Pipe; // Changed from Space
 
             public string GetIndentString(int depth)
             {
@@ -190,7 +190,7 @@ namespace RALogicEditor.Helpers
             if (stats.PipeCount >= stats.EqCount && stats.PipeCount >= stats.ColCount && stats.PipeCount > 0) style.Separator = SeparatorStyle.Pipe;
             else if (stats.EqCount >= stats.PipeCount && stats.EqCount >= stats.ColCount && stats.EqCount > 0) style.Separator = SeparatorStyle.Equals;
             else if (stats.ColCount >= stats.PipeCount && stats.ColCount >= stats.EqCount && stats.ColCount > 0) style.Separator = SeparatorStyle.Colon;
-            else style.Separator = SeparatorStyle.Space;
+            else style.Separator = SeparatorStyle.Pipe; // Changed fallback from Space to Pipe
 
             if (style.Separator == SeparatorStyle.Space && !stats.HasSeparator)
                 style.Separator = SeparatorStyle.Pipe;

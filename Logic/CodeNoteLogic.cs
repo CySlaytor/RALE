@@ -32,7 +32,8 @@ namespace RALogicEditor.Logic
             if (style.StartsWith("Auto Detect") || string.IsNullOrEmpty(style))
             {
                 char detectedIndent = DetectIndentStyle(lines);
-                style = detectedIndent == '+' ? "Plusses (+)" : "Dots (.)";
+                if (detectedIndent == 'U') style = "Unicode Tree (├─)";
+                else style = detectedIndent == '.' ? "Dots (.)" : "Plusses (+)";
             }
 
             // 1. Parse the flat text into a tree structure.
@@ -47,13 +48,21 @@ namespace RALogicEditor.Logic
 
         private static char DetectIndentStyle(string[] lines)
         {
-            // If any line uses multiple '+' for indentation, prefer that style.
-            if (lines.Any(line => line.TrimStart().StartsWith("++")))
+            int plusCount = 0;
+            int dotCount = 0;
+            int unicodeCount = 0;
+
+            foreach (var line in lines)
             {
-                return '+';
+                string trimmed = line.TrimStart();
+                if (trimmed.StartsWith("++") || trimmed.StartsWith("+0x")) plusCount++;
+                else if (trimmed.StartsWith("..") || trimmed.StartsWith(".0x")) dotCount++;
+                else if (trimmed.Contains("├") || trimmed.Contains("└") || trimmed.Contains("│")) unicodeCount++;
             }
-            // Otherwise, default to dots.
-            return '.';
+
+            if (unicodeCount > plusCount && unicodeCount > dotCount) return 'U'; // Unicode
+            if (dotCount > plusCount) return '.'; // Dots
+            return '+'; // Default to pluses
         }
 
         private static List<CodeNoteNode> ParseLinesToTree(string[] lines)

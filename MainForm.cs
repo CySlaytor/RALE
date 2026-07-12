@@ -52,13 +52,14 @@ namespace RALogicEditor
 
         public MainForm()
         {
+            // Load UI settings first so they are available to controls during construction
+            AppSettings.Load();
+
             InitializeComponent();
 
             // Initialize services that require dependencies
             _batchProcessor = new MultiRegionBatchProcessor(_projectRepo.Metadata);
 
-            // Load UI settings (Window size, splitters)
-            AppSettings.Load();
             ApplySettings();
 
             // --- Event Wiring ---
@@ -362,6 +363,7 @@ namespace RALogicEditor
             triggerEditor.CollapseChains = AppSettings.Current.Trigger_CollapseChains;
             codeNoteEditor.ShowLeafsOnly = AppSettings.Current.Notes_ShowLeafsOnly;
             codeNoteEditor.IndentValues = AppSettings.Current.Notes_IndentValues;
+            codeNoteEditor.NoteIndentStyle = AppSettings.Current.NoteIndentStyle;
         }
 
         private void SaveSettings()
