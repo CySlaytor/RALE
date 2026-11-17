@@ -1,58 +1,83 @@
-name: Build and Release RALogicEditor
+name: Build and Package
 
 on:
   push:
+    branches: [ master, main ]
     tags:
       - 'v*'
+  pull_request:
+    branches: [ master, main ]
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   build:
-    runs-on: windows-latest
+    name: Build Windows x64 (MSVC 2022 + Qt 6)
+    runs-on: windows-2022
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
-    - name: Restore Dependencies
-      run: dotnet restore
+      - name: Install Qt 6.11.2
+        uses: jurplel/install-qt@v3
+        with:
+          version: '6.11.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          modules: 'qtimageformats qtsvg'
+          cache: true
 
-    - name: Publish Small Single File EXE
-      # We point directly to the .csproj to avoid the "Solution output" warning
-      # We use -p:SelfContained=false to ensure the runtime is NOT included
-      run: >
-        dotnet publish RALogicEditor.csproj -c Release -r win-x64 
-        -p:PublishSingleFile=true 
-        -p:PublishReadyToRun=false 
-        -p:SelfContained=false 
-        -o ./publish
+      - name: Configure CMake
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: RALogicEditor-v-Latest-Small
-        path: ./publish/RALogicEditor.exe
+      - name: Build Project
+        run: |
+          cmake --build build --config Release --parallel
 
-    - name: Create GitHub Release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ./publish/RALogicEditor.exe
-        name: Release ${{ github.ref_name }}
-        tag_name: ${{ github.ref }}
-        body: |
-          ### RALogicEditor - Version ${{ github.ref_name }}
-          
-          **Requirements:**
-          This is a **Framework Dependent** build (~2.5MB).
-          You must have the [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) installed to run this.
-        draft: false
-        prerelease: false
+      - name: Deploy Qt Dependencies (windeployqt)
+        shell: pwsh
+        run: |
+          $binDir = "build/Release"
+          $exePath = "$binDir/RALogicEditor.exe"
+
+          if (-not (Test-Path $exePath)) {
+            Write-Error "Executable not found at $exePath"
+            exit 1
+          }
+
+          # Run windeployqt
+          & "${{ env.Qt6_DIR }}/bin/windeployqt.exe" `
+            --no-compiler-runtime `
+            --no-opengl-sw `
+            --no-translations `
+            --plugindir "$binDir/plugins" `
+            $exePath
+
+          # Clean up unnecessary heavy shader DLLs
+          Remove-Item -Path "$binDir/dxcompiler.dll" -ErrorAction SilentlyContinue
+          Remove-Item -Path "$binDir/dxil.dll" -ErrorAction SilentlyContinue
+          Remove-Item -Path "$binDir/D3Dcompiler_47.dll" -ErrorAction SilentlyContinue
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RALogicEditor-Windows-x64
+          path: |
+            build/Release/
+            !build/Release/*.obj
+            !build/Release/*.pdb
+            !build/Release/*.ilk
+            !build/Release/*.exp
+            !build/Release/*.lib
+          if-no-files-found: error

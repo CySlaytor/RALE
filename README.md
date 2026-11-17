@@ -1,82 +1,60 @@
-# RA Logic Editor
+# RA Logic Editor (Qt Edition)
 
-RA Logic Editor is a development tool designed to assist RetroAchievements developers in compiling, modifying, and managing achievement and leaderboard logic. By integrating asset configuration, code note visualization, and automated generation tools under a single interface, it aims to streamline development workflows and reduce repetitive manual scripting.
-<img width="1281" height="767" alt="thumbnail" src="https://github.com/user-attachments/assets/75e44941-212f-44d4-887e-4f4dd0f3a7f0" />
-
----
+RA Logic Editor is a development tool that helps RetroAchievements developers compile, modify, and manage achievement and leaderboard logic. This repository is the **C++17 / Qt 6 port** of the original C#/.NET WinForms application ([RALogicEditor](https://github.com/CySlaytor/RALogicEditor)), rebuilt natively on the Qt Widgets framework with feature parity.
 
 ## Key Features
 
-### 🛠️ Interactive Trigger Editor
-- **Advanced Grid Controls:** Drag-and-drop-style logic reordering, copy/paste operations, and instant bulk property editing (flags, sizes, types, and hit counts).
-- **Visualization Aids:** Display code note aliases directly within logic cells, and use **Collapse Chains** to condense complex `Add Address` blocks into single, readable rows.
-- **Double-Buffered Rendering:** Enhanced row-header painting visually highlights active logic chains (pointer chains, arithmetic operations, and hit counts).
-
-### 📝 Smart Code Note Editor
-- **Hierarchical Pointer Parsing:** Parses complex, nested code notes into tree structures for easy navigation.
-- **Fix Hierarchy Tool:** Ported from [PointerFinder2](https://github.com/CySlaytor/PointerFinder2). It cleans, merges, and formats indentation layouts automatically. Supports custom visual formats, including Unicode tree graphics (`├─`), dot paths (`.`), and plusses (`+`).
-- **Intelligent Search:** Searches beyond top-level headers to find deeply nested sub-pointers, specific variables, and raw descriptions.
-- **Intelligent Node Deletion:** Safely removes an offset and its orphaned dependencies from a code note without corrupting the broader layout.
-
-### ⚡ Automation & Productivity Generators
-- **Create Generator (Logic Multiplier):** Automatically duplicates logic blocks across sequential index offsets or multi-slot arrays (e.g., slot 1 through slot 4) using custom memory strides.
-- **Batch Note Multiplier:** Duplicates documented notes across structures with auto-incrementing text labels (e.g., "Player 1" to "Player 4").
-- **Multi-Region Support Tool:** Converts base achievements into multi-region variants (such as USA, PAL, and Japan). This tool resolves target addresses via `refer to $0x...` virtual links, updates the Rich Presence script, and inserts regional Pause If locks.
-- **Logic Optimizer:** Strips leading zeros or pads addresses to reduce script size and warn users if logic exceeds standard database character limits.
-
-### 🔍 Code Review & Live Validation
-- **Static Analysis:** An entry level real-time logic scanner that alerts of potential execution issues, including:
-  - **PauseLocks:** Missing resets on Pause If conditions with hit counts.
-  - **Stale Pointers:** Hazardous read orders or stale pointer offsets.
-  - **Size Mismatches:** Mismatched comparison sizes across memory reads.
-  - **Undocumented Addresses:** Highlights memory cells or pointer leaves missing active code notes.
-- **One-Click Navigation:** Double-clicking an issue in the reviewer pane directs you to the exact row and condition inside the trigger grid.
-
----
+- **Interactive Trigger Editor** — grid-based logic editing with drag reordering, copy/paste, bulk property editing, code note aliases in cells, collapse chains for `Add Address` blocks, and owner-drawn row headers that highlight active logic chains.
+- **Smart Code Note Editor** — hierarchical pointer parsing into tree structures, hierarchy fixing/formatting, deep search across nested notes, and safe node deletion that prunes orphaned dependencies.
+- **Automation Generators** — logic multiplier (create generator), batch note multiplier, multi-region support tool with `refer to $0x...` resolution and regional Pause If locks, and a logic optimizer for script size reduction.
+- **Code Review & Live Validation** — static analysis for missing Pause If resets, stale pointer reads, size mismatches, and undocumented addresses, with one-click navigation to the offending row.
+- **Rich Presence tooling** — full Rich (Presence) script parsing, editing, and validation.
+- **Theming** — light and dark application themes with Qt stylesheet support.
 
 ## File Resolution & Project Loading
 
-The editor relies on standard RetroAchievements file naming conventions based on your **Game ID**. Opening a primary file (such as a server-downloaded `.json` file) will automatically attempt to load all adjacent files in the same directory:
+The editor follows standard RetroAchievements naming conventions based on the **Game ID**. Opening a primary file automatically loads adjacent files in the same directory:
 
 - **Server Data:** `<GameID>.json` (Core and Unofficial assets)
-- **Local Edits:** `<GameID>-User.txt` (Local modifications and new assets)
-- **Code Notes:** `<GameID>-Notes.json` (Server-backed documentation)
-- **Rich Presence:** `<GameID>-Rich.txt` (RP scripts)
+- **Local Edits:** `<GameID>-User.txt` (prioritized and highlighted)
+- **Code Notes:** `<GameID>-Notes.json`
+- **Rich Presence:** `<GameID>-Rich.txt`
 
-Local modifications found in your `-User.txt` file are prioritized and highlighted in orange. Newly created local assets are highlighted in green.
-
----
-
-## Installation & Requirements
-
-RA Logic Editor is built on **.NET 8.0** and utilizes **Windows Forms** for a clean, responsive desktop experience.
+## Building from Source
 
 ### Prerequisites
-* Windows 10 SP1 or newer
-* .NET Runtime 8.0 (Desktop Runtime)
 
-### Building from Source
-1. Clone the repository:
-   ```
-   git clone https://github.com/CySlaytor/RALogicEditor.git
-   ```
-2. Open the solution file `RALogicEditor.sln` in Visual Studio 2022 (or newer).
-3. Restore NuGet dependencies and build the project in **Release** mode.
+- Windows 10 or newer
+- Qt 6.11.2 (or later Qt 6.x) with the `msvc2022_64` kit, including the **Qt Concurrent** and **Qt Svg** modules
+- CMake 3.20 or newer
+- Visual Studio 2022 (MSVC v143) or Build Tools for Visual Studio 2022
 
----
+### Build steps
 
-## Configuration & Customization
+```bat
+cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/Qt/6.11.2/msvc2022_64"
+cmake --build build --config Release
+```
 
-The application automatically stores UI settings in a local `settings.json` file inside the startup directory, preserving configuration choices across sessions:
-- Main splitter distances and panel positions.
-- Last active filters (Asset Type, Category, Source Mode).
-- Trigger editor preferences (decimal representation, aliases, collapsed chains).
-- Code note styling (default indentation engine, value padding).
+The build runs `windeployqt` automatically as a post-build step and deploys Qt plugins into a `plugins/` directory next to the executable.
 
-To fully reset the application to its default state, select **Edit -> Clear Data / Reset...** from the main menu. This will clear user settings, backup archives, and the local cache directories.
+Continuous integration builds Windows x64 artifacts with GitHub Actions (`.github/workflows/build.yml`).
 
----
+## Project Layout
 
-## Contributing
+```
+src/
+  Common/        App settings, formatting helpers, image cache
+  Definitions/   Memory sizes, syntax and region definitions
+  Logic/         Core code note logic
+  Models/        Data models for assets, notes, and projects
+  Parsers/       Achievement, Rich Presence, and pointer tree parsers
+  Services/      Validation, generation, optimization, persistence
+  UI/            Main window, dialogs, models, widgets, and styles
+  Utilities/     Logic formatting
+resources/       Icons, Windows resource file, Qt resource collection
+```
 
-Contributions, bug reports, and feature suggestions are welcome. Please open an issue to discuss proposed modifications before submitting pull requests.
+## License
+
+Released under the MIT License — see [LICENSE.txt](LICENSE.txt).

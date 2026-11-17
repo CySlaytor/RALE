@@ -1,0 +1,258 @@
+/* Windows Forms 1:1 Clean Light Theme with PointerFinder2 Polished Accents */
+
+/* Base font for closed QComboBox and general UI */
+QWidget {
+    font-family: "Segoe UI", "Inter", "Helvetica Neue", sans-serif;
+}
+
+QMainWindow, QDialog {
+    background-color: #f0f0f0;
+    color: #000000;
+}
+
+/* Data Tables - Background #8c8c8c represents the WinForms DataGridView AppWorkspace backdrop */
+QTableView, QTableWidget {
+    background-color: #8c8c8c;
+    color: #000000;
+    border: 1px solid #707070;
+    gridline-color: #707070;
+    selection-background-color: #0078d7;
+    selection-color: #ffffff;
+    outline: 0;
+}
+
+/* Dialogs: Data Tables have clean white backgrounds matching WinForms dialogs */
+QDialog QTableView, QDialog QTableWidget {
+    background-color: #ffffff;
+    color: #000000;
+    border: 1px solid #707070;
+    gridline-color: #d0d0d0;
+    selection-background-color: #0078d7;
+    selection-color: #ffffff;
+    outline: 0;
+}
+
+/* MultiRegionDialog tables maintain consistent #8c8c8c workspace background when empty */
+#dgvMapping, #gridLockLogic {
+    background-color: #8c8c8c;
+    gridline-color: #707070;
+}
+
+QTreeWidget, QListWidget {
+    background-color: #ffffff;
+    color: #000000;
+    border: 1px solid #a0a0a0;
+    gridline-color: #707070;
+    selection-background-color: #0078d7;
+    selection-color: #ffffff;
+    outline: 0;
+}
+
+QTreeWidget::item, QListWidget::item {
+    min-height: 18px;
+}
+
+#lblStrideHint, #lblHint, #lblInstruction, #lblInfo {
+    color: #707070;
+}
+
+/* Crisp left-aligned DataGridView headers with selective blue highlight on active selection */
+QHeaderView::section {
+    background-color: #f0f0f0;
+    color: #000000;
+    border: 1px solid #707070;
+    border-top: none;
+    border-left: none;
+    padding: 3px 5px;
+    font-weight: normal;
+    text-align: left;
+}
+QHeaderView::section:checked, QHeaderView::section:selected {
+    background-color: #cce4f7;
+    color: #000000;
+    border: 1px solid #707070;
+    border-top: none;
+    border-left: none;
+}
+QTableView QTableCornerButton::section {
+    background-color: #f0f0f0;
+    border: 1px solid #707070;
+}
+
+#lblGroupsHeader {
+    background-color: #f0f0f0;
+    border: 1px solid #707070;
+    color: #000000;
+}
+
+/* Inputs & Edit Controls */
+QLineEdit, QPlainTextEdit, QTextEdit {
+    border: 1px solid #adadad;
+    border-radius: 2px;
+    background-color: #ffffff;
+    color: #000000;
+    padding: 2px 3px;
+    selection-background-color: #0078d7;
+    selection-color: #ffffff;
+}
+QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {
+    border-color: #0078d7;
+}
+
+/* Buttons */
+QPushButton {
+    border: 1px solid #adadad;
+    border-radius: 2px;
+    background-color: #f6f6f6;
+    color: #000000;
+    padding: 0px 4px 2px 4px;
+    min-height: 16px;
+    text-align: center;
+}
+QPushButton:hover {
+    background-color: #e5f1fb;
+    border-color: #0078d7;
+}
+QPushButton:pressed {
+    background-color: #cce4f7;
+    border-color: #005499;
+}
+QPushButton:disabled {
+    background-color: #f4f4f4;
+    color: #8a8a8a;
+    border-color: #dcdcdc;
+}
+
+/* Dedicated clean styling for the Groups + / - buttons matching WinForms Screenshot 3 */
+#btnAddGroup, #btnRemoveGroup {
+    background-color: #ffffff;
+    border: 1px solid #c8c8c8;
+    border-radius: 3px;
+    color: #000000;
+    font-size: 9pt;
+    font-weight: bold;
+    padding: 0px 0px 2px 0px;
+    min-height: 18px;
+    min-width: 20px;
+}
+#btnAddGroup:hover, #btnRemoveGroup:hover {
+    background-color: #f0f7fd;
+    border-color: #0078d7;
+}
+#btnAddGroup:pressed, #btnRemoveGroup:pressed {
+    background-color: #cce4f7;
+    border-color: #005499;
+}
+
+/* Dropdown Popup View (applies to every QComboBox popup) */
+QComboBox QListView,
+QListView#comboPopupView {
+    background-color: #ffffff;
+    color: #000000;
+    border: 1px solid #c0c0c0;
+    padding: 1px;
+    outline: 0;
+    font-family: "Consolas", "Segoe UI", monospace;
+    font-size: 11px;
+}
+
+QComboBox QListView::item,
+QListView#comboPopupView::item {
+    height: 19px;
+    min-height: 19px;
+    padding: 1px 4px;
+}
+
+QComboBox QListView::item:hover,
+QListView#comboPopupView::item:hover {
+    background-color: #e5f1fb;
+    color: #000000;
+}
+
+QComboBox QListView::item:selected,
+QListView#comboPopupView::item:selected {
+    background-color: #3a78cb;
+    color: #ffffff;
+}
+
+/* Checkboxes base layout */
+QCheckBox {
+    spacing: 5px;
+    color: #000000;
+    background: transparent;
+}
+QCheckBox::indicator,
+QAbstractItemView::indicator,
+QTreeWidget::indicator,
+QListWidget::indicator,
+QTableView::indicator,
+QTableWidget::indicator {
+    width: 13px;
+    height: 13px;
+}
+
+/* Splitters */
+QSplitter::handle {
+    background-color: #d0d0d0;
+}
+QSplitter::handle:hover {
+    background-color: #0078d7;
+}
+QSplitter::handle:horizontal {
+    width: 2px;
+}
+QSplitter::handle:vertical {
+    height: 2px;
+}
+
+/* Slim Scrollbars inside dropdowns and views */
+QScrollBar:vertical {
+    border: none;
+    background-color: #f0f0f0;
+    width: 8px;
+    margin: 0px;
+}
+QScrollBar::handle:vertical {
+    background-color: #c0c0c0;
+    min-height: 20px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical:hover {
+    background-color: #a0a0a0;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background-color: #f0f0f0;
+    height: 8px;
+    margin: 0px;
+}
+QScrollBar::handle:horizontal {
+    background-color: #c0c0c0;
+    min-width: 20px;
+    border-radius: 4px;
+}
+QScrollBar::handle:horizontal:hover {
+    background-color: #a0a0a0;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: none;
+}
+
+/* Status Bar */
+QStatusBar {
+    background-color: #f0f0f0;
+    color: #000000;
+    border-top: 1px solid #d0d0d0;
+    min-height: 22px;
+    max-height: 22px;
+}
