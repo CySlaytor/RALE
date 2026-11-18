@@ -110,6 +110,11 @@ QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {
     border-color: #0078d7;
 }
 
+#txtNoteBody {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 10pt;
+}
+
 /* Buttons */
 QPushButton {
     border: 1px solid #adadad;

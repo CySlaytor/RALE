@@ -109,6 +109,7 @@ void CodeNoteEditorWidget::InitializeUI()
 
     // Text Editor
     txtNoteBody = new QPlainTextEdit(this);
+    txtNoteBody->setObjectName("txtNoteBody");
     txtNoteBody->setFont(QFont("Consolas", 10));
     txtNoteBody->installEventFilter(this);
     connect(txtNoteBody, &QPlainTextEdit::textChanged, this, &CodeNoteEditorWidget::onNoteBodyTextChanged);

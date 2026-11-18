@@ -629,6 +629,11 @@ void TriggerEditorWidget::SetNotes(const QList<CodeNote> &notes)
 
 void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, const QString &setType)
 {
+    const QList<int> savedVisualRows = GetSelectedVisualRows();
+    const int savedCurrentVisualRow = conditionGrid->currentIndex().row();
+    const int savedCurrentCol = conditionGrid->currentIndex().column();
+    const int savedScroll = conditionGrid->verticalScrollBar()->value();
+
     _preserveSegmentSelection = "";
     if (lvLeaderboardComponents->isVisible() && lvLeaderboardComponents->currentItem() != nullptr)
     {
@@ -679,8 +684,46 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
     SetStatus("Asset loaded.");
     RunValidation();
 
-    // Clear grid selection on load so row 0 is not highlighted in blue by default
-    conditionGrid->clearSelection();
+    int newRowCount = _conditionModel.rowCount();
+    QItemSelection restoredSelection;
+    QList<int> validRestoredRows;
+    for (int vRow : savedVisualRows)
+    {
+        if (vRow >= 0 && vRow < newRowCount)
+        {
+            auto left = _conditionModel.index(vRow, 0);
+            auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
+            restoredSelection.select(left, right);
+            validRestoredRows.append(vRow);
+        }
+    }
+
+    if (!restoredSelection.isEmpty())
+    {
+        conditionGrid->selectionModel()->select(
+            restoredSelection,
+            QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+
+        int focusRow = (savedCurrentVisualRow >= 0 && savedCurrentVisualRow < newRowCount)
+            ? savedCurrentVisualRow
+            : validRestoredRows.first();
+        int focusCol = (savedCurrentCol >= 0 && savedCurrentCol < _conditionModel.columnCount())
+            ? savedCurrentCol
+            : 0;
+        conditionGrid->selectionModel()->setCurrentIndex(
+            _conditionModel.index(focusRow, focusCol),
+            QItemSelectionModel::NoUpdate);
+    }
+    else
+    {
+        // Clear grid selection on load so row 0 is not highlighted in blue by default
+        conditionGrid->clearSelection();
+        conditionGrid->selectionModel()->setCurrentIndex(QModelIndex(), QItemSelectionModel::NoUpdate);
+    }
+
+    conditionGrid->verticalScrollBar()->setValue(savedScroll);
+    if (_headerView != nullptr)
+        _headerView->viewport()->update();
 
     _preserveSegmentSelection = "";
     _isProgrammaticallyChanging = false;
@@ -745,6 +788,10 @@ void TriggerEditorWidget::Clear()
     lblAuthor->clear();
     pbBadge->clear();
     groupsList->clear();
+    conditionGrid->clearSelection();
+    conditionGrid->selectionModel()->setCurrentIndex(QModelIndex(), QItemSelectionModel::NoUpdate);
+    if (_headerView != nullptr)
+        _headerView->viewport()->update();
     _currentIssues.clear();
 
     cmbPoints->setVisible(true);
@@ -816,18 +863,25 @@ void TriggerEditorWidget::RefreshGroupsListUI()
     }
 
     if (groupsList->count() > 0)
-        RefreshCurrentGridDisplay();
+    {
+        int targetIndex = (savedIndex >= 0 && savedIndex < groupsList->count()) ? savedIndex : 0;
+        groupsList->setCurrentRow(targetIndex);
+    }
+
+    RefreshCurrentGridDisplay();
+
+    _isProgrammaticallyChanging = wasChanging;
 }
 
 void TriggerEditorWidget::RefreshCurrentGridDisplay()
 {
     int savedScroll = conditionGrid->verticalScrollBar()->value();
     QList<int> selectedModelRows;
-    auto selectedRows = conditionGrid->selectionModel()->selectedRows();
-    for (const auto &idx : selectedRows)
+    for (int vRow : GetSelectedVisualRows())
     {
-        int mIdx = _conditionModel.GetModelIndexForVisualRow(idx.row());
-        if (mIdx != -1) selectedModelRows.append(mIdx);
+        int mIdx = _conditionModel.GetModelIndexForVisualRow(vRow);
+        if (mIdx != -1 && !selectedModelRows.contains(mIdx))
+            selectedModelRows.append(mIdx);
     }
     int currentVisualRow = conditionGrid->currentIndex().row();
     int currentModelRow = _conditionModel.GetModelIndexForVisualRow(currentVisualRow);
@@ -856,9 +910,6 @@ void TriggerEditorWidget::RefreshCurrentGridDisplay()
         &_notesLookup,
         &_rangeCache,
         &_currentIssues);
-
-    if (_headerView != nullptr)
-        _headerView->viewport()->update();
 
     if (group != nullptr && !selectedModelRows.isEmpty())
     {
@@ -893,6 +944,9 @@ void TriggerEditorWidget::RefreshCurrentGridDisplay()
             conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, col), QItemSelectionModel::NoUpdate);
         }
     }
+
+    if (_headerView != nullptr)
+        _headerView->viewport()->update();
 
     conditionGrid->verticalScrollBar()->setValue(savedScroll);
 }
@@ -1438,6 +1492,7 @@ void TriggerEditorWidget::AddCondition()
         auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
         conditionGrid->selectionModel()->select(QItemSelection(left, right), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
         conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, 0), QItemSelectionModel::NoUpdate);
+        if (_headerView != nullptr) _headerView->viewport()->update();
     }
 
     SetStatus("Condition added.");
@@ -1504,6 +1559,9 @@ void TriggerEditorWidget::DuplicateSelected()
         }
     }
 
+    if (_headerView != nullptr)
+        _headerView->viewport()->update();
+
     SetStatus(QString("Conditions duplicated (%1 lines).").arg(clones.size()));
 }
 
@@ -1553,6 +1611,9 @@ void TriggerEditorWidget::DeleteSelected()
         }
     }
 
+    if (_headerView != nullptr)
+        _headerView->viewport()->update();
+
     SetStatus("Conditions deleted.");
 }
 
@@ -1567,6 +1628,10 @@ void TriggerEditorWidget::MoveSelected(int direction)
     auto &group = groups[row];
     auto selectedRows = conditionGrid->selectionModel()->selectedRows();
     if (selectedRows.isEmpty()) return;
+
+    int savedCurrentCol = conditionGrid->currentIndex().column();
+    if (savedCurrentCol < 0 || savedCurrentCol >= _conditionModel.columnCount())
+        savedCurrentCol = 0;
 
     QList<int> selectedModelIndices = GetEffectiveSelectionIndices();
     if (selectedModelIndices.isEmpty()) return;
@@ -1706,11 +1771,14 @@ void TriggerEditorWidget::MoveSelected(int direction)
     {
         int focusRow = (direction > 0) ? visualRowsToSelect.last() : visualRowsToSelect.first();
         conditionGrid->selectionModel()->setCurrentIndex(
-            _conditionModel.index(focusRow, 0),
+            _conditionModel.index(focusRow, savedCurrentCol),
             QItemSelectionModel::NoUpdate
         );
-        conditionGrid->scrollTo(_conditionModel.index(focusRow, 0));
+        conditionGrid->scrollTo(_conditionModel.index(focusRow, savedCurrentCol));
     }
+
+    if (_headerView != nullptr)
+        _headerView->viewport()->update();
 
     SetStatus("Conditions moved.");
 }
@@ -1903,6 +1971,9 @@ void TriggerEditorWidget::PasteLogic(const QString &logicToPaste)
             conditionGrid->scrollTo(_conditionModel.index(vRow, 0));
         }
     }
+
+    if (_headerView != nullptr)
+        _headerView->viewport()->update();
 
     SetStatus(QString("Logic pasted (%1 lines).").arg(newConditions.size()));
 }
@@ -2113,6 +2184,9 @@ void TriggerEditorWidget::AddConditionFromNote(const QString &logicString, const
                     break;
                 }
             }
+
+            if (_headerView != nullptr)
+                _headerView->viewport()->update();
         }
     }
 }

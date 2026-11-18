@@ -103,11 +103,14 @@ int ConditionTableModel::GetVisualRowForCondition(const AchievementCondition *co
     for (int v = 0; v < _visualToModelMap.size(); ++v)
     {
         int m = _visualToModelMap[v];
-        if (m >= 0 && m < _group->Conditions.size())
-        {
-            if (&_group->Conditions.at(m) == cond || _group->Conditions.at(m) == *cond)
-                return v;
-        }
+        if (m >= 0 && m < _group->Conditions.size() && &_group->Conditions.at(m) == cond)
+            return v;
+    }
+    for (int v = 0; v < _visualToModelMap.size(); ++v)
+    {
+        int m = _visualToModelMap[v];
+        if (m >= 0 && m < _group->Conditions.size() && _group->Conditions.at(m) == *cond)
+            return v;
     }
     return -1;
 }
