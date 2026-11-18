@@ -13,7 +13,8 @@ class CodeNoteLogic
 {
 public:
     // Logic: Parses raw code note text, merges duplicate offsets, fixes hierarchy indentation, and sorts results.
-    static QString FixHierarchy(const QString &inputText, const QString &indentStylePref, bool indentDescriptions);
+    static QString FixHierarchy(const QString &inputText, const QString &indentStylePref, bool indentDescriptions, int consoleId = 0);
+    static QString FixHierarchy(const QString &inputText, bool useUnicodeTree, bool indentDescriptions, int consoleId = 0);
 
 private:
     // Represents a single line/node in the code note's hierarchy.
@@ -29,15 +30,21 @@ private:
     };
 
     static QChar DetectIndentStyle(const QStringList &lines);
-    static QList<std::shared_ptr<CodeNoteNode>> ParseLinesToTree(const QStringList &lines);
+    static QList<std::shared_ptr<CodeNoteNode>> ParseLinesToTree(const QStringList &lines, QString &outHeaderComment);
     static QList<std::shared_ptr<CodeNoteNode>> MergeTree(const QList<std::shared_ptr<CodeNoteNode>> &nodes);
-    static QList<std::shared_ptr<CodeNoteNode>> SortNodes(const QList<std::shared_ptr<CodeNoteNode>> &nodes);
+    static QList<std::shared_ptr<CodeNoteNode>> SortNodes(QList<std::shared_ptr<CodeNoteNode>> &nodes);
     static QString RebuildTextFromTree(
         const QList<std::shared_ptr<CodeNoteNode>> &nodes,
         int indentLevel,
-        const QString &style,
+        bool useUnicodeTree,
         bool indentDescriptions,
-        QList<bool> ancestorIsLast = {});
+        const QString &headerComment = "",
+        QList<bool> ancestorIsLast = {},
+        int parentNestingLevel = 0,
+        const QString &delimiterSuffix = "",
+        bool autoPopulateTemplate = false,
+        const QString &pointerTypeTemplate = "",
+        const QString &indentPrefix = "");
 };
 
 } // namespace RALogicEditor

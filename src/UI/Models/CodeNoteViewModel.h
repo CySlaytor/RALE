@@ -22,6 +22,9 @@ public:
     // Injected Parser Dependency
     IPointerTreeParser &_parser;
 
+    // Active project platform ConsoleId (e.g. 19 = Wii, 16 = GameCube, 21 = PS2, 5 = GBA, etc.)
+    int ConsoleId = 0;
+
     // -- State --
     QList<CodeNote> AllNotes;
 

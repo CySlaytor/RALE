@@ -51,12 +51,14 @@ QString ConditionFormatter::ResolveAlias(
     static const QRegularExpression tagRegex(R"(\[.*?\])");
     static const QRegularExpression bitSizeRegex(R"(^(Bit\d+|Lower4|Upper4))", QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression multiSpaceRegex(R"(\s{2,})");
+    static const QRegularExpression arrayTagRx(R"(\[(?:(\d+)\s*x\s*(\d+)|(\d+))\s*bytes\])", QRegularExpression::CaseInsensitiveOption);
 
-    // Robust Hex Parser: Removes 0x and any non-hex size prefixes (W, H, X, etc.)
+    // Robust Hex Parser: Removes 0x, pipes |, and any non-hex characters
     auto ParseHex = [](const QString &s) -> int64_t {
         if (s.trimmed().isEmpty()) return -1;
         QString clean = s;
         clean.remove("0x", Qt::CaseInsensitive);
+        clean.remove('|');
         clean = clean.trimmed();
         // Regex to keep only valid hex characters 0-9, A-F
         clean.remove(hexFilterRegex);
@@ -271,7 +273,7 @@ QString ConditionFormatter::ResolveAlias(
         }
     }
 
-    // 2. Direct Lookup
+    // 2. Direct Lookup & Static Array Element Resolution
     if (notesLookup.contains(address))
     {
         // Redirect Resolution Logic added here too
@@ -357,7 +359,54 @@ QString ConditionFormatter::ResolveAlias(
         }
     }
 
-    // 3. Ranged Direct Lookup
+    // 3. Ranged Direct Lookup (Including PF2 Static Array Structures)
+    if (targetVal != -1)
+    {
+        // Check for direct static array elements mapped from base note
+        for (auto it = notesLookup.cbegin(); it != notesLookup.cend(); ++it)
+        {
+            int64_t baseAddr = ParseHex(it.key());
+            if (baseAddr == -1 || targetVal < baseAddr) continue;
+
+            const auto &nodes = it.value();
+            if (nodes.isEmpty()) continue;
+
+            std::shared_ptr<NoteNode> root = nullptr;
+            for (const auto &n : nodes)
+            {
+                if (n->IndentLevel == -2) { root = n; break; }
+            }
+            if (root == nullptr) root = nodes.first();
+
+            QString firstLine = root->Content.split('\n', Qt::SkipEmptyParts).value(0, "");
+            auto arrMatch = arrayTagRx.match(firstLine);
+            if (arrMatch.hasMatch())
+            {
+                int64_t arrSize = 0;
+                if (!arrMatch.captured(1).isEmpty() && !arrMatch.captured(2).isEmpty())
+                    arrSize = arrMatch.captured(1).toLongLong() * arrMatch.captured(2).toLongLong();
+                else if (!arrMatch.captured(3).isEmpty())
+                    arrSize = arrMatch.captured(3).toLongLong();
+
+                if (targetVal < baseAddr + arrSize)
+                {
+                    int64_t targetOffset = targetVal - baseAddr;
+                    for (const auto &n : nodes)
+                    {
+                        if (n->IndentLevel == -2) continue;
+                        int64_t offVal = ParseHex(n->Offset);
+                        if (offVal == targetOffset)
+                        {
+                            QString d = n->Description;
+                            d.remove(tagRegex);
+                            return d.trimmed();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if (rangeCache != nullptr && targetVal != -1)
     {
         for (const auto &match : *rangeCache)

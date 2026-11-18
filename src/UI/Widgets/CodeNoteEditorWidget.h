@@ -28,8 +28,13 @@ public:
     bool IndentValues() const;
     void SetIndentValues(bool value);
 
+    bool UnicodeTree() const;
+    void SetUnicodeTree(bool value);
+
     QString NoteIndentStyle() const;
     void SetNoteIndentStyle(const QString &style);
+
+    void SetConsoleId(int consoleId);
 
     void SetNotes(const QList<CodeNote> &notes);
     void CommitChanges();
@@ -92,8 +97,8 @@ private:
 
     QPushButton *btnSave = nullptr;
     QPushButton *btnFixHierarchy = nullptr;
+    QCheckBox *chkUnicodeTree = nullptr;
     QCheckBox *chkIndentValues = nullptr;
-    QComboBox *cmbIndentStyle = nullptr;
     QPushButton *btnReset = nullptr;
 
     QLabel *lblOffsetChain = nullptr;
@@ -101,6 +106,7 @@ private:
 
     std::unique_ptr<CodeNoteViewModel> _viewModel;
     QList<CodeNote> _filteredNotes;
+    int _consoleId = 0;
     bool _isInternalUpdate = false;
     bool _isRefreshingVariables = false;
     bool _variableRefreshPending = false;

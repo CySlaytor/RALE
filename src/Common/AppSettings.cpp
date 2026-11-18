@@ -53,6 +53,31 @@ void AppSettings::Load()
                     Current.Notes_ShowLeafsOnly = obj.value("Notes_ShowLeafsOnly").toBool(Current.Notes_ShowLeafsOnly);
                     Current.Notes_IndentValues = obj.value("Notes_IndentValues").toBool(Current.Notes_IndentValues);
                     Current.NoteIndentStyle = obj.value("NoteIndentStyle").toString(Current.NoteIndentStyle);
+
+                    // Code Note Formatting Options
+                    Current.CodeNotePrefix = obj.value("CodeNotePrefix").toString(Current.CodeNotePrefix);
+                    Current.CodeNoteSuffix = obj.value("CodeNoteSuffix").toString(Current.CodeNoteSuffix);
+                    Current.CodeNoteAlignSuffixes = obj.value("CodeNoteAlignSuffixes").toBool(Current.CodeNoteAlignSuffixes);
+                    Current.CodeNoteSuffixOnLastLineOnly = obj.value("CodeNoteSuffixOnLastLineOnly").toBool(Current.CodeNoteSuffixOnLastLineOnly);
+                    Current.CodeNoteAutoPopulatePointers = obj.value("CodeNoteAutoPopulatePointers").toBool(Current.CodeNoteAutoPopulatePointers);
+
+                    if (obj.contains("CodeNoteUnicodeTree"))
+                    {
+                        Current.CodeNoteUnicodeTree = obj.value("CodeNoteUnicodeTree").toBool(Current.CodeNoteUnicodeTree);
+                    }
+                    else if (obj.contains("NoteIndentStyle"))
+                    {
+                        Current.CodeNoteUnicodeTree = obj.value("NoteIndentStyle").toString().startsWith("Unicode Tree", Qt::CaseInsensitive);
+                    }
+
+                    if (obj.contains("CodeNoteIndentDescriptions"))
+                    {
+                        Current.CodeNoteIndentDescriptions = obj.value("CodeNoteIndentDescriptions").toBool(Current.CodeNoteIndentDescriptions);
+                    }
+                    else if (obj.contains("Notes_IndentValues"))
+                    {
+                        Current.CodeNoteIndentDescriptions = obj.value("Notes_IndentValues").toBool(Current.CodeNoteIndentDescriptions);
+                    }
                 }
             }
         }
@@ -88,6 +113,15 @@ void AppSettings::Save()
         obj.insert("Notes_ShowLeafsOnly", Current.Notes_ShowLeafsOnly);
         obj.insert("Notes_IndentValues", Current.Notes_IndentValues);
         obj.insert("NoteIndentStyle", Current.NoteIndentStyle);
+
+        // Code Note Formatting Options
+        obj.insert("CodeNotePrefix", Current.CodeNotePrefix);
+        obj.insert("CodeNoteSuffix", Current.CodeNoteSuffix);
+        obj.insert("CodeNoteAlignSuffixes", Current.CodeNoteAlignSuffixes);
+        obj.insert("CodeNoteSuffixOnLastLineOnly", Current.CodeNoteSuffixOnLastLineOnly);
+        obj.insert("CodeNoteAutoPopulatePointers", Current.CodeNoteAutoPopulatePointers);
+        obj.insert("CodeNoteUnicodeTree", Current.CodeNoteUnicodeTree);
+        obj.insert("CodeNoteIndentDescriptions", Current.CodeNoteIndentDescriptions);
 
         QFile file(GetSettingsPath());
         if (file.open(QIODevice::WriteOnly | QIODevice::Text))

@@ -345,8 +345,8 @@ void CodeNoteViewModel::CommitEditState()
 
     // UPDATED: Use DetectStyle with Current Note context first, fallback to AllNotes
     auto style = CodeNoteModifier::DetectStyle(CurrentBaseNote->Note, AllNotes);
-    QString styleStr = AppSettings::Current.NoteIndentStyle;
-    bool indentDescriptions = AppSettings::Current.Notes_IndentValues;
+    QString styleStr = AppSettings::Current.CodeNoteUnicodeTree ? "Unicode Tree (├─)" : "Plusses (+)";
+    bool indentDescriptions = AppSettings::Current.CodeNoteIndentDescriptions;
 
     if (EditState.IsVirtual)
     {
@@ -512,7 +512,7 @@ std::tuple<QString, QString, QString> CodeNoteViewModel::GetSelectedLogic(const 
     // The logic should point to PAL (0x1234) + Offsets.
     // The parser uses CurrentBaseNote address as the root I:0x...
     // So this works perfectly: Logic is built relative to PAL base, using USA tree structure.
-    return _parser.GeneratePointerLogic(*CurrentBaseNote, uiSelectedNode);
+    return _parser.GeneratePointerLogic(*CurrentBaseNote, uiSelectedNode, ConsoleId);
 }
 
 void CodeNoteViewModel::ClearEditState()
@@ -658,7 +658,7 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets)
 
     auto ParseOffsetString = [](const QString &offsetStr) -> int64_t {
         QString clean = offsetStr.trimmed();
-        clean.remove('+').remove('-').remove("0x", Qt::CaseInsensitive);
+        clean.remove('|').remove('+').remove('-').remove("0x", Qt::CaseInsensitive);
         bool ok = false;
         int64_t val = clean.toLongLong(&ok, 16);
         if (ok)
@@ -762,7 +762,7 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets)
     // Partial Match or No Match -> Virtual Mode
     if (bestMatchNode != nullptr)
     {
-        auto [baseLogic, type, size] = _parser.GeneratePointerLogic(*CurrentBaseNote, bestMatchNode);
+        auto [baseLogic, type, size] = _parser.GeneratePointerLogic(*CurrentBaseNote, bestMatchNode, ConsoleId);
 
         QString baseAddrStr = CurrentBaseNote->Address.startsWith("0x", Qt::CaseInsensitive)
             ? CurrentBaseNote->Address.mid(2)

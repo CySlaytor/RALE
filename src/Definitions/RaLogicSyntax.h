@@ -31,6 +31,12 @@ public:
     static const QMap<QString, QChar> ReverseSizeMap;
     static const QMap<QString, QChar> ReverseFloatSizeMap;
     static const QMap<QChar, QString> FloatSizeMap;
+
+    // Platform pointer descriptions and masking mapped to pointer-oriented RetroAchievements consoles
+    static QString GetPlatformPointerTemplate(int consoleId, const QString &noteHeader = "");
+    static QString GetPlatformPointerPrefix(int consoleId);
+    static QString GetPlatformPointerMask(int consoleId);
+    static bool IsPointerOrientedConsole(int consoleId);
 };
 
 } // namespace RALogicEditor

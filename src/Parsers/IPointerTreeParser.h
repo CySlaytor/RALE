@@ -19,7 +19,8 @@ public:
     virtual QList<std::shared_ptr<NoteNode>> ParseNoteText(const QString &noteText) = 0;
     virtual std::tuple<QString, QString, QString> GeneratePointerLogic(
         const CodeNote &baseNote,
-        const std::shared_ptr<NoteNode> &selectedNode) = 0;
+        const std::shared_ptr<NoteNode> &selectedNode,
+        int consoleId = 0) = 0;
     virtual QList<int64_t> GetOffsetsFromNode(const std::shared_ptr<NoteNode> &node) = 0;
 };
 

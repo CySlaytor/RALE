@@ -10,6 +10,7 @@
 #include "Dialogs/LogicOptimizerDialog.h"
 #include "Dialogs/BatchNoteMultiplierDialog.h"
 #include "Dialogs/RevertRegionDialog.h"
+#include "Dialogs/SettingsDialog.h"
 #include <QApplication>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -382,6 +383,8 @@ void MainWindow::InitializeMainMenu()
     editMenu->addAction("Clear Data / Reset...", this, &MainWindow::onClearDataReset);
     editMenu->addSeparator();
     editMenu->addAction("Revert Rich Presence", this, &MainWindow::onRevertRichPresence);
+    editMenu->addSeparator();
+    editMenu->addAction("Settings...", this, &MainWindow::onSettings)->setShortcut(QKeySequence("Ctrl+,"));
 
     // View Menu
     auto *viewMenu = menuBar->addMenu("&View");
@@ -389,34 +392,16 @@ void MainWindow::InitializeMainMenu()
     actViewReviewer->setShortcut(QKeySequence(Qt::Key_F8));
     actViewReviewer->setCheckable(true);
     viewMenu->addAction("View RP Diff", this, &MainWindow::onViewRpDiff);
-
-    // Theme Submenu
-    viewMenu->addSeparator();
-    themeMenu = viewMenu->addMenu("&Theme");
-    auto *themeGroup = new QActionGroup(this);
-
-    actThemeLight = themeMenu->addAction("Light", this, [this]() { onSetTheme(ThemeManager::Theme::Light); });
-    actThemeLight->setCheckable(true);
-    themeGroup->addAction(actThemeLight);
-
-    actThemeDark = themeMenu->addAction("Dark", this, [this]() { onSetTheme(ThemeManager::Theme::Dark); });
-    actThemeDark->setCheckable(true);
-    themeGroup->addAction(actThemeDark);
-
-    bool isDark = (AppSettings::Current.Theme.compare("Dark", Qt::CaseInsensitive) == 0);
-    actThemeDark->setChecked(isDark);
-    actThemeLight->setChecked(!isDark);
 }
 
-void MainWindow::onSetTheme(ThemeManager::Theme theme)
+void MainWindow::onSettings()
 {
-    ThemeManager::ApplyTheme(theme);
-    AppSettings::Current.Theme = (theme == ThemeManager::Theme::Dark) ? "Dark" : "Light";
-    // Persist the live geometry along with the theme instead of writing stale values.
-    SaveSettings();
+    SettingsDialog dialog(this);
+    dialog.exec();
 
-    if (actThemeLight) actThemeLight->setChecked(theme == ThemeManager::Theme::Light);
-    if (actThemeDark) actThemeDark->setChecked(theme == ThemeManager::Theme::Dark);
+    // Re-apply live settings to CodeNoteEditor
+    codeNoteEditor->SetUnicodeTree(AppSettings::Current.CodeNoteUnicodeTree);
+    codeNoteEditor->SetIndentValues(AppSettings::Current.CodeNoteIndentDescriptions);
 }
 
 void MainWindow::InitializeAssetContextMenu()
@@ -532,8 +517,8 @@ void MainWindow::ApplySettings()
     triggerEditor->SetShowAliases(AppSettings::Current.Trigger_ShowAliases);
     triggerEditor->SetCollapseChains(AppSettings::Current.Trigger_CollapseChains);
     codeNoteEditor->SetShowLeafsOnly(AppSettings::Current.Notes_ShowLeafsOnly);
-    codeNoteEditor->SetIndentValues(AppSettings::Current.Notes_IndentValues);
-    codeNoteEditor->SetNoteIndentStyle(AppSettings::Current.NoteIndentStyle);
+    codeNoteEditor->SetIndentValues(AppSettings::Current.CodeNoteIndentDescriptions);
+    codeNoteEditor->SetUnicodeTree(AppSettings::Current.CodeNoteUnicodeTree);
 }
 
 void MainWindow::SaveSettings()
@@ -584,7 +569,8 @@ void MainWindow::SaveSettings()
     AppSettings::Current.Trigger_CollapseChains = triggerEditor->CollapseChains();
 
     AppSettings::Current.Notes_ShowLeafsOnly = codeNoteEditor->ShowLeafsOnly();
-    AppSettings::Current.Notes_IndentValues = codeNoteEditor->IndentValues();
+    AppSettings::Current.CodeNoteIndentDescriptions = codeNoteEditor->IndentValues();
+    AppSettings::Current.CodeNoteUnicodeTree = codeNoteEditor->UnicodeTree();
     AppSettings::Current.ShowLogicReviewer = actViewReviewer->isChecked();
 
     AppSettings::Save();
@@ -715,6 +701,9 @@ void MainWindow::LoadFiles(const QString &primaryPath)
             this->setWindowTitle(QString("RA Logic Editor - %1").arg(_projectRepo.CurrentTitle));
         else
             this->setWindowTitle(QString("RA Logic Editor - %1").arg(QFileInfo(primaryPath).fileName()));
+
+        int consoleId = (_projectRepo.ServerData != nullptr) ? _projectRepo.ServerData->ConsoleId : 0;
+        codeNoteEditor->SetConsoleId(consoleId);
 
         bool hasServerAssets = false;
         if (_projectRepo.ServerData != nullptr)

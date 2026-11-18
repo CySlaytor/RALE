@@ -46,8 +46,9 @@ QString CodeNoteModifier::NoteStyle::GetSeparatorString() const
 
 bool CodeNoteModifier::IsNodeBoundary(const QString &line)
 {
+    // Updated to support standard (+0x, -0x) and array (|0x, |+0x, |-0x) boundaries
     static const QRegularExpression regex(
-        QString::fromUtf8(R"(^([.\+\s\x{2500}-\x{257F}]*)([-+]?)(0x[0-9A-Fa-f]+)\s*([|=:])?\s*(.*)$)"),
+        QString::fromUtf8(R"(^([.\+\s\x{2500}-\x{257F}]*)(\|[\+\-]?|[\+\-]?)(0x[0-9A-Fa-f]+)\s*([|=:])?\s*(.*)$)"),
         QRegularExpression::CaseInsensitiveOption);
 
     auto match = regex.match(line);
@@ -67,7 +68,7 @@ bool CodeNoteModifier::IsNodeBoundary(const QString &line)
 QString CodeNoteModifier::ExtractExactPrefix(const QString &line)
 {
     static const QRegularExpression regex(
-        QString::fromUtf8(R"(^([.\+\s\x{2500}-\x{257F}]*)([-+]?)(0x[0-9A-Fa-f]+))"),
+        QString::fromUtf8(R"(^([.\+\s\x{2500}-\x{257F}]*)(\|[\+\-]?|[\+\-]?)(0x[0-9A-Fa-f]+))"),
         QRegularExpression::CaseInsensitiveOption);
 
     auto match = regex.match(line);
@@ -76,11 +77,10 @@ QString CodeNoteModifier::ExtractExactPrefix(const QString &line)
         QString indentStr = match.captured(1);
         QString sign = match.captured(2);
 
-        // Safely recover and separate the mathematical sign from the structural prefix 
-        // if the greedy regex group 1 ate it. This prevents double pluses (e.g. ++0x04) on edit.
+        // Safely recover and separate mathematical and array prefix characters
         if (sign.isEmpty())
         {
-            if (indentStr.endsWith('+') || indentStr.endsWith('-'))
+            if (indentStr.endsWith('+') || indentStr.endsWith('-') || indentStr.endsWith('|'))
             {
                 indentStr.chop(1);
             }
@@ -279,7 +279,6 @@ QString CodeNoteModifier::DeleteNodeFamily(const QString &baseNoteText, const st
     }
 
     QString result = lines.join("\r\n");
-    // C# uses TrimEnd() (all trailing whitespace); chop newlines then spaces/tabs.
     while (!result.isEmpty() && result.back().isSpace()) result.chop(1);
     return result;
 }
@@ -314,7 +313,8 @@ QString CodeNoteModifier::UpdateRealNode(
         }
 
         if (IsNodeBoundary(line)) break;
-        if (line.trimmed().startsWith("+0x", Qt::CaseInsensitive) || line.trimmed().startsWith("-0x", Qt::CaseInsensitive)) break;
+        if (line.trimmed().startsWith("+0x", Qt::CaseInsensitive) || line.trimmed().startsWith("-0x", Qt::CaseInsensitive) ||
+            line.trimmed().startsWith("|0x", Qt::CaseInsensitive) || line.trimmed().startsWith("|+0x", Qt::CaseInsensitive)) break;
 
         idx++;
         removeCount++;
@@ -324,9 +324,10 @@ QString CodeNoteModifier::UpdateRealNode(
         lines.removeAt(node->RawLineIndex);
 
     QString offsetHex = node->Offset;
-    while (offsetHex.startsWith('+') || offsetHex.startsWith('-')) offsetHex = offsetHex.mid(1);
+    bool isArrayElem = offsetHex.startsWith('|');
+    while (offsetHex.startsWith('|') || offsetHex.startsWith('+') || offsetHex.startsWith('-')) offsetHex = offsetHex.mid(1);
     if (!offsetHex.startsWith("0x", Qt::CaseInsensitive)) offsetHex = "0x" + offsetHex;
-    QString sign = node->Offset.startsWith('-') ? "-" : "+";
+    QString sign = isArrayElem ? "|" : (node->Offset.startsWith('-') ? "-" : "+");
 
     QString sep = style.GetSeparatorString();
 
@@ -342,7 +343,6 @@ QString CodeNoteModifier::UpdateRealNode(
 
     for (int k = 1; k < contentParts.size(); k++)
     {
-        // C# uses TrimStart only; keep intentional trailing whitespace.
         QString bodyLine = contentParts[k];
         int p = 0;
         while (p < bodyLine.size() && bodyLine[p].isSpace()) ++p;

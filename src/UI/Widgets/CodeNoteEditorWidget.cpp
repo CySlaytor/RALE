@@ -31,20 +31,16 @@ CodeNoteEditorWidget::CodeNoteEditorWidget(QWidget *parent)
 
     connect(chkShowLeafsOnly, &QCheckBox::toggled, this, &CodeNoteEditorWidget::RefreshVariableTreeDisplay);
 
-    cmbIndentStyle->addItems({
-        "Unicode Tree (├─)",
-        "Auto Detect (. or +)",
-        "Dots (.)",
-        "Plusses (+)"
+    chkUnicodeTree->setChecked(AppSettings::Current.CodeNoteUnicodeTree);
+    chkIndentValues->setChecked(AppSettings::Current.CodeNoteIndentDescriptions);
+
+    connect(chkUnicodeTree, &QCheckBox::toggled, this, [this](bool checked) {
+        AppSettings::Current.CodeNoteUnicodeTree = checked;
+        AppSettings::Save();
     });
 
-    QString savedStyle = AppSettings::Current.NoteIndentStyle;
-    int idx = cmbIndentStyle->findText(savedStyle);
-    if (idx != -1) cmbIndentStyle->setCurrentIndex(idx);
-    else cmbIndentStyle->setCurrentIndex(0);
-
-    connect(cmbIndentStyle, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() {
-        AppSettings::Current.NoteIndentStyle = cmbIndentStyle->currentText();
+    connect(chkIndentValues, &QCheckBox::toggled, this, [this](bool checked) {
+        AppSettings::Current.CodeNoteIndentDescriptions = checked;
         AppSettings::Save();
     });
 }
@@ -142,7 +138,7 @@ void CodeNoteEditorWidget::InitializeUI()
     panelBottom->setFixedHeight(34);
     auto *bottomLayout = new QHBoxLayout(panelBottom);
     bottomLayout->setContentsMargins(4, 4, 4, 4);
-    bottomLayout->setSpacing(4);
+    bottomLayout->setSpacing(6);
 
     btnSave = new QPushButton("Save", panelBottom);
     btnSave->setFixedSize(48, 26);
@@ -154,16 +150,16 @@ void CodeNoteEditorWidget::InitializeUI()
     connect(btnFixHierarchy, &QPushButton::clicked, this, &CodeNoteEditorWidget::onBtnFixHierarchyClicked);
     bottomLayout->addWidget(btnFixHierarchy);
 
-    chkIndentValues = new QCheckBox("Indent", panelBottom);
+    chkUnicodeTree = new QCheckBox("Unicode Tree", panelBottom);
+    chkUnicodeTree->setToolTip("Use Unicode box-drawing characters (├─, └─, │) for tree hierarchy indentation");
+    bottomLayout->addWidget(chkUnicodeTree);
+
+    chkIndentValues = new QCheckBox("Indent Descriptions", panelBottom);
+    chkIndentValues->setToolTip("Indent attached value descriptions and enumerations (using dots) to match the parent pointer's level");
     chkIndentValues->setChecked(true);
     bottomLayout->addWidget(chkIndentValues);
 
-    // Flexible width dropdown prevents squishing or forcing outer layout overflow
-    cmbIndentStyle = new QComboBox(panelBottom);
-    cmbIndentStyle->setMinimumWidth(125);
-    ThemeManager::SetupComboBox(cmbIndentStyle, 14);
-    cmbIndentStyle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    bottomLayout->addWidget(cmbIndentStyle);
+    bottomLayout->addStretch();
 
     btnReset = new QPushButton("Reset", panelBottom);
     btnReset->setFixedSize(54, 26);
@@ -245,11 +241,24 @@ void CodeNoteEditorWidget::SetShowLeafsOnly(bool value) { chkShowLeafsOnly->setC
 bool CodeNoteEditorWidget::IndentValues() const { return chkIndentValues->isChecked(); }
 void CodeNoteEditorWidget::SetIndentValues(bool value) { chkIndentValues->setChecked(value); }
 
-QString CodeNoteEditorWidget::NoteIndentStyle() const { return cmbIndentStyle->currentText(); }
+bool CodeNoteEditorWidget::UnicodeTree() const { return chkUnicodeTree->isChecked(); }
+void CodeNoteEditorWidget::SetUnicodeTree(bool value) { chkUnicodeTree->setChecked(value); }
+
+QString CodeNoteEditorWidget::NoteIndentStyle() const
+{
+    return chkUnicodeTree->isChecked() ? "Unicode Tree (├─)" : "Plusses (+)";
+}
+
 void CodeNoteEditorWidget::SetNoteIndentStyle(const QString &style)
 {
-    int idx = cmbIndentStyle->findText(style);
-    if (idx != -1) cmbIndentStyle->setCurrentIndex(idx);
+    chkUnicodeTree->setChecked(style.startsWith("Unicode Tree", Qt::CaseInsensitive));
+}
+
+void CodeNoteEditorWidget::SetConsoleId(int consoleId)
+{
+    _consoleId = consoleId;
+    if (_viewModel)
+        _viewModel->ConsoleId = consoleId;
 }
 
 void CodeNoteEditorWidget::onBtnReloadClicked()
@@ -297,8 +306,9 @@ void CodeNoteEditorWidget::onBtnFixHierarchyClicked()
 
     QString fixedText = CodeNoteLogic::FixHierarchy(
         currentText,
-        cmbIndentStyle->currentText(),
-        chkIndentValues->isChecked()
+        chkUnicodeTree->isChecked(),
+        chkIndentValues->isChecked(),
+        _consoleId
     );
 
     if (txtNoteBody->toPlainText() != fixedText)
@@ -386,8 +396,6 @@ void CodeNoteEditorWidget::ApplyFilter(bool autoSelectFirst)
     cmbNotes->clear();
     for (const auto &n : _filteredNotes)
     {
-        // Split on any newline flavour so a note beginning with CRLF still shows its
-        // first real line (C# uses RemoveEmptyEntries on {'\r','\n'}).
         QStringList lines = n.Note.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts);
         QString firstLine = lines.isEmpty() ? QString() : lines.first().trimmed();
         if (firstLine.length() > 50) firstLine = firstLine.left(47) + "...";
@@ -450,14 +458,8 @@ void CodeNoteEditorWidget::onVmNoteContentChanged()
 
 void CodeNoteEditorWidget::RefreshVariableTreeDisplay()
 {
-    // addItem() selects the first item, which can commit a pending edit and emit
-    // NoteContentChanged synchronously. Without this guard that re-enters this
-    // function mid-loop and leaves duplicate/stale entries in the dropdown.
     if (_isRefreshingVariables)
     {
-        // A nested refresh (usually caused by committing a pending edit from
-        // addItem's automatic selection) must rebuild again with the new tree
-        // once the outer rebuild is done.
         _variableRefreshPending = true;
         return;
     }

@@ -37,6 +37,15 @@ public:
     bool Notes_ShowLeafsOnly = false;
     bool Notes_IndentValues = true;
     QString NoteIndentStyle = "Unicode Tree (├─)";
+
+    // Code Note Formatting Options (Ported from Pointer Finder 2.0)
+    QString CodeNotePrefix = "+";
+    QString CodeNoteSuffix = "=";
+    bool CodeNoteAlignSuffixes = false;
+    bool CodeNoteSuffixOnLastLineOnly = false;
+    bool CodeNoteAutoPopulatePointers = true;
+    bool CodeNoteUnicodeTree = false;
+    bool CodeNoteIndentDescriptions = true;
 };
 
 class AppSettings

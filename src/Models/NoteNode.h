@@ -23,6 +23,10 @@ public:
     NoteNode* Parent = nullptr;
     QList<std::shared_ptr<NoteNode>> Children;
 
+    // Array structure tracking ported from Pointer Finder 2.0
+    bool IsArrayElement = false; // True for root/indexed array elements: |0x00
+    bool IsArrayChild = false;   // True for child fields inside array elements: |+0x04
+
     QString ToString() const
     {
         // Formatting happens in the ListControl's Format event, 

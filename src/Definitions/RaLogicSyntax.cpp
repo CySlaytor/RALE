@@ -1,4 +1,5 @@
 #include "RaLogicSyntax.h"
+#include <QRegularExpression>
 
 namespace RALogicEditor {
 
@@ -70,5 +71,98 @@ const QMap<QChar, QString> RaLogicSyntax::FloatSizeMap = {
     { 'F', "Float" }, { 'B', "Float BE" }, { 'H', "Double32" }, { 'I', "Double32 BE" },
     { 'M', "MBF32" }, { 'L', "MBF32 LE" }
 };
+
+bool RaLogicSyntax::IsPointerOrientedConsole(int consoleId)
+{
+    switch (consoleId)
+    {
+        case 2:  // N64
+        case 5:  // GBA
+        case 12: // PlayStation (PSX)
+        case 16: // GameCube
+        case 18: // Nintendo DS
+        case 19: // Wii
+        case 21: // PlayStation 2
+        case 40: // Dreamcast
+        case 41: // PlayStation Portable (PSP)
+        case 78: // Nintendo DSi
+            return true;
+        default:
+            return false;
+    }
+}
+
+QString RaLogicSyntax::GetPlatformPointerTemplate(int consoleId, const QString &noteHeader)
+{
+    // If the header already explicitly declares a pointer structure tag, preserve it verbatim
+    if (!noteHeader.isEmpty())
+    {
+        static const QRegularExpression ptrTagRx(R"(\[([^\]]*pointer[^\]]*)\])", QRegularExpression::CaseInsensitiveOption);
+        auto match = ptrTagRx.match(noteHeader);
+        if (match.hasMatch())
+        {
+            return QString("[%1]").arg(match.captured(1).trimmed());
+        }
+    }
+
+    switch (consoleId)
+    {
+        case 16: // GameCube
+        case 19: // Wii
+            return "[32-bit BE & 0x1FFFFFFF] Pointer";
+        case 2:  // Nintendo 64
+            return "[32-bit BE] Pointer";
+        case 21: // PlayStation 2
+            return "[32-bit & 0x1FFFFFFF] Pointer";
+        case 41: // PlayStation Portable (PSP)
+            return "[32-bit & 0x1FFFFFF] Pointer";
+        case 12: // PlayStation (PS1)
+        case 18: // Nintendo DS
+        case 78: // Nintendo DSi
+        case 40: // Dreamcast
+            return "[24-bit] Pointer";
+        case 5:  // Game Boy Advance
+        default:
+            return "[32-bit] Pointer";
+    }
+}
+
+QString RaLogicSyntax::GetPlatformPointerPrefix(int consoleId)
+{
+    switch (consoleId)
+    {
+        case 16: // GameCube
+        case 19: // Wii
+        case 2:  // N64
+            return "G";
+        case 12: // PlayStation
+        case 18: // NDS
+        case 78: // DSi
+        case 40: // Dreamcast
+            return "W";
+        case 5:  // GBA
+            return "O";
+        case 21: // PS2
+        case 41: // PSP
+        default:
+            return "X";
+    }
+}
+
+QString RaLogicSyntax::GetPlatformPointerMask(int consoleId)
+{
+    switch (consoleId)
+    {
+        case 16: // GameCube
+        case 19: // Wii
+            return "&536870911"; // 0x1FFFFFFF
+        case 21: // PlayStation 2
+            return "&536870911"; // 0x1FFFFFFF
+        case 41: // PSP
+            return "&33554431";  // 0x01FFFFFF
+        default:
+            return "";
+    }
+}
 
 } // namespace RALogicEditor

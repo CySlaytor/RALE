@@ -7,7 +7,6 @@
 #include <QPushButton>
 #include <QSplitter>
 #include <QMenu>
-#include <QActionGroup>
 #include <memory>
 #include "Models/AssetTableModel.h"
 #include "Widgets/TriggerEditorWidget.h"
@@ -61,7 +60,7 @@ private slots:
     void onViewDiff();
     void onClearDataReset();
     void onToggleReviewer();
-    void onSetTheme(ThemeManager::Theme theme);
+    void onSettings();
 
     void onOpenFile();
     void onSaveFile();
@@ -128,10 +127,6 @@ private:
     QAction *actUndo = nullptr;
     QAction *actRedo = nullptr;
     QAction *actViewReviewer = nullptr;
-
-    QMenu *themeMenu = nullptr;
-    QAction *actThemeLight = nullptr;
-    QAction *actThemeDark = nullptr;
 
     QMenu *assetContextMenu = nullptr;
     QAction *actNewAsset = nullptr;
