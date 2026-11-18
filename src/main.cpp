@@ -30,6 +30,13 @@ int main(int argc, char *argv[])
     // Automatic QComboBox popup configuration across the entire app
     app.installEventFilter(new RALogicEditor::GlobalComboBoxConfigurator(&app));
 
+    // Disable default Qt tooltip slide/fade effects
+    app.setEffectEnabled(Qt::UI_AnimateTooltip, false);
+    app.setEffectEnabled(Qt::UI_FadeTooltip, false);
+
+    // Symmetric tooltip fade-in / fade-out animation filter
+    app.installEventFilter(new RALogicEditor::TooltipAnimationFilter(&app));
+
     // Initialize the style and dark palette on QApplication at startup (before creating widgets)
     QPalette darkPalette;
     darkPalette.setColor(QPalette::Window, QColor(32, 32, 32));

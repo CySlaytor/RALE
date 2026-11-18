@@ -10,6 +10,17 @@ QMainWindow, QDialog {
     color: #000000;
 }
 
+/* Tooltips */
+QToolTip {
+    background-color: #f8f8f8;
+    color: #202020;
+    border: 1px solid #c8c8c8;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: 11px;
+    margin: 0px;
+}
+
 /* Data Tables - Background #8c8c8c represents the WinForms DataGridView AppWorkspace backdrop */
 QTableView, QTableWidget {
     background-color: #8c8c8c;

@@ -10,6 +10,17 @@ QMainWindow, QDialog {
     color: #ffffff;
 }
 
+/* Tooltips */
+QToolTip {
+    background-color: #202020;
+    color: #f0f0f0;
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: 11px;
+    margin: 0px;
+}
+
 /* Tables in Dark Mode */
 QTableView, QTableWidget {
     background-color: #202022;

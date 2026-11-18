@@ -332,6 +332,9 @@ void ThemeManager::ApplyTheme(Theme theme)
 {
     _currentTheme = theme;
 
+    QApplication::setEffectEnabled(Qt::UI_AnimateTooltip, false);
+    QApplication::setEffectEnabled(Qt::UI_FadeTooltip, false);
+
     // Apply RaStyle over Fusion base engine
     qApp->setStyle(new RaStyle(QStyleFactory::create("Fusion")));
 
@@ -383,8 +386,8 @@ void ThemeManager::ApplyLightPalette(QApplication *app)
     lightPalette.setColor(QPalette::WindowText, QColor(0, 0, 0));
     lightPalette.setColor(QPalette::Base, QColor(255, 255, 255));
     lightPalette.setColor(QPalette::AlternateBase, QColor(248, 249, 250));
-    lightPalette.setColor(QPalette::ToolTipBase, QColor(255, 255, 220));
-    lightPalette.setColor(QPalette::ToolTipText, QColor(0, 0, 0));
+    lightPalette.setColor(QPalette::ToolTipBase, QColor(248, 248, 248));
+    lightPalette.setColor(QPalette::ToolTipText, QColor(32, 32, 32));
     lightPalette.setColor(QPalette::Text, QColor(0, 0, 0));
     lightPalette.setColor(QPalette::Button, QColor(240, 240, 240));
     lightPalette.setColor(QPalette::ButtonText, QColor(0, 0, 0));
