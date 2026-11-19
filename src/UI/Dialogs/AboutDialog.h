@@ -14,6 +14,9 @@ class AboutDialog : public QDialog {
     explicit AboutDialog(QWidget *parent = nullptr);
     ~AboutDialog() override;
 
+  protected:
+    void done(int r) override;
+
   private:
     QLabel *m_iconLabel = nullptr;
     QLabel *m_titleLabel = nullptr;
@@ -22,6 +25,8 @@ class AboutDialog : public QDialog {
     QPushButton *m_closeButton = nullptr;
 
     void setupLayout();
+    void loadPositionSettings();
+    void savePositionSettings();
 };
 
 } // namespace RALE

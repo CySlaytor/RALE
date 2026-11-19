@@ -121,9 +121,6 @@ private slots:
     void onLogicOptimizerClicked();
     void onBatchMultiplyNotesClicked();
 
-    void onSaveAsSnippetClicked();
-    void onInsertSnippetClicked();
-
 private:
     struct LeaderboardFormatEntry
     {

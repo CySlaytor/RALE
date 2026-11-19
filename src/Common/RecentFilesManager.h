@@ -26,7 +26,7 @@ private:
     void Save();
     QString ExtractGameTitle(const QString &path);
 
-    // Save to JSON to store Title + Path structure
+    // Save to JSON in Metadata folder to store Title + Path structure
     QString GetFilePathJson() const;
     // Legacy support
     QString GetFilePathTxt() const;

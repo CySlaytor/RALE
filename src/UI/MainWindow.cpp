@@ -590,6 +590,7 @@ void MainWindow::ApplySettings()
     codeNoteEditor->SetShowLeafsOnly(AppSettings::Current.Notes_ShowLeafsOnly);
     codeNoteEditor->SetIndentValues(AppSettings::Current.CodeNoteIndentDescriptions);
     codeNoteEditor->SetUnicodeTree(AppSettings::Current.CodeNoteUnicodeTree);
+    codeReviewControl->SetFilterIndex(AppSettings::Current.CodeReview_FilterIndex);
 }
 
 void MainWindow::SaveSettings()
@@ -634,6 +635,7 @@ void MainWindow::SaveSettings()
     AppSettings::Current.LastAssetTypeIndex = cmbAssetType->currentIndex();
     AppSettings::Current.LastCategoryIndex = cmbCategory->currentIndex();
     AppSettings::Current.LastSourceIndex = cmbSource->currentIndex();
+    AppSettings::Current.CodeReview_FilterIndex = codeReviewControl->FilterIndex();
 
     AppSettings::Current.Trigger_ShowDecimal = triggerEditor->ShowDecimal();
     AppSettings::Current.Trigger_ShowAliases = triggerEditor->ShowAliases();
@@ -1100,7 +1102,7 @@ void MainWindow::RebuildNotesCache()
                         const auto targetNodes = _cachedNotesLookup.value(targetAddr);
                         _cachedNotesLookup.insert(sourceKey, targetNodes);
                         if (!targetNodes.isEmpty() && targetNodes[0]->Size > 1)
-                            {
+                        {
                             bool ok = false;
                             QString clean = sourceKey;
                             clean.remove("0x", Qt::CaseInsensitive);
@@ -1762,9 +1764,9 @@ void MainWindow::onClearDataReset()
         try
         {
             QString appPath = QCoreApplication::applicationDirPath();
+            QFile::remove(QDir(appPath).filePath("settings.ini"));
             QFile::remove(QDir(appPath).filePath("settings.json"));
             QFile::remove(QDir(appPath).filePath("recent.json"));
-            QFile::remove(QDir(appPath).filePath("snippets.json"));
 
             QDir(QDir(appPath).filePath("Cache")).removeRecursively();
             QDir(QDir(appPath).filePath("Metadata")).removeRecursively();

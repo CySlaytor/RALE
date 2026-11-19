@@ -1,4 +1,5 @@
 #include "NoteMultiplierDialog.h"
+#include "../../Common/AppSettings.h"
 #include "../Styles/ThemeManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -7,29 +8,43 @@
 
 namespace RALE {
 
-int NoteMultiplierDialog::_lastCopies = 1;
-QString NoteMultiplierDialog::_lastStride = "0x0";
-int NoteMultiplierDialog::_lastStartNum = 2;
-int NoteMultiplierDialog::_lastNamingIdx = 1;
-QString NoteMultiplierDialog::_lastSearch = "";
-QString NoteMultiplierDialog::_lastReplace = "";
-int NoteMultiplierDialog::_lastTargetIdx = 0;
-
 NoteMultiplierDialog::NoteMultiplierDialog(QWidget *parent)
     : QDialog(parent)
 {
     InitializeUI();
 
     // Load persisted state
-    txtCopies->setText(QString::number(_lastCopies));
-    txtStride->setText(_lastStride);
-    txtStartNum->setText(QString::number(_lastStartNum));
-    txtSearch->setText(_lastSearch);
-    txtReplace->setText(_lastReplace);
-    cmbNaming->setCurrentIndex(_lastNamingIdx);
-    cmbStrideTarget->setCurrentIndex(_lastTargetIdx);
+    txtCopies->setText(QString::number(AppSettings::Current.NoteMultiply_Copies));
+    txtStride->setText(AppSettings::Current.NoteMultiply_Stride);
+    txtStartNum->setText(QString::number(AppSettings::Current.NoteMultiply_StartNum));
+    txtSearch->setText(AppSettings::Current.NoteMultiply_Search);
+    txtReplace->setText(AppSettings::Current.NoteMultiply_Replace);
+    cmbNaming->setCurrentIndex(AppSettings::Current.NoteMultiply_NamingIdx);
+    cmbStrideTarget->setCurrentIndex(AppSettings::Current.NoteMultiply_TargetIdx);
 
     this->setWindowTitle("Multiply Selected Text");
+    loadPositionSettings();
+}
+
+void NoteMultiplierDialog::loadPositionSettings()
+{
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("NoteMultiplierDialog", p, s))
+    {
+        move(p);
+    }
+}
+
+void NoteMultiplierDialog::savePositionSettings()
+{
+    AppSettings::SaveDialogGeometry("NoteMultiplierDialog", pos());
+}
+
+void NoteMultiplierDialog::done(int r)
+{
+    savePositionSettings();
+    QDialog::done(r);
 }
 
 void NoteMultiplierDialog::InitializeUI()
@@ -146,13 +161,14 @@ void NoteMultiplierDialog::onBtnOK()
     TargetMode = static_cast<StrideTarget>(cmbStrideTarget->currentIndex());
 
     // Save state for next use
-    _lastCopies = Copies;
-    _lastStride = txtStride->text().trimmed();
-    _lastStartNum = StartNumber;
-    _lastNamingIdx = cmbNaming->currentIndex();
-    _lastSearch = SearchText;
-    _lastReplace = ReplaceText;
-    _lastTargetIdx = cmbStrideTarget->currentIndex();
+    AppSettings::Current.NoteMultiply_Copies = Copies;
+    AppSettings::Current.NoteMultiply_Stride = txtStride->text().trimmed();
+    AppSettings::Current.NoteMultiply_StartNum = StartNumber;
+    AppSettings::Current.NoteMultiply_NamingIdx = cmbNaming->currentIndex();
+    AppSettings::Current.NoteMultiply_Search = SearchText;
+    AppSettings::Current.NoteMultiply_Replace = ReplaceText;
+    AppSettings::Current.NoteMultiply_TargetIdx = cmbStrideTarget->currentIndex();
+    AppSettings::Save();
 
     accept();
 }

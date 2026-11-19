@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QFile>
 #include <QProcess>
+#include <algorithm>
 
 namespace RALE {
 
@@ -36,6 +37,33 @@ SettingsDialog::SettingsDialog(QWidget *parent)
 
     m_isInitializing = false;
     updateCodeNotePreview();
+    loadPositionSettings();
+}
+
+void SettingsDialog::loadPositionSettings()
+{
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("SettingsDialog", p, s))
+    {
+        move(p);
+        if (s.isValid())
+        {
+            resize(std::max(s.width(), 450), std::max(s.height(), 320));
+        }
+    }
+}
+
+void SettingsDialog::savePositionSettings()
+{
+    if (m_isResetting) return;
+    AppSettings::SaveDialogGeometry("SettingsDialog", pos(), size());
+}
+
+void SettingsDialog::done(int r)
+{
+    savePositionSettings();
+    QDialog::done(r);
 }
 
 void SettingsDialog::setupLayout()
@@ -313,13 +341,14 @@ void SettingsDialog::onResetAllClicked()
 {
     auto result = QMessageBox::critical(this, "Confirm Reset All Settings",
                                         "This will reset ALL application settings, including window geometry, theme, and code note options.\n\n"
-                                        "The settings.json file will be deleted and the application will restart.\n\n"
+                                        "The settings.ini file will be deleted and the application will restart.\n\n"
                                         "Are you sure you want to proceed?",
                                         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
     if (result == QMessageBox::Yes)
     {
-        QString settingsFile = QDir(QCoreApplication::applicationDirPath()).filePath("settings.json");
+        m_isResetting = true;
+        QString settingsFile = QDir(QCoreApplication::applicationDirPath()).filePath("settings.ini");
         if (QFile::exists(settingsFile))
         {
             QFile::remove(settingsFile);

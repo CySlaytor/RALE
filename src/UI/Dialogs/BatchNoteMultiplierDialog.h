@@ -23,6 +23,9 @@ public:
 
     explicit BatchNoteMultiplierDialog(const QList<CodeNote> &allNotes, QWidget *parent = nullptr);
 
+protected:
+    void done(int r) override;
+
 private slots:
     void onFilterChanged(const QString &filter);
     void onSelectAll();
@@ -31,13 +34,6 @@ private slots:
     void onBtnCancel();
 
 private:
-    // Persisted state
-    static int _lastCopies;
-    static QString _lastStride;
-    static int _lastStartNum;
-    static QString _lastSearch;
-    static QString _lastReplace;
-
     QList<CodeNote> _allNotes;
     QList<CodeNote> _filteredNotes;
 
@@ -56,6 +52,8 @@ private:
     QPushButton *btnCancel = nullptr;
 
     void InitializeUI();
+    void loadPositionSettings();
+    void savePositionSettings();
     void PopulateList(const QString &filter);
 };
 

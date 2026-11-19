@@ -1,4 +1,5 @@
 #include "AboutDialog.h"
+#include "../../Common/AppSettings.h"
 #include "../Styles/ThemeManager.h"
 #include <QFrame>
 #include <QHBoxLayout>
@@ -17,9 +18,27 @@ AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent) {
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
     setupLayout();
+    loadPositionSettings();
 }
 
 AboutDialog::~AboutDialog() = default;
+
+void AboutDialog::loadPositionSettings() {
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("AboutDialog", p, s)) {
+        move(p);
+    }
+}
+
+void AboutDialog::savePositionSettings() {
+    AppSettings::SaveDialogGeometry("AboutDialog", pos());
+}
+
+void AboutDialog::done(int r) {
+    savePositionSettings();
+    QDialog::done(r);
+}
 
 void AboutDialog::setupLayout() {
     auto *mainLayout = new QVBoxLayout(this);

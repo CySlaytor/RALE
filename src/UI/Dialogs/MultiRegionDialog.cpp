@@ -1,6 +1,8 @@
 #include "MultiRegionDialog.h"
+#include "../../Common/AppSettings.h"
 #include "../../Definitions/RegionDefinitions.h"
 #include "../../Parsers/AchievementParser.h"
+#include "../Styles/ThemeManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
@@ -13,6 +15,7 @@
 #include <QSet>
 #include <QStyledItemDelegate>
 #include <QPainter>
+#include <algorithm>
 
 namespace RALE {
 
@@ -58,6 +61,32 @@ MultiRegionDialog::MultiRegionDialog(const QList<CodeNote> &notes, QWidget *pare
 {
     InitializeUI();
     InitializeDynamicRegions();
+    loadPositionSettings();
+}
+
+void MultiRegionDialog::loadPositionSettings()
+{
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("MultiRegionDialog", p, s))
+    {
+        move(p);
+        if (s.isValid())
+        {
+            resize(std::max(s.width(), 550), std::max(s.height(), 400));
+        }
+    }
+}
+
+void MultiRegionDialog::savePositionSettings()
+{
+    AppSettings::SaveDialogGeometry("MultiRegionDialog", pos(), size());
+}
+
+void MultiRegionDialog::done(int r)
+{
+    savePositionSettings();
+    QDialog::done(r);
 }
 
 bool MultiRegionDialog::ShouldUpdateRichPresence() const { return chkUpdateRP->isChecked(); }
@@ -110,13 +139,21 @@ void MultiRegionDialog::InitializeUI()
     bottomRow->addWidget(btnHelp);
 
     chkUsePauseLocks = new QCheckBox("Generate as PauseLocks", this);
-    chkUsePauseLocks->setChecked(true);
+    chkUsePauseLocks->setChecked(AppSettings::Current.MultiRegion_UsePauseLocks);
+    connect(chkUsePauseLocks, &QCheckBox::toggled, this, [](bool checked) {
+        AppSettings::Current.MultiRegion_UsePauseLocks = checked;
+        AppSettings::Save();
+    });
     bottomRow->addWidget(chkUsePauseLocks);
 
     bottomRow->addStretch();
 
     chkUpdateRP = new QCheckBox("Update Rich Presence", this);
-    chkUpdateRP->setChecked(true);
+    chkUpdateRP->setChecked(AppSettings::Current.MultiRegion_UpdateRP);
+    connect(chkUpdateRP, &QCheckBox::toggled, this, [](bool checked) {
+        AppSettings::Current.MultiRegion_UpdateRP = checked;
+        AppSettings::Save();
+    });
     bottomRow->addWidget(chkUpdateRP);
 
     btnOK = new QPushButton("Apply", this);
@@ -133,11 +170,11 @@ void MultiRegionDialog::InitializeUI()
 
     // Context Menu for Condition Grids
     ctxGridActions = new QMenu(this);
-    auto *actPaste = ctxGridActions->addAction("Paste Logic", this, &MultiRegionDialog::onPasteToGrid);
+    auto *actPaste = ctxGridActions->addAction(ThemeManager::getIcon(":/icons/load.svg", ThemeManager::CurrentTheme()), "Paste Logic", this, &MultiRegionDialog::onPasteToGrid);
     actPaste->setShortcut(QKeySequence::Paste);
-    auto *actCopy = ctxGridActions->addAction("Copy", this, &MultiRegionDialog::onCopyFromGrid);
+    auto *actCopy = ctxGridActions->addAction(ThemeManager::getIcon(":/icons/copy.svg", ThemeManager::CurrentTheme()), "Copy", this, &MultiRegionDialog::onCopyFromGrid);
     actCopy->setShortcut(QKeySequence::Copy);
-    auto *actDelete = ctxGridActions->addAction("Delete Row", this, &MultiRegionDialog::onDeleteFromGrid);
+    auto *actDelete = ctxGridActions->addAction(ThemeManager::getIcon(":/icons/delete.svg", ThemeManager::CurrentTheme()), "Delete Row", this, &MultiRegionDialog::onDeleteFromGrid);
     actDelete->setShortcut(QKeySequence::Delete);
 }
 

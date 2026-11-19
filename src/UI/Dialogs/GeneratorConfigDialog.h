@@ -44,6 +44,9 @@ public:
         const QSet<QString> *preSelectedAddresses = nullptr,
         QWidget *parent = nullptr);
 
+protected:
+    void done(int r) override;
+
 private slots:
     void onTreeItemChanged(QTreeWidgetItem *item, int column);
     void onSelectAll();
@@ -51,10 +54,7 @@ private slots:
     void onBtnCancel();
 
 private:
-    // Static fields to persist state across the session
-    static QString _lastCopies;
-    static QString _lastStride;
-    static bool _lastIsArray;
+    // Static field to track if user explicitly customized stride this session
     static bool _userModifiedStride; // Tracks if the user has explicitly set a stride this session
 
     QTreeWidget *tvAddresses = nullptr;
@@ -68,6 +68,8 @@ private:
     bool _isUpdatingCheck = false;
 
     void InitializeUI();
+    void loadPositionSettings();
+    void savePositionSettings();
     void InitializeTreeView(const QList<std::shared_ptr<GeneratorItemViewModel>> &items);
     QTreeWidgetItem *CreateTreeNode(const GeneratorItemViewModel &item);
     void CheckNodesRecursive(QTreeWidgetItem *item, const QSet<QString> &addressesToCheck);

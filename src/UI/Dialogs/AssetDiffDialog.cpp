@@ -1,4 +1,5 @@
 #include "AssetDiffDialog.h"
+#include "../../Common/AppSettings.h"
 #include "../../Parsers/AchievementParser.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -6,6 +7,7 @@
 #include <QTextCursor>
 #include <QTextCharFormat>
 #include <QScrollBar>
+#include <algorithm>
 
 namespace RALE {
 
@@ -16,6 +18,7 @@ AssetDiffDialog::AssetDiffDialog(
     : QDialog(parent)
 {
     InitializeUI();
+    loadPositionSettings();
 
     this->setWindowTitle(QString("Diff Viewer - %1 (ID: %2)").arg(localItem->Title).arg(localItem->ID));
 
@@ -25,6 +28,31 @@ AssetDiffDialog::AssetDiffDialog(
     AlignDiffLists(serverLines, localLines);
     HighlightDifferences(serverLines, localLines);
     UpdateDiffStats(serverLines, localLines);
+}
+
+void AssetDiffDialog::loadPositionSettings()
+{
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("AssetDiffDialog", p, s))
+    {
+        move(p);
+        if (s.isValid())
+        {
+            resize(std::max(s.width(), 500), std::max(s.height(), 300));
+        }
+    }
+}
+
+void AssetDiffDialog::savePositionSettings()
+{
+    AppSettings::SaveDialogGeometry("AssetDiffDialog", pos(), size());
+}
+
+void AssetDiffDialog::done(int r)
+{
+    savePositionSettings();
+    QDialog::done(r);
 }
 
 void AssetDiffDialog::InitializeUI()

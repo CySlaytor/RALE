@@ -1,4 +1,5 @@
 #include "TextDiffDialog.h"
+#include "../../Common/AppSettings.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -16,6 +17,7 @@ TextDiffDialog::TextDiffDialog(
     : QDialog(parent)
 {
     InitializeUI();
+    loadPositionSettings();
     this->setWindowTitle(title);
     ApplyTheme();
 
@@ -31,6 +33,31 @@ TextDiffDialog::TextDiffDialog(
     AlignDiffLists(leftLines, rightLines);
     HighlightDifferences(leftLines, rightLines);
     UpdateDiffStats(leftLines, rightLines);
+}
+
+void TextDiffDialog::loadPositionSettings()
+{
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("TextDiffDialog", p, s))
+    {
+        move(p);
+        if (s.isValid())
+        {
+            resize(std::max(s.width(), 500), std::max(s.height(), 300));
+        }
+    }
+}
+
+void TextDiffDialog::savePositionSettings()
+{
+    AppSettings::SaveDialogGeometry("TextDiffDialog", pos(), size());
+}
+
+void TextDiffDialog::done(int r)
+{
+    savePositionSettings();
+    QDialog::done(r);
 }
 
 void TextDiffDialog::InitializeUI()

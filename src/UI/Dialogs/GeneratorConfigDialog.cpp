@@ -1,4 +1,5 @@
 #include "GeneratorConfigDialog.h"
+#include "../../Common/AppSettings.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -8,9 +9,6 @@
 
 namespace RALE {
 
-QString GeneratorConfigDialog::_lastCopies = "1";
-QString GeneratorConfigDialog::_lastStride = "0x0";
-bool GeneratorConfigDialog::_lastIsArray = false;
 bool GeneratorConfigDialog::_userModifiedStride = false; // Tracks if the user has explicitly set a stride this session
 
 QString GeneratorConfigDialog::GeneratorItemViewModel::ToString() const
@@ -39,10 +37,10 @@ GeneratorConfigDialog::GeneratorConfigDialog(
     InitializeUI();
     InitializeTreeView(rootItems);
 
-    // 1. Apply Session Persistence Defaults First
-    txtCopies->setText(_lastCopies);
-    txtStride->setText(_lastStride);
-    chkGenerateAsArray->setChecked(_lastIsArray);
+    // 1. Apply Persistence Defaults First
+    txtCopies->setText(AppSettings::Current.Generator_Copies);
+    txtStride->setText(AppSettings::Current.Generator_Stride);
+    chkGenerateAsArray->setChecked(AppSettings::Current.Generator_IsArray);
 
     // 2. Pre-fill Stride if auto-detected (Only override if the user hasn't explicitly customized it this session)
     if (defaultStride > 0 && !_userModifiedStride)
@@ -99,6 +97,29 @@ GeneratorConfigDialog::GeneratorConfigDialog(
         SetChildrenChecked(tvAddresses->topLevelItem(0), true);
         _isUpdatingCheck = false;
     }
+
+    loadPositionSettings();
+}
+
+void GeneratorConfigDialog::loadPositionSettings()
+{
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("GeneratorConfigDialog", p, s))
+    {
+        move(p);
+    }
+}
+
+void GeneratorConfigDialog::savePositionSettings()
+{
+    AppSettings::SaveDialogGeometry("GeneratorConfigDialog", pos());
+}
+
+void GeneratorConfigDialog::done(int r)
+{
+    savePositionSettings();
+    QDialog::done(r);
 }
 
 void GeneratorConfigDialog::InitializeUI()
@@ -335,10 +356,11 @@ void GeneratorConfigDialog::onBtnOK()
     Stride = s;
     IsArray = chkGenerateAsArray->isChecked();
 
-    // Save state for next use in the same session
-    _lastCopies = txtCopies->text();
-    _lastStride = txtStride->text();
-    _lastIsArray = chkGenerateAsArray->isChecked();
+    // Save state for next use
+    AppSettings::Current.Generator_Copies = txtCopies->text();
+    AppSettings::Current.Generator_Stride = txtStride->text();
+    AppSettings::Current.Generator_IsArray = chkGenerateAsArray->isChecked();
+    AppSettings::Save();
     _userModifiedStride = true; // Mark as explicitly set by user
 
     accept();

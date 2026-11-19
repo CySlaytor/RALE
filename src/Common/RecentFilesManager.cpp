@@ -13,7 +13,9 @@ namespace RALE {
 
 QString RecentFilesManager::GetFilePathJson() const
 {
-    return QDir(QCoreApplication::applicationDirPath()).filePath("recent.json");
+    QString folder = QDir(QCoreApplication::applicationDirPath()).filePath("Metadata");
+    if (!QDir(folder).exists()) QDir().mkpath(folder);
+    return QDir(folder).filePath("recent.json");
 }
 
 QString RecentFilesManager::GetFilePathTxt() const
@@ -26,6 +28,13 @@ void RecentFilesManager::Load()
     Files.clear();
     QString pathJson = GetFilePathJson();
     QString pathTxt = GetFilePathTxt();
+    QString legacyRootJson = QDir(QCoreApplication::applicationDirPath()).filePath("recent.json");
+
+    // Migrate existing recent.json from root to Metadata/ folder if needed
+    if (!QFile::exists(pathJson) && QFile::exists(legacyRootJson))
+    {
+        QFile::rename(legacyRootJson, pathJson);
+    }
 
     // 1. Try loading new JSON format
     if (QFile::exists(pathJson))

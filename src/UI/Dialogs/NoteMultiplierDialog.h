@@ -25,21 +25,15 @@ public:
     int StartNumber = 2;
     StrideTarget TargetMode = StrideTarget::All;
 
+protected:
+    void done(int r) override;
+
 private slots:
     void onNamingIndexChanged(int index);
     void onBtnOK();
     void onBtnCancel();
 
 private:
-    // Static fields to persist state across session
-    static int _lastCopies;
-    static QString _lastStride;
-    static int _lastStartNum;
-    static int _lastNamingIdx;
-    static QString _lastSearch;
-    static QString _lastReplace;
-    static int _lastTargetIdx;
-
     QLineEdit *txtCopies = nullptr;
     QLineEdit *txtStride = nullptr;
     QLineEdit *txtStartNum = nullptr;
@@ -52,6 +46,8 @@ private:
     QPushButton *btnCancel = nullptr;
 
     void InitializeUI();
+    void loadPositionSettings();
+    void savePositionSettings();
 };
 
 } // namespace RALE

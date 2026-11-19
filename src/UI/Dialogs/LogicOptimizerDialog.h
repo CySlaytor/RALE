@@ -18,6 +18,9 @@ class LogicOptimizerDialog : public QDialog
 public:
     explicit LogicOptimizerDialog(const QList<std::shared_ptr<IAssetItem>> &assets, QWidget *parent = nullptr);
 
+protected:
+    void done(int r) override;
+
 private slots:
     void onSelectAllClicked();
     void onSelectWarningClicked();
@@ -41,6 +44,8 @@ private:
     QLabel *lblInfo = nullptr;
 
     void InitializeUI();
+    void loadPositionSettings();
+    void savePositionSettings();
     void ApplyTheme();
     void PopulateGrid();
     void UpdateRowForAsset(const std::shared_ptr<IAssetItem> &asset);

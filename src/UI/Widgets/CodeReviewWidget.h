@@ -18,6 +18,9 @@ public:
 
     void SetIssues(const QList<ValidationIssue> &issues);
 
+    int FilterIndex() const;
+    void SetFilterIndex(int index);
+
 signals:
     void IssueSelected(const ValidationIssue &issue);
 

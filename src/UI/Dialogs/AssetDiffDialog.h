@@ -20,6 +20,9 @@ public:
         const std::shared_ptr<IAssetItem> &localItem,
         QWidget *parent = nullptr);
 
+protected:
+    void done(int r) override;
+
 private:
     QTextEdit *rtbServer = nullptr;
     QTextEdit *rtbLocal = nullptr;
@@ -28,6 +31,8 @@ private:
     QLabel *lblStats = nullptr;
 
     void InitializeUI();
+    void loadPositionSettings();
+    void savePositionSettings();
     QStringList GetReadableLines(const QString &rawLogic, bool isLeaderboard);
     QString ConditionToAlignedString(const AchievementCondition &cond);
     QString OperandToAligned(const Operand &op);

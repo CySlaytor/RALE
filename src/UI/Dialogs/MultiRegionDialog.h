@@ -28,6 +28,9 @@ public:
 
     QList<RegionConfig> GetConfiguredRegions();
 
+protected:
+    void done(int r) override;
+
 private slots:
     void onBtnOK();
     void onBtnCancel();
@@ -51,6 +54,8 @@ private:
     QMenu *ctxGridActions = nullptr;
 
     void InitializeUI();
+    void loadPositionSettings();
+    void savePositionSettings();
     void InitializeDynamicRegions();
     void CreateRegionTab(const QString &regionName, bool isBase);
     void ScanForMappings(const QString &baseRegion);

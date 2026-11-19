@@ -18,6 +18,9 @@ public:
         const QString &rightText,
         QWidget *parent = nullptr);
 
+protected:
+    void done(int r) override;
+
 private:
     QTextEdit *rtbLeft = nullptr;
     QTextEdit *rtbRight = nullptr;
@@ -26,6 +29,8 @@ private:
     QLabel *lblStats = nullptr;
 
     void InitializeUI();
+    void loadPositionSettings();
+    void savePositionSettings();
     void ApplyTheme();
     void AlignDiffLists(QStringList &left, QStringList &right);
     bool IsSimilar(const QString &left, const QString &right);

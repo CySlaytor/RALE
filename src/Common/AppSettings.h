@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QString>
+#include <QPoint>
+#include <QSize>
 
 namespace RALE {
 
@@ -27,6 +29,7 @@ public:
     int LastAssetTypeIndex = 0; // 0=Ach, 1=LB
     int LastCategoryIndex = 0;  // 0=Core
     int LastSourceIndex = 0;    // 0=JSON
+    int CodeReview_FilterIndex = 0;
 
     // Trigger Editor State
     bool Trigger_ShowDecimal = false;
@@ -46,6 +49,28 @@ public:
     bool CodeNoteAutoPopulatePointers = true;
     bool CodeNoteUnicodeTree = false;
     bool CodeNoteIndentDescriptions = true;
+
+    // Dialog States & Preferences
+    bool MultiRegion_UsePauseLocks = true;
+    bool MultiRegion_UpdateRP = true;
+
+    int BatchMultiply_Copies = 1;
+    QString BatchMultiply_Stride = "0x0";
+    int BatchMultiply_StartNum = 2;
+    QString BatchMultiply_Search = "";
+    QString BatchMultiply_Replace = "";
+
+    int NoteMultiply_Copies = 1;
+    QString NoteMultiply_Stride = "0x0";
+    int NoteMultiply_StartNum = 2;
+    int NoteMultiply_NamingIdx = 1;
+    QString NoteMultiply_Search = "";
+    QString NoteMultiply_Replace = "";
+    int NoteMultiply_TargetIdx = 0;
+
+    QString Generator_Copies = "1";
+    QString Generator_Stride = "0x0";
+    bool Generator_IsArray = false;
 };
 
 class AppSettings
@@ -56,8 +81,14 @@ public:
     static void Load();
     static void Save();
 
-private:
+    // Dialog Positions and Sizes Persistence (matching PF2 conventions)
+    static void SaveDialogGeometry(const QString &dialogName, const QPoint &pos, const QSize &size = QSize());
+    static bool LoadDialogGeometry(const QString &dialogName, QPoint &pos, QSize &size);
+
     static QString GetSettingsPath();
+
+private:
+    static void MigrateFromJsonIfPresent(const QString &jsonPath);
 };
 
 } // namespace RALE

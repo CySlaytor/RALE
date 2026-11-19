@@ -1,4 +1,5 @@
 #include "BatchNoteMultiplierDialog.h"
+#include "../../Common/AppSettings.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -6,14 +7,9 @@
 #include <QFormLayout>
 #include <QLabel>
 #include <QMessageBox>
+#include <algorithm>
 
 namespace RALE {
-
-int BatchNoteMultiplierDialog::_lastCopies = 1;
-QString BatchNoteMultiplierDialog::_lastStride = "0x0";
-int BatchNoteMultiplierDialog::_lastStartNum = 2;
-QString BatchNoteMultiplierDialog::_lastSearch = "";
-QString BatchNoteMultiplierDialog::_lastReplace = "";
 
 BatchNoteMultiplierDialog::BatchNoteMultiplierDialog(const QList<CodeNote> &allNotes, QWidget *parent)
     : QDialog(parent), _allNotes(allNotes)
@@ -21,13 +17,39 @@ BatchNoteMultiplierDialog::BatchNoteMultiplierDialog(const QList<CodeNote> &allN
     InitializeUI();
 
     // Load persisted state
-    txtCopies->setText(QString::number(_lastCopies));
-    txtStride->setText(_lastStride);
-    txtStartNum->setText(QString::number(_lastStartNum));
-    txtSearchKeyword->setText(_lastSearch);
-    txtReplacePattern->setText(_lastReplace);
+    txtCopies->setText(QString::number(AppSettings::Current.BatchMultiply_Copies));
+    txtStride->setText(AppSettings::Current.BatchMultiply_Stride);
+    txtStartNum->setText(QString::number(AppSettings::Current.BatchMultiply_StartNum));
+    txtSearchKeyword->setText(AppSettings::Current.BatchMultiply_Search);
+    txtReplacePattern->setText(AppSettings::Current.BatchMultiply_Replace);
 
     PopulateList("");
+    loadPositionSettings();
+}
+
+void BatchNoteMultiplierDialog::loadPositionSettings()
+{
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("BatchNoteMultiplierDialog", p, s))
+    {
+        move(p);
+        if (s.isValid())
+        {
+            resize(std::max(s.width(), 600), std::max(s.height(), 350));
+        }
+    }
+}
+
+void BatchNoteMultiplierDialog::savePositionSettings()
+{
+    AppSettings::SaveDialogGeometry("BatchNoteMultiplierDialog", pos(), size());
+}
+
+void BatchNoteMultiplierDialog::done(int r)
+{
+    savePositionSettings();
+    QDialog::done(r);
 }
 
 void BatchNoteMultiplierDialog::InitializeUI()
@@ -246,11 +268,12 @@ void BatchNoteMultiplierDialog::onBtnOK()
     ReplacePattern = txtReplacePattern->text();
 
     // Save persisted state
-    _lastCopies = Copies;
-    _lastStride = txtStride->text();
-    _lastStartNum = StartNumber;
-    _lastSearch = SearchKeyword;
-    _lastReplace = ReplacePattern;
+    AppSettings::Current.BatchMultiply_Copies = Copies;
+    AppSettings::Current.BatchMultiply_Stride = txtStride->text();
+    AppSettings::Current.BatchMultiply_StartNum = StartNumber;
+    AppSettings::Current.BatchMultiply_Search = SearchKeyword;
+    AppSettings::Current.BatchMultiply_Replace = ReplacePattern;
+    AppSettings::Save();
 
     accept();
 }

@@ -18,6 +18,9 @@ public:
     explicit SettingsDialog(QWidget *parent = nullptr);
     ~SettingsDialog() override = default;
 
+protected:
+    void done(int r) override;
+
 private slots:
     void onThemeChanged(const QString &themeName);
     void onCodeNoteSettingChanged();
@@ -42,11 +45,14 @@ private:
 
     QPushButton *m_closeButton = nullptr;
     bool m_isInitializing = true;
+    bool m_isResetting = false;
 
     void setupLayout();
     void setupGeneralTab();
     void setupCodeNotesTab();
     void updateCodeNotePreview();
+    void loadPositionSettings();
+    void savePositionSettings();
 };
 
 } // namespace RALE

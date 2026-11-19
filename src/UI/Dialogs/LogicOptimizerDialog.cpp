@@ -1,4 +1,5 @@
 #include "LogicOptimizerDialog.h"
+#include "../../Common/AppSettings.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -8,6 +9,7 @@
 #include <QStyleOptionButton>
 #include <QStyleOptionViewItem>
 #include <QMouseEvent>
+#include <algorithm>
 
 namespace RALE {
 
@@ -117,6 +119,32 @@ LogicOptimizerDialog::LogicOptimizerDialog(const QList<std::shared_ptr<IAssetIte
     InitializeUI();
     PopulateGrid();
     UpdateSelectAllButtonState();
+    loadPositionSettings();
+}
+
+void LogicOptimizerDialog::loadPositionSettings()
+{
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("LogicOptimizerDialog", p, s))
+    {
+        move(p);
+        if (s.isValid())
+        {
+            resize(std::max(s.width(), 700), std::max(s.height(), 400));
+        }
+    }
+}
+
+void LogicOptimizerDialog::savePositionSettings()
+{
+    AppSettings::SaveDialogGeometry("LogicOptimizerDialog", pos(), size());
+}
+
+void LogicOptimizerDialog::done(int r)
+{
+    savePositionSettings();
+    QDialog::done(r);
 }
 
 void LogicOptimizerDialog::InitializeUI()

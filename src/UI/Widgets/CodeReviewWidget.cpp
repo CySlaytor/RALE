@@ -81,6 +81,19 @@ void CodeReviewWidget::InitializeUI()
     mainLayout->addWidget(listIssues, 1);
 }
 
+int CodeReviewWidget::FilterIndex() const
+{
+    return cmbFilter ? cmbFilter->currentIndex() : 0;
+}
+
+void CodeReviewWidget::SetFilterIndex(int index)
+{
+    if (cmbFilter && index >= 0 && index < cmbFilter->count())
+    {
+        cmbFilter->setCurrentIndex(index);
+    }
+}
+
 void CodeReviewWidget::SetIssues(const QList<ValidationIssue> &issues)
 {
     _allIssues = issues;

@@ -1,4 +1,5 @@
 #include "RevertRegionDialog.h"
+#include "../../Common/AppSettings.h"
 #include "../Styles/ThemeManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -14,6 +15,28 @@ RevertRegionDialog::RevertRegionDialog(const QStringList &detectedRegions, QWidg
     for (const auto &r : detectedRegions)
         cmbRegions->addItem(r);
     if (cmbRegions->count() > 0) cmbRegions->setCurrentIndex(0);
+    loadPositionSettings();
+}
+
+void RevertRegionDialog::loadPositionSettings()
+{
+    QPoint p;
+    QSize s;
+    if (AppSettings::LoadDialogGeometry("RevertRegionDialog", p, s))
+    {
+        move(p);
+    }
+}
+
+void RevertRegionDialog::savePositionSettings()
+{
+    AppSettings::SaveDialogGeometry("RevertRegionDialog", pos());
+}
+
+void RevertRegionDialog::done(int r)
+{
+    savePositionSettings();
+    QDialog::done(r);
 }
 
 void RevertRegionDialog::InitializeUI()

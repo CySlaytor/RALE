@@ -9,8 +9,6 @@
 #include "../Dialogs/GeneratorConfigDialog.h"
 #include "../Dialogs/MultiRegionDialog.h"
 #include "../Dialogs/BatchNoteMultiplierDialog.h"
-#include "../Dialogs/SnippetSelectDialog.h"
-#include "../../Services/SnippetManager.h"
 #include "../Styles/ThemeManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -21,7 +19,6 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QMessageBox>
-#include <QInputDialog>
 #include <QRegularExpression>
 #include <QSignalBlocker>
 #include <algorithm>
@@ -474,14 +471,6 @@ void TriggerEditorWidget::InitializeUI()
     auto *actPaste = gridContextMenu->addAction(getThemeIcon(":/icons/load.svg"), "Paste Logic", this, [this]() { PasteLogic(); });
     actPaste->setShortcut(QKeySequence::Paste);
     actPaste->setProperty("iconPath", ":/icons/load.svg");
-
-    gridContextMenu->addSeparator();
-
-    auto *actSaveSnip = gridContextMenu->addAction(getThemeIcon(":/icons/copy_note.svg"), "Save Selected Rows to Snippet Library...", this, &TriggerEditorWidget::onSaveAsSnippetClicked);
-    actSaveSnip->setProperty("iconPath", ":/icons/copy_note.svg");
-
-    auto *actInsertSnip = gridContextMenu->addAction(getThemeIcon(":/icons/load.svg"), "Insert Snippet from Library...", this, &TriggerEditorWidget::onInsertSnippetClicked);
-    actInsertSnip->setProperty("iconPath", ":/icons/load.svg");
 
     conditionGrid->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(conditionGrid, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
@@ -1871,95 +1860,299 @@ void TriggerEditorWidget::ExtendSelectionByPattern()
     int row = groupsList->currentRow();
     auto &groups = _viewModel.GetActiveGroups();
     if (row < 0 || row >= groups.size()) return;
-    const auto &group = groups[row];
-
-    int v1 = selectedVisualRows[selectedVisualRows.size() - 2];
-    int v2 = selectedVisualRows.last();
-    int r1Idx = _conditionModel.GetModelIndexForVisualRow(v1);
-    int r2Idx = _conditionModel.GetModelIndexForVisualRow(v2);
-    if (r1Idx == -1 || r2Idx == -1) return;
-
-    const auto &c1 = group.Conditions[r1Idx];
-    const auto &c2 = group.Conditions[r2Idx];
 
     auto ParseNumeric = [](const Operand &op) -> int64_t {
-        if (op.Value.trimmed().isEmpty()) return 0;
         QString val = op.Value.trimmed();
+        if (val.isEmpty()) return 0;
         bool ok = false;
         if (val.startsWith("0x", Qt::CaseInsensitive))
-            return val.mid(2).toLongLong(&ok, 16);
-        return val.toLongLong(&ok, 10);
+        {
+            uint64_t u = val.mid(2).toULongLong(&ok, 16);
+            return ok ? static_cast<int64_t>(u) : 0;
+        }
+        int64_t v = val.toLongLong(&ok, 10);
+        if (!ok)
+        {
+            uint64_t u = val.toULongLong(&ok, 16);
+            return ok ? static_cast<int64_t>(u) : 0;
+        }
+        return v;
+    };
+
+    auto ParseBitIndex = [](const QString &size) -> int {
+        if (size.startsWith("Bit", Qt::CaseInsensitive))
+        {
+            bool ok = false;
+            int idx = size.mid(3).toInt(&ok);
+            if (ok && idx >= 0 && idx <= 7) return idx;
+        }
+        return -1;
     };
 
     auto IsFloatOrRecall = [](const Operand &op) {
         return op.Type == "Float" || op.Type == "Recall";
     };
 
-    int64_t leftDelta = ParseNumeric(c2.LeftOperand) - ParseNumeric(c1.LeftOperand);
-    int64_t rightDelta = ParseNumeric(c2.RightOperand) - ParseNumeric(c1.RightOperand);
-    int64_t hitsDelta = static_cast<int64_t>(c2.RequiredHits) - c1.RequiredHits;
+    struct ConditionDelta {
+        int64_t leftDelta = 0;
+        int64_t rightDelta = 0;
+        int64_t hitsDelta = 0;
+        int leftBitDelta = 0;
+        bool leftIsBit = false;
+        bool leftIsFloatOrRecall = false;
+        bool rightIsFloatOrRecall = false;
+    };
+
+    auto AreStructureCompatible = [](const AchievementCondition &a, const AchievementCondition &b) -> bool {
+        return a.Flag == b.Flag &&
+               a.Operator == b.Operator &&
+               a.LeftOperand.Type == b.LeftOperand.Type &&
+               a.RightOperand.Type == b.RightOperand.Type;
+    };
+
+    auto ComputeDelta = [&](const AchievementCondition &a, const AchievementCondition &b) -> ConditionDelta {
+        ConditionDelta d;
+        d.leftIsFloatOrRecall = IsFloatOrRecall(a.LeftOperand);
+        d.rightIsFloatOrRecall = IsFloatOrRecall(a.RightOperand);
+
+        int bitA = ParseBitIndex(a.LeftOperand.Size);
+        int bitB = ParseBitIndex(b.LeftOperand.Size);
+        if (bitA != -1 && bitB != -1)
+        {
+            d.leftIsBit = true;
+            d.leftBitDelta = bitB - bitA;
+        }
+
+        d.leftDelta = ParseNumeric(b.LeftOperand) - ParseNumeric(a.LeftOperand);
+        d.rightDelta = ParseNumeric(b.RightOperand) - ParseNumeric(a.RightOperand);
+        d.hitsDelta = static_cast<int64_t>(b.RequiredHits) - a.RequiredHits;
+        return d;
+    };
+
+    auto MatchesExpected = [&](const AchievementCondition &prev, const AchievementCondition &target, const ConditionDelta &d) -> bool {
+        if (!AreStructureCompatible(prev, target)) return false;
+
+        int64_t expectedLeftDelta = d.leftDelta;
+
+        if (d.leftIsBit)
+        {
+            int prevBit = ParseBitIndex(prev.LeftOperand.Size);
+            int targetBit = ParseBitIndex(target.LeftOperand.Size);
+            if (prevBit == -1 || targetBit == -1) return false;
+
+            int expectedBit = prevBit + d.leftBitDelta;
+            // Support wrapping from Bit7 -> Bit0 (+1 byte) or Bit0 -> Bit7 (-1 byte) when stepping bits sequentially
+            if (expectedBit > 7 && d.leftDelta == 0)
+            {
+                expectedBit %= 8;
+                expectedLeftDelta += 1;
+            }
+            else if (expectedBit < 0 && d.leftDelta == 0)
+            {
+                expectedBit = (expectedBit % 8 + 8) % 8;
+                expectedLeftDelta -= 1;
+            }
+
+            if (targetBit != expectedBit) return false;
+        }
+        else
+        {
+            if (target.LeftOperand.Size != prev.LeftOperand.Size) return false;
+        }
+
+        if (target.RightOperand.Size != prev.RightOperand.Size) return false;
+
+        // Float/Recall values cannot be stepped numerically; require an exact match.
+        bool leftOk = d.leftIsFloatOrRecall
+            ? (target.LeftOperand.Value == prev.LeftOperand.Value)
+            : (ParseNumeric(target.LeftOperand) == ParseNumeric(prev.LeftOperand) + expectedLeftDelta);
+        if (!leftOk) return false;
+
+        bool rightOk = d.rightIsFloatOrRecall
+            ? (target.RightOperand.Value == prev.RightOperand.Value)
+            : (ParseNumeric(target.RightOperand) == ParseNumeric(prev.RightOperand) + d.rightDelta);
+        if (!rightOk) return false;
+
+        if (static_cast<int64_t>(target.RequiredHits) != static_cast<int64_t>(prev.RequiredHits) + d.hitsDelta) return false;
+
+        return true;
+    };
+
+    // Determine pattern block size (B) and visual stride across contiguous or gapped selections
+    const int k = selectedVisualRows.size();
+    bool isContiguous = true;
+    for (int i = 1; i < k; ++i)
+    {
+        if (selectedVisualRows[i] != selectedVisualRows[i - 1] + 1)
+        {
+            isContiguous = false;
+            break;
+        }
+    }
+
+    int blockSize = 1;
+    int visualStride = 1;
+    QList<ConditionDelta> deltas;
+
+    if (isContiguous)
+    {
+        bool foundPattern = false;
+        // Find the smallest repeating block divisor B of k (where at least 2 blocks are selected)
+        for (int b = 1; b <= k / 2; ++b)
+        {
+            if (k % b != 0) continue;
+            int numBlocks = k / b;
+
+            QList<ConditionDelta> candidateDeltas;
+            bool structureOk = true;
+            for (int j = 0; j < b; ++j)
+            {
+                auto *c0 = _conditionModel.GetConditionAtRow(selectedVisualRows[j]);
+                auto *c1 = _conditionModel.GetConditionAtRow(selectedVisualRows[b + j]);
+                if (!c0 || !c1 || !AreStructureCompatible(*c0, *c1))
+                {
+                    structureOk = false;
+                    break;
+                }
+                candidateDeltas.append(ComputeDelta(*c0, *c1));
+            }
+            if (!structureOk) continue;
+
+            // Verify all selected blocks follow this exact candidate delta progression
+            bool allBlocksMatch = true;
+            for (int blockIdx = 1; blockIdx < numBlocks; ++blockIdx)
+            {
+                for (int j = 0; j < b; ++j)
+                {
+                    auto *cPrev = _conditionModel.GetConditionAtRow(selectedVisualRows[(blockIdx - 1) * b + j]);
+                    auto *cCurr = _conditionModel.GetConditionAtRow(selectedVisualRows[blockIdx * b + j]);
+                    if (!cPrev || !cCurr || !MatchesExpected(*cPrev, *cCurr, candidateDeltas[j]))
+                    {
+                        allBlocksMatch = false;
+                        break;
+                    }
+                }
+                if (!allBlocksMatch) break;
+            }
+
+            if (allBlocksMatch)
+            {
+                blockSize = b;
+                visualStride = b;
+                deltas = candidateDeltas;
+                foundPattern = true;
+                break;
+            }
+        }
+
+        if (!foundPattern)
+        {
+            // Fallback: use last two selected rows as single-row pattern
+            blockSize = 1;
+            visualStride = 1;
+            auto *c1 = _conditionModel.GetConditionAtRow(selectedVisualRows[k - 2]);
+            auto *c2 = _conditionModel.GetConditionAtRow(selectedVisualRows.last());
+            if (!c1 || !c2) return;
+            deltas.append(ComputeDelta(*c1, *c2));
+        }
+    }
+    else
+    {
+        // Gapped / non-contiguous selection: detect whether rows form uniform gapped blocks or uniform single rows
+        QList<QList<int>> blocks;
+        QList<int> currBlock = { selectedVisualRows[0] };
+        for (int i = 1; i < k; ++i)
+        {
+            if (selectedVisualRows[i] == selectedVisualRows[i - 1] + 1)
+                currBlock.append(selectedVisualRows[i]);
+            else
+            {
+                blocks.append(currBlock);
+                currBlock = { selectedVisualRows[i] };
+            }
+        }
+        blocks.append(currBlock);
+
+        if (blocks.size() >= 2 && blocks.last().size() == blocks[blocks.size() - 2].size())
+        {
+            const auto &b1 = blocks[blocks.size() - 2];
+            const auto &b2 = blocks.last();
+            blockSize = b2.size();
+            visualStride = b2.first() - b1.first();
+            for (int j = 0; j < blockSize; ++j)
+            {
+                auto *c1 = _conditionModel.GetConditionAtRow(b1[j]);
+                auto *c2 = _conditionModel.GetConditionAtRow(b2[j]);
+                if (!c1 || !c2) return;
+                deltas.append(ComputeDelta(*c1, *c2));
+            }
+        }
+        else
+        {
+            int v1 = selectedVisualRows[k - 2];
+            int v2 = selectedVisualRows.last();
+            blockSize = 1;
+            visualStride = v2 - v1;
+            auto *c1 = _conditionModel.GetConditionAtRow(v1);
+            auto *c2 = _conditionModel.GetConditionAtRow(v2);
+            if (!c1 || !c2) return;
+            deltas.append(ComputeDelta(*c1, *c2));
+        }
+    }
+
+    if (visualStride <= 0 || deltas.size() != blockSize) return;
 
     // Walk the VISIBLE rows (C# semantics): with collapsed chains, model indices
     // contain hidden Add Address gaps and must not be used as the stride.
-    int visualStride = v2 - v1;
-    if (visualStride <= 0) return;
-
-    int currentVisual = v2;
-    AchievementCondition cPrev = c2;
+    int prevBlockStart = selectedVisualRows.last() - (blockSize - 1);
+    int totalRows = _conditionModel.rowCount();
     int selectedCount = 0;
+    int lastSelectedVisual = -1;
 
     while (true)
     {
-        int nextVisual = currentVisual + visualStride;
-        if (nextVisual < 0 || nextVisual >= _conditionModel.rowCount()) break;
+        int nextBlockStart = prevBlockStart + visualStride;
+        if (nextBlockStart < 0 || nextBlockStart + blockSize - 1 >= totalRows) break;
 
-        auto *cNextPtr = _conditionModel.GetConditionAtRow(nextVisual);
-        if (cNextPtr == nullptr) break;
-        const auto &cNext = *cNextPtr;
+        bool blockMatches = true;
+        for (int j = 0; j < blockSize; ++j)
+        {
+            auto *cPrev = _conditionModel.GetConditionAtRow(prevBlockStart + j);
+            auto *cNext = _conditionModel.GetConditionAtRow(nextBlockStart + j);
+            if (!cPrev || !cNext || !MatchesExpected(*cPrev, *cNext, deltas[j]))
+            {
+                blockMatches = false;
+                break;
+            }
+        }
 
-        if (cNext.Flag != cPrev.Flag || cNext.Operator != cPrev.Operator ||
-            cNext.LeftOperand.Type != cPrev.LeftOperand.Type || cNext.LeftOperand.Size != cPrev.LeftOperand.Size ||
-            cNext.RightOperand.Type != cPrev.RightOperand.Type || cNext.RightOperand.Size != cPrev.RightOperand.Size)
-            break;
+        if (!blockMatches) break;
 
-        // Float/Recall values cannot be stepped numerically; require an exact match.
-        bool leftOk = IsFloatOrRecall(cPrev.LeftOperand)
-            ? (cNext.LeftOperand.Value == cPrev.LeftOperand.Value)
-            : (ParseNumeric(cNext.LeftOperand) == ParseNumeric(cPrev.LeftOperand) + leftDelta);
-        if (!leftOk) break;
+        for (int j = 0; j < blockSize; ++j)
+        {
+            int targetRow = nextBlockStart + j;
+            auto left = _conditionModel.index(targetRow, 0);
+            auto right = _conditionModel.index(targetRow, _conditionModel.columnCount() - 1);
+            conditionGrid->selectionModel()->select(QItemSelection(left, right), QItemSelectionModel::Select | QItemSelectionModel::Rows);
+            lastSelectedVisual = targetRow;
+            selectedCount++;
+        }
 
-        bool rightOk = IsFloatOrRecall(cPrev.RightOperand)
-            ? (cNext.RightOperand.Value == cPrev.RightOperand.Value)
-            : (ParseNumeric(cNext.RightOperand) == ParseNumeric(cPrev.RightOperand) + rightDelta);
-        if (!rightOk) break;
-
-        if (static_cast<int64_t>(cNext.RequiredHits) != static_cast<int64_t>(cPrev.RequiredHits) + hitsDelta) break;
-
-        auto left = _conditionModel.index(nextVisual, 0);
-        auto right = _conditionModel.index(nextVisual, _conditionModel.columnCount() - 1);
-        conditionGrid->selectionModel()->select(QItemSelection(left, right), QItemSelectionModel::Select | QItemSelectionModel::Rows);
-
-        currentVisual = nextVisual;
-        cPrev = cNext;
-        selectedCount++;
+        prevBlockStart = nextBlockStart;
     }
 
     if (selectedCount > 0)
     {
-        int lastVisualRow = -1;
-        auto currentSelected = conditionGrid->selectionModel()->selectedRows();
-        for (const auto &idx : currentSelected)
-        {
-            if (idx.row() > lastVisualRow) lastVisualRow = idx.row();
-        }
-        if (lastVisualRow != -1)
+        if (lastSelectedVisual != -1)
         {
             conditionGrid->selectionModel()->setCurrentIndex(
-                _conditionModel.index(lastVisualRow, 0),
+                _conditionModel.index(lastSelectedVisual, 0),
                 QItemSelectionModel::NoUpdate
             );
-            conditionGrid->scrollTo(_conditionModel.index(lastVisualRow, 0));
+            conditionGrid->scrollTo(_conditionModel.index(lastSelectedVisual, 0));
         }
+        conditionGrid->viewport()->update();
+        if (_headerView != nullptr) _headerView->viewport()->update();
         SetStatus(QString("Extended selection by %1 row(s).").arg(selectedCount));
     }
     else
@@ -2667,33 +2860,6 @@ void TriggerEditorWidget::onBatchMultiplyNotesClicked()
     if (form.exec() == QDialog::Accepted)
     {
         emit BatchMultiplyNotesRequested(&form);
-    }
-}
-
-void TriggerEditorWidget::onSaveAsSnippetClicked()
-{
-    QString logic = GetSelectedLogicString();
-    if (logic.isEmpty())
-    {
-        QMessageBox::information(this, "No Selection", "Please select at least one row to save as a snippet.");
-        return;
-    }
-
-    bool ok = false;
-    QString name = QInputDialog::getText(this, "Save Snippet", "Snippet Name:", QLineEdit::Normal, "", &ok);
-    if (ok && !name.trimmed().isEmpty())
-    {
-        SnippetManager::SaveSnippet(name.trimmed(), logic);
-        SetStatus(QString("Snippet '%1' saved.").arg(name.trimmed()));
-    }
-}
-
-void TriggerEditorWidget::onInsertSnippetClicked()
-{
-    SnippetSelectDialog form(this);
-    if (form.exec() == QDialog::Accepted && form.SelectedSnippet.has_value())
-    {
-        PasteLogic(form.SelectedSnippet->Logic);
     }
 }
 
