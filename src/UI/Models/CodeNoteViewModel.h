@@ -111,6 +111,7 @@ private:
     QStack<QString> _undoStack;
     QStack<QString> _redoStack;
 
+    void RebuildRangeCache();
     std::shared_ptr<NoteNode> FindNodeByOffsetString(const QString &offset);
     void SetEditState(bool isVirtual, const QString &description, const QString &displayText, const QString &logicCode, const QString &type, const QString &size, const QList<int64_t> *offsets);
     int64_t ParseAddress(const QString &addr) const;

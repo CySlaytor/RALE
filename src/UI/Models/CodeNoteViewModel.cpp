@@ -3,6 +3,7 @@
 #include "../../Common/AppSettings.h"
 #include "../../Utilities/LogicFormatter.h"
 #include <QRegularExpression>
+#include <QSet>
 #include <algorithm>
 
 namespace RALogicEditor {
@@ -64,6 +65,7 @@ void CodeNoteViewModel::Undo()
             }
         }
 
+        RebuildRangeCache();
         CurrentParsedNodes = _parser.ParseNoteText(previous);
 
         // Clear active buffer so UI refreshes cleanly
@@ -90,6 +92,7 @@ void CodeNoteViewModel::Redo()
             }
         }
 
+        RebuildRangeCache();
         CurrentParsedNodes = _parser.ParseNoteText(next);
 
         ClearEditState();
@@ -101,33 +104,61 @@ void CodeNoteViewModel::Redo()
 
 // -- Logic --
 
-void CodeNoteViewModel::LoadNotes(const QList<CodeNote> &notes)
+void CodeNoteViewModel::RebuildRangeCache()
 {
-    AllNotes = notes;
     _rangeCache.clear();
+    QMap<int64_t, std::shared_ptr<NoteNode>> rootNodesByAddr;
+    QSet<int64_t> rangedStarts;
 
     // Rebuild Range Cache
     for (const auto &note : AllNotes)
     {
-        QString cleanAddr = note.Address;
-        cleanAddr.remove("0x", Qt::CaseInsensitive);
-        cleanAddr = cleanAddr.trimmed();
-        bool ok = false;
-        int64_t startAddr = cleanAddr.toLongLong(&ok, 16);
-        if (ok)
+        int64_t startAddr = ParseAddress(note.Address);
+        if (startAddr != -1)
         {
             auto nodes = _parser.ParseNoteText(note.Note);
             if (!nodes.isEmpty())
             {
                 auto rootNode = nodes.first();
-                if (rootNode->Size > 1)
+                rootNodesByAddr.insert(startAddr, rootNode);
+                if (rootNode->Size > 1 && !rangedStarts.contains(startAddr))
                 {
+                    rangedStarts.insert(startAddr);
                     int64_t endAddr = startAddr + rootNode->Size;
                     _rangeCache.append(RangeCacheEntry{ startAddr, endAddr, note, rootNode });
                 }
             }
         }
     }
+
+    static const QRegularExpression structRegex(
+        QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"),
+        QRegularExpression::MultilineOption);
+    static const QRegularExpression referralRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
+
+    for (const auto &note : AllNotes)
+    {
+        if (structRegex.match(note.Note).hasMatch()) continue;
+        auto match = referralRegex.match(note.Note);
+        if (!match.hasMatch()) continue;
+
+        int64_t sourceAddr = ParseAddress(note.Address);
+        int64_t targetAddr = ParseAddress(match.captured(1));
+        if (sourceAddr == -1 || targetAddr == -1 || rangedStarts.contains(sourceAddr)) continue;
+
+        auto targetRoot = rootNodesByAddr.value(targetAddr, nullptr);
+        if (targetRoot != nullptr && targetRoot->Size > 1)
+        {
+            rangedStarts.insert(sourceAddr);
+            _rangeCache.append(RangeCacheEntry{ sourceAddr, sourceAddr + targetRoot->Size, note, targetRoot });
+        }
+    }
+}
+
+void CodeNoteViewModel::LoadNotes(const QList<CodeNote> &notes)
+{
+    AllNotes = notes;
+    RebuildRangeCache();
     emit NotesLoaded();
 }
 
@@ -181,6 +212,8 @@ void CodeNoteViewModel::BatchMultiplyNotes(
         return ParseAddress(a.Address) < ParseAddress(b.Address);
     });
 
+    RebuildRangeCache();
+
     // Trigger complete UI refresh
     emit NotesLoaded();
 }
@@ -227,6 +260,7 @@ void CodeNoteViewModel::IntelligentDelete(const std::shared_ptr<NoteNode> &targe
         }
     }
 
+    RebuildRangeCache();
     CurrentParsedNodes = _parser.ParseNoteText(updatedNote);
 
     ClearEditState();
@@ -314,6 +348,7 @@ void CodeNoteViewModel::UpdateNoteContent(const QString &newText)
         }
     }
 
+    RebuildRangeCache();
     CurrentParsedNodes = _parser.ParseNoteText(newText);
     emit NoteContentChanged();
 }
@@ -410,6 +445,8 @@ void CodeNoteViewModel::CommitEditState()
             break;
         }
     }
+
+    RebuildRangeCache();
 
     // Re-parse
     CurrentParsedNodes = _parser.ParseNoteText(updatedBaseNote);
@@ -599,6 +636,8 @@ void CodeNoteViewModel::HighlightAddress(const QString &address)
     std::sort(AllNotes.begin(), AllNotes.end(), [this](const CodeNote &a, const CodeNote &b) {
         return ParseAddress(a.Address) < ParseAddress(b.Address);
     });
+
+    RebuildRangeCache();
 
     // Notify UI to refresh dropdown list
     emit NotesLoaded();

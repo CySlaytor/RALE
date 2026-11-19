@@ -26,7 +26,8 @@ QList<std::shared_ptr<NoteNode>> PointerTreeParser::ParseNoteText(const QString 
 
     // Attempt to parse the size of the root data from the first line 
     // (useful if the note defines a struct at the base address).
-    if (!lines.isEmpty()) root->Size = ParseSizeFromDescription(lines[0]);
+    bool rootHasSizeTag = false;
+    if (!lines.isEmpty()) root->Size = ParseSizeFromDescription(lines[0], &rootHasSizeTag);
 
     flatList.append(root);
 
@@ -41,6 +42,7 @@ QList<std::shared_ptr<NoteNode>> PointerTreeParser::ParseNoteText(const QString 
     stack.push(logicalRoot);
 
     std::shared_ptr<NoteNode> lastAddedNode = nullptr;
+    bool seenFirstNode = false;
 
     // Regex supporting both pointer (+0x, -0x) and PF2 array offsets (|0x, |+0x, |-0x)
     // Group 1: Indentation (traditional chars + whitespace + Unicode box drawing chars \u2500-\u257F)
@@ -97,6 +99,7 @@ QList<std::shared_ptr<NoteNode>> PointerTreeParser::ParseNoteText(const QString 
 
         if (isNode)
         {
+            seenFirstNode = true;
             QString indentStr = match.captured(1);
             QString sign = match.captured(2);
             QString hex = match.captured(3);
@@ -162,6 +165,17 @@ QList<std::shared_ptr<NoteNode>> PointerTreeParser::ParseNoteText(const QString 
         }
         else
         {
+            if (!seenFirstNode && !rootHasSizeTag)
+            {
+                bool foundTag = false;
+                int64_t candidateSize = ParseSizeFromDescription(line, &foundTag);
+                if (foundTag)
+                {
+                    root->Size = candidateSize;
+                    rootHasSizeTag = true;
+                }
+            }
+
             // Append to content of most recent node
             if (lastAddedNode != nullptr)
             {
@@ -180,12 +194,15 @@ QList<std::shared_ptr<NoteNode>> PointerTreeParser::ParseNoteText(const QString 
 }
 
 // Parses data size from tags in the description (e.g., [16-bit] or [32 bytes] or [30x16 bytes]).
-int64_t PointerTreeParser::ParseSizeFromDescription(const QString &desc)
+int64_t PointerTreeParser::ParseSizeFromDescription(const QString &desc, bool *foundTag)
 {
+    if (foundTag != nullptr) *foundTag = false;
     if (desc.isEmpty()) return 1;
 
     // 1. Check for explicit byte count or 2D stride: [144 bytes], [30x16 bytes], [ASCII: 20-bytes]
-    static const QRegularExpression bytesRegex(R"(\[(?:(\d+)\s*x\s*(\d+)|(\d+))\s*bytes?.*?\])", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression bytesRegex(
+        R"(\[[^\]]*?\b(?:(\d+)\s*x\s*(\d+)|(0x[0-9A-Fa-f]+)|(\d+))[\s\-]*bytes?\b[^\]]*\])",
+        QRegularExpression::CaseInsensitiveOption);
     auto bytesMatch = bytesRegex.match(desc);
     if (bytesMatch.hasMatch())
     {
@@ -194,21 +211,46 @@ int64_t PointerTreeParser::ParseSizeFromDescription(const QString &desc)
             bool ok1 = false, ok2 = false;
             int64_t w = bytesMatch.captured(1).toLongLong(&ok1);
             int64_t h = bytesMatch.captured(2).toLongLong(&ok2);
-            if (ok1 && ok2 && w > 0 && h > 0) return w * h;
+            if (ok1 && ok2 && w > 0 && h > 0)
+            {
+                if (foundTag != nullptr) *foundTag = true;
+                return w * h;
+            }
         }
         else if (!bytesMatch.captured(3).isEmpty())
         {
             bool ok = false;
-            int64_t bSize = bytesMatch.captured(3).toLongLong(&ok);
-            if (ok) return bSize;
+            int64_t bSize = bytesMatch.captured(3).mid(2).toLongLong(&ok, 16);
+            if (ok && bSize > 0)
+            {
+                if (foundTag != nullptr) *foundTag = true;
+                return bSize;
+            }
+        }
+        else if (!bytesMatch.captured(4).isEmpty())
+        {
+            bool ok = false;
+            int64_t bSize = bytesMatch.captured(4).toLongLong(&ok);
+            if (ok && bSize > 0)
+            {
+                if (foundTag != nullptr) *foundTag = true;
+                return bSize;
+            }
         }
     }
 
     // 2. Check for standard type tags
-    if (desc.contains("[32-bit", Qt::CaseInsensitive) || desc.contains("[Float", Qt::CaseInsensitive)) return 4;
-    if (desc.contains("[24-bit", Qt::CaseInsensitive)) return 3;
-    if (desc.contains("[16-bit", Qt::CaseInsensitive)) return 2;
-    if (desc.contains("[8-bit", Qt::CaseInsensitive)) return 1;
+    static const QRegularExpression bits64Regex(R"(\[[^\]]*\b(?:64[\s\-]*bits?|Double64)\b[^\]]*\])", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression bits32Regex(R"(\[[^\]]*\b(?:32[\s\-]*bits?|Float(?:32)?|MBF32(?:\s+LE)?|Double32(?:\s+BE)?)\b[^\]]*\])", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression bits24Regex(R"(\[[^\]]*\b24[\s\-]*bits?\b[^\]]*\])", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression bits16Regex(R"(\[[^\]]*\b16[\s\-]*bits?\b[^\]]*\])", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression bits8Regex(R"(\[[^\]]*\b8[\s\-]*bits?\b[^\]]*\])", QRegularExpression::CaseInsensitiveOption);
+
+    if (bits64Regex.match(desc).hasMatch()) { if (foundTag != nullptr) *foundTag = true; return 8; }
+    if (bits32Regex.match(desc).hasMatch()) { if (foundTag != nullptr) *foundTag = true; return 4; }
+    if (bits24Regex.match(desc).hasMatch()) { if (foundTag != nullptr) *foundTag = true; return 3; }
+    if (bits16Regex.match(desc).hasMatch()) { if (foundTag != nullptr) *foundTag = true; return 2; }
+    if (bits8Regex.match(desc).hasMatch()) { if (foundTag != nullptr) *foundTag = true; return 1; }
 
     return 1; // Default to 8-bit (1 byte)
 }
@@ -243,7 +285,7 @@ std::tuple<QString, QString, QString> PointerTreeParser::GeneratePointerLogic(
     if (!headerLines.isEmpty()) noteHeader = headerLines.first();
 
     // Check if the base address is a static array structure in RAM
-    static const QRegularExpression arrayTagRx(R"(\[(?:(\d+)\s*x\s*(\d+)|(\d+))\s*bytes\])", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression arrayTagRx(R"(\[[^\]]*?\b(?:(\d+)\s*x\s*(\d+)|(0x[0-9A-Fa-f]+)|(\d+))[\s\-]*bytes?\b[^\]]*\])", QRegularExpression::CaseInsensitiveOption);
     bool hasArrayTag = arrayTagRx.match(noteHeader).hasMatch();
     bool hasPointerTag = noteHeader.contains("Pointer", Qt::CaseInsensitive);
     bool isStaticRootArray = (hasArrayTag && !hasPointerTag);

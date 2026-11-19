@@ -287,6 +287,13 @@ QVariant ConditionTableModel::data(const QModelIndex &index, int role) const
                 QString addr = op.Value.trimmed();
                 if (!addr.startsWith("0x", Qt::CaseInsensitive)) addr = "0x" + addr;
                 QString key = LogicFormatter::NormalizeAddress(addr);
+                QString sizeRef = (index.column() == ColLValue)
+                    ? cond.LeftOperand.Size
+                    : LogicFormatter::GetRightOperandSizeReference(cond);
+
+                QString resolved = ConditionFormatter::ResolveAlias(key, sizeRef, _group, modelIdx, *_notesLookup, _rangeCache);
+                if (!resolved.trimmed().isEmpty())
+                    return resolved.trimmed();
 
                 if (_notesLookup->contains(key))
                 {
@@ -300,7 +307,7 @@ QVariant ConditionTableModel::data(const QModelIndex &index, int role) const
                     if (root != nullptr)
                     {
                         QString desc = root->Description;
-                        if (desc.isEmpty())
+                        if (desc.isEmpty() || desc.compare("Full Note", Qt::CaseInsensitive) == 0)
                         {
                             QString norm = root->Content;
                             norm.replace("\r\n", "\n").replace('\r', '\n');
@@ -323,7 +330,7 @@ QVariant ConditionTableModel::data(const QModelIndex &index, int role) const
                             if (targetVal < range.Start || targetVal >= range.End || range.Node == nullptr)
                                 continue;
                             QString desc = range.Node->Description;
-                            if (desc.isEmpty())
+                            if (desc.isEmpty() || desc.compare("Full Note", Qt::CaseInsensitive) == 0)
                             {
                                 QString norm = range.Node->Content;
                                 norm.replace("\r\n", "\n").replace('\r', '\n');

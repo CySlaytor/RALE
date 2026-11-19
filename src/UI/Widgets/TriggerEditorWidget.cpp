@@ -570,6 +570,7 @@ void TriggerEditorWidget::SetNotes(const QList<CodeNote> &notes)
     _rangeCache.clear();
 
     PointerTreeParser parser;
+    QSet<int64_t> rangedStarts;
 
     // Pass 1: Parse all real notes
     for (const auto &note : notes)
@@ -587,8 +588,9 @@ void TriggerEditorWidget::SetNotes(const QList<CodeNote> &notes)
                 QString clean = key;
                 clean.remove("0x", Qt::CaseInsensitive);
                 int64_t startAddr = clean.toLongLong(&ok, 16);
-                if (ok)
+                if (ok && !rangedStarts.contains(startAddr))
                 {
+                    rangedStarts.insert(startAddr);
                     _rangeCache.append(ConditionFormatter::RangeEntry{ startAddr, startAddr + root->Size, root });
                 }
             }
@@ -597,7 +599,7 @@ void TriggerEditorWidget::SetNotes(const QList<CodeNote> &notes)
 
     // Pass 2: Handle Redirects for Aliasing (Refer to $0x...)
     // If a note is empty but refers to another note, clone the tree so the Grid can display aliases
-    static const QRegularExpression redirectRegex(R"(refer to \$0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression redirectRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression structRegex(
         QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"),
         QRegularExpression::MultilineOption);
@@ -615,7 +617,20 @@ void TriggerEditorWidget::SetNotes(const QList<CodeNote> &notes)
 
                 if (_notesLookup.contains(targetAddr))
                 {
-                    _notesLookup.insert(sourceKey, _notesLookup.value(targetAddr));
+                    const auto targetNodes = _notesLookup.value(targetAddr);
+                    _notesLookup.insert(sourceKey, targetNodes);
+                    if (!targetNodes.isEmpty() && targetNodes[0]->Size > 1)
+                    {
+                        bool ok = false;
+                        QString clean = sourceKey;
+                        clean.remove("0x", Qt::CaseInsensitive);
+                        int64_t startAddr = clean.toLongLong(&ok, 16);
+                        if (ok && !rangedStarts.contains(startAddr))
+                        {
+                            rangedStarts.insert(startAddr);
+                            _rangeCache.append(ConditionFormatter::RangeEntry{ startAddr, startAddr + targetNodes[0]->Size, targetNodes[0] });
+                        }
+                    }
                 }
             }
         }

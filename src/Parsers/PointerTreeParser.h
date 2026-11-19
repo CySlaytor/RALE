@@ -25,7 +25,7 @@ public:
 
 private:
     // Parses data size from tags in the description (e.g., [16-bit] or [32 bytes] or [30x16 bytes]).
-    int64_t ParseSizeFromDescription(const QString &desc);
+    int64_t ParseSizeFromDescription(const QString &desc, bool *foundTag = nullptr);
 
     // Helper to traverse tree and populate the list.
     void CollectAllNodes(const std::shared_ptr<NoteNode> &node, QList<std::shared_ptr<NoteNode>> &flatList);
