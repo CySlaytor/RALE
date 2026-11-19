@@ -7,7 +7,7 @@
 #include <QJsonArray>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 void ProjectMetadataService::Load(const QString &gameId)
 {
@@ -100,4 +100,4 @@ void ProjectMetadataService::ApplyNamesToAsset(int assetId, QList<AchievementCon
     }
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -22,7 +22,7 @@
 #include "../../Common/ConditionFormatter.h"
 #include "../Dialogs/GeneratorConfigDialog.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class MultiRegionDialog;
 class BatchNoteMultiplierDialog;
@@ -70,6 +70,8 @@ public:
     void MoveSelected(int direction);
     void AddCondition();
     void CommitActiveEditor();
+
+    void updateThemeIcons();
 
 signals:
     void TriggerTextChanged();
@@ -204,6 +206,7 @@ private:
     QMenu *_cmpArithmeticContextMenu = nullptr;
     QMenu *_cmpStrictContextMenu = nullptr;
 
+    QIcon getThemeIcon(const QString &resourcePath) const;
     void InitializeUI();
     void InitializeLeaderboardControls();
     void InitializeColumnContextMenus();
@@ -226,4 +229,4 @@ private:
     void OnColumnContextMenuTriggered(int column, const QString &val);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

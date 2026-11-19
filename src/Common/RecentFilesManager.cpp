@@ -9,7 +9,7 @@
 #include <QJsonArray>
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QString RecentFilesManager::GetFilePathJson() const
 {
@@ -196,4 +196,4 @@ QString RecentFilesManager::ExtractGameTitle(const QString &path)
     return "";
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

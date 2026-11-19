@@ -8,7 +8,7 @@
 #include <QPushButton>
 #include "../../Common/CodeNoteMultiplier.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class NoteMultiplierDialog : public QDialog
 {
@@ -54,4 +54,4 @@ private:
     void InitializeUI();
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

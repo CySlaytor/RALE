@@ -5,7 +5,7 @@
 #include <QFormLayout>
 #include <QMessageBox>
 
-namespace RALogicEditor {
+namespace RALE {
 
 int NoteMultiplierDialog::_lastCopies = 1;
 QString NoteMultiplierDialog::_lastStride = "0x0";
@@ -162,4 +162,4 @@ void NoteMultiplierDialog::onBtnCancel()
     reject();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

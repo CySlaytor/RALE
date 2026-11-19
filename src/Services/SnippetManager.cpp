@@ -6,7 +6,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QList<Snippet> SnippetManager::_cache;
 
@@ -110,4 +110,4 @@ void SnippetManager::SaveDisk()
     catch (...) {}
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

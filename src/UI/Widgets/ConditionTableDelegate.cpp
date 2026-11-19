@@ -7,7 +7,7 @@
 #include <QRegularExpressionValidator>
 #include <QPainter>
 
-namespace RALogicEditor {
+namespace RALE {
 
 ConditionTableDelegate::ConditionTableDelegate(QObject *parent)
     : QStyledItemDelegate(parent)
@@ -290,4 +290,4 @@ void ConditionTableDelegate::updateEditorGeometry(
     editor->setGeometry(option.rect.adjusted(1, 1, -1, -1));
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

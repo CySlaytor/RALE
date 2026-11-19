@@ -7,7 +7,7 @@
 #include <QTextCharFormat>
 #include <QScrollBar>
 
-namespace RALogicEditor {
+namespace RALE {
 
 AssetDiffDialog::AssetDiffDialog(
     const std::shared_ptr<IAssetItem> &serverItem,
@@ -305,4 +305,4 @@ void AssetDiffDialog::UpdateDiffStats(const QStringList &serverLines, const QStr
     lblStats->setText(QString("Changes: +%1 / -%2 lines").arg(added).arg(removed));
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

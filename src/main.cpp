@@ -11,7 +11,7 @@
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    app.setApplicationName("RALogicEditor");
+    app.setApplicationName("RALE");
     app.setOrganizationName("RetroAchievements");
     app.setWindowIcon(QIcon(":/appicon.ico"));
 
@@ -22,20 +22,20 @@ int main(int argc, char *argv[])
 #endif
 
     // Pre-load application configuration
-    RALogicEditor::AppSettings::Load();
+    RALE::AppSettings::Load();
 
     // Apply the Fusion style engine first to ensure predictable cross-platform QSS rendering
-    app.setStyle(new RALogicEditor::ClassicDropdownStyle(QStyleFactory::create("Fusion")));
+    app.setStyle(new RALE::ClassicDropdownStyle(QStyleFactory::create("Fusion")));
 
     // Automatic QComboBox popup configuration across the entire app
-    app.installEventFilter(new RALogicEditor::GlobalComboBoxConfigurator(&app));
+    app.installEventFilter(new RALE::GlobalComboBoxConfigurator(&app));
 
     // Disable default Qt tooltip slide/fade effects
     app.setEffectEnabled(Qt::UI_AnimateTooltip, false);
     app.setEffectEnabled(Qt::UI_FadeTooltip, false);
 
     // Symmetric tooltip fade-in / fade-out animation filter
-    app.installEventFilter(new RALogicEditor::TooltipAnimationFilter(&app));
+    app.installEventFilter(new RALE::TooltipAnimationFilter(&app));
 
     // Initialize the style and dark palette on QApplication at startup (before creating widgets)
     QPalette darkPalette;
@@ -58,13 +58,13 @@ int main(int argc, char *argv[])
     app.setPalette(darkPalette);
 
     // Apply user selected theme from settings (defaults to Light)
-    auto activeTheme = (RALogicEditor::AppSettings::Current.Theme.compare("Dark", Qt::CaseInsensitive) == 0)
-        ? RALogicEditor::ThemeManager::Theme::Dark
-        : RALogicEditor::ThemeManager::Theme::Light;
+    auto activeTheme = (RALE::AppSettings::Current.Theme.compare("Dark", Qt::CaseInsensitive) == 0)
+        ? RALE::ThemeManager::Theme::Dark
+        : RALE::ThemeManager::Theme::Light;
 
-    RALogicEditor::ThemeManager::ApplyTheme(activeTheme);
+    RALE::ThemeManager::ApplyTheme(activeTheme);
 
-    RALogicEditor::MainWindow mainWindow;
+    RALE::MainWindow mainWindow;
     mainWindow.show();
 
     // Use QCoreApplication::arguments to ensure Unicode command-line paths are parsed reliably.

@@ -4,7 +4,7 @@
 #include <QPaintEvent>
 #include <QStyleOptionHeader>
 
-namespace RALogicEditor {
+namespace RALE {
 
 ConditionHeaderView::ConditionHeaderView(Qt::Orientation orientation, QWidget *parent)
     : QHeaderView(orientation, parent)
@@ -168,4 +168,4 @@ std::optional<QColor> ConditionHeaderView::GetChainColor(const QString &flag) co
         return std::nullopt;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -5,7 +5,7 @@
 #include <QChar>
 #include "../Models/LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class AchievementParser
 {
@@ -22,4 +22,4 @@ private:
     static AchievementCondition ParseCondition(const QString &conditionStr);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -3,7 +3,7 @@
 #include <QString>
 #include "../Models/LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class LogicFormatter
 {
@@ -20,4 +20,4 @@ public:
     static QString NormalizeAddress(const QString &address);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

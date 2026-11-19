@@ -7,7 +7,7 @@
 #include "../Models/LogicModels.h"
 #include "../Models/NoteNode.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Interface for parsing Code Notes into tree structures and generating logic.
 // Enables Dependency Injection for ViewModels.
@@ -24,4 +24,4 @@ public:
     virtual QList<int64_t> GetOffsetsFromNode(const std::shared_ptr<NoteNode> &node) = 0;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

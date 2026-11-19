@@ -2,7 +2,7 @@
 
 #include "ILogicGenerator.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class LogicGeneratorService : public ILogicGenerator
 {
@@ -15,4 +15,4 @@ private:
     void ApplyOffsetToOperand(Operand &op, const QString &targetAddress, int stride, int multiplier);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

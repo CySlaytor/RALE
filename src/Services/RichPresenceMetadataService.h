@@ -3,7 +3,7 @@
 #include <QString>
 #include <optional>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Persists backup metadata for Rich Presence to allow reverting changes
 class RichPresenceMetadataService
@@ -25,4 +25,4 @@ private:
     QString _path = "";
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

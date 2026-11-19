@@ -4,7 +4,7 @@
 #include <QtEndian>
 #include <cstring>
 
-namespace RALogicEditor {
+namespace RALE {
 
 namespace {
 
@@ -283,4 +283,4 @@ QString LogicFormatter::NormalizeAddress(const QString &address)
     return "0x" + clean.toLower();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -2,7 +2,7 @@
 #include "../Logic/CodeNoteLogic.h"
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QString CodeNoteModifier::NoteStyle::GetIndentString(int depth) const
 {
@@ -408,4 +408,4 @@ QString CodeNoteModifier::InjectNoteContent(
     return CodeNoteLogic::FixHierarchy(sb, indentStylePref, indentDescriptions);
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

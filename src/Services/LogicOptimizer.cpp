@@ -2,7 +2,7 @@
 #include "AssetStrategies.h"
 #include "../Definitions/RaLogicSyntax.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 int LogicOptimizer::OptimizeAsset(std::shared_ptr<IAssetItem> asset)
 {
@@ -186,4 +186,4 @@ bool LogicOptimizer::PadOperand(Operand &op)
     return false;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

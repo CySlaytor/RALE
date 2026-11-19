@@ -6,7 +6,7 @@
 #include <QList>
 #include "../Models/LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Interface to abstract differences between Achievement logic (Core/Alts) 
 // and Leaderboard logic (Start/Cancel/Submit/Value)
@@ -51,4 +51,4 @@ public:
     QString BuildLogic(const QMap<QString, QList<AchievementConditionGroup>> &segments) const override;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

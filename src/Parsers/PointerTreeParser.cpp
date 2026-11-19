@@ -2,7 +2,7 @@
 #include "../Definitions/RaLogicSyntax.h"
 #include <QStack>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Main entry point: Converts a multiline string into a flat list of nodes
 // preserving hierarchy via Parent/Children references.
@@ -464,4 +464,4 @@ QList<int64_t> PointerTreeParser::GetOffsetsFromNode(const std::shared_ptr<NoteN
     return nodeChain;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

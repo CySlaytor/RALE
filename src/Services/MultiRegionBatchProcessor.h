@@ -6,7 +6,7 @@
 #include "../Models/AssetModels.h"
 #include "../Models/RegionConfig.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class MultiRegionBatchProcessor
 {
@@ -28,4 +28,4 @@ private:
     void ApplyAddressSwap(Operand &op, const QList<AddressRangeMap> &ranges);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

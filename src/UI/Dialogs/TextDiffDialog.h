@@ -5,7 +5,7 @@
 #include <QLabel>
 #include <QStringList>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class TextDiffDialog : public QDialog
 {
@@ -48,4 +48,4 @@ private:
     void AppendText(QTextEdit *box, const QString &text, const QColor &fore, const QColor &back, bool bold = false);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

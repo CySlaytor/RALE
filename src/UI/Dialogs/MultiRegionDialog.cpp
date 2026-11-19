@@ -14,7 +14,7 @@
 #include <QStyledItemDelegate>
 #include <QPainter>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Delegate ensuring crisp 1px thin borders, pure white background, and standard Windows selection highlight
 class MultiRegionTableDelegate : public QStyledItemDelegate
@@ -554,4 +554,4 @@ void MultiRegionDialog::onBtnHelp()
         "Maps regions based on notes. Ensure base notes have size (e.g. [0x20 bytes]) for range mapping.\n\nOptionally check 'Generate as PauseLocks' to automatically apply PauseIf and invert the operators for memory checks.");
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

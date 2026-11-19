@@ -6,7 +6,7 @@
 #include <functional>
 #include "../Models/GeneratorModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 template <typename T>
 class HistoryManager
@@ -143,4 +143,4 @@ public:
     }
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -5,7 +5,7 @@
 #include <QPushButton>
 #include <QStringList>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class RevertRegionDialog : public QDialog
 {
@@ -26,4 +26,4 @@ private:
     void InitializeUI();
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

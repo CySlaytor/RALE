@@ -4,7 +4,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 
-namespace RALogicEditor {
+namespace RALE {
 
 RevertRegionDialog::RevertRegionDialog(const QStringList &detectedRegions, QWidget *parent)
     : QDialog(parent)
@@ -46,4 +46,4 @@ void RevertRegionDialog::onBtnOK()
     accept();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -3,7 +3,7 @@
 #include "../Utilities/LogicFormatter.h"
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QString ConditionFormatter::FormatOperandDisplay(
     const Operand &op,
@@ -593,4 +593,4 @@ std::shared_ptr<NoteNode> ConditionFormatter::GetEffectiveNote(
     return workingNodes.isEmpty() ? nullptr : workingNodes.first();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

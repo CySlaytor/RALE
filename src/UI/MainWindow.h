@@ -22,7 +22,7 @@
 #include "../Services/LogicValidator.h"
 #include "../Common/RecentFilesManager.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class MultiRegionDialog;
 class BatchNoteMultiplierDialog;
@@ -36,6 +36,7 @@ public:
     ~MainWindow() override;
 
     void LoadFiles(const QString &primaryPath);
+    void updateThemeIcons();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -61,6 +62,7 @@ private slots:
     void onClearDataReset();
     void onToggleReviewer();
     void onSettings();
+    void onAbout();
 
     void onOpenFile();
     void onSaveFile();
@@ -127,6 +129,7 @@ private:
     QAction *actUndo = nullptr;
     QAction *actRedo = nullptr;
     QAction *actViewReviewer = nullptr;
+    QAction *actAbout = nullptr;
 
     QMenu *assetContextMenu = nullptr;
     QAction *actNewAsset = nullptr;
@@ -140,6 +143,7 @@ private:
     QAction *actViewDiff = nullptr;
     QAction *actRevertRegion = nullptr;
 
+    QIcon getThemeIcon(const QString &resourcePath) const;
     void InitializeUI();
     void InitializeFilters();
     void InitializeMainMenu();
@@ -172,4 +176,4 @@ private:
     bool IsAssetInLocalStore(const std::shared_ptr<IAssetItem> &item);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

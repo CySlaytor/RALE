@@ -3,7 +3,7 @@
 #include <QPainter>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 AssetTableModel::AssetTableModel(QObject *parent)
     : QAbstractTableModel(parent)
@@ -28,7 +28,6 @@ QVariant AssetTableModel::data(const QModelIndex &index, int role) const
         return QVariant();
 
     const auto &item = _assets[index.row()];
-    bool isDark = false;
 
     if (role == Qt::DisplayRole)
     {
@@ -199,4 +198,4 @@ void AssetTableDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     painter->restore();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

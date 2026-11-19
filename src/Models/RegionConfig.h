@@ -6,7 +6,7 @@
 #include "AddressRangeMap.h"
 #include "LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class RegionConfig
 {
@@ -18,4 +18,4 @@ public:
     QList<AchievementCondition> LockConditions;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

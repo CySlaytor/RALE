@@ -8,7 +8,7 @@
 #include "../Models/RichPresence.h"
 #include "../Parsers/UserTextParser.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ProjectRepository
 {
@@ -50,4 +50,4 @@ private:
     bool AreAssetsEqual(const IAssetItem &a, const IAssetItem &b) const;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -4,7 +4,7 @@
 #include "../Models/AssetModels.h"
 #include "../Models/LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class LogicOptimizer
 {
@@ -19,4 +19,4 @@ private:
     bool PadOperand(Operand &op);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

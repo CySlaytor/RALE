@@ -4,7 +4,7 @@
 #include <QStringList>
 #include <QMap>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Global definitions for Region keywords to identify NTSC-U, PAL, NTSC-J, etc.
 class RegionDefinitions
@@ -21,4 +21,4 @@ public:
     static bool IsRegion(const QString &text, const QString &regionKey);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

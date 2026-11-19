@@ -12,7 +12,7 @@
 #include <QFile>
 #include <QProcess>
 
-namespace RALogicEditor {
+namespace RALE {
 
 SettingsDialog::SettingsDialog(QWidget *parent)
     : QDialog(parent)
@@ -330,4 +330,4 @@ void SettingsDialog::onResetAllClicked()
     }
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

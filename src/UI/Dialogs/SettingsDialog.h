@@ -8,7 +8,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Dedicated Settings dialog providing Appearance and Code Note configuration matching Pointer Finder 2.0
 class SettingsDialog : public QDialog
@@ -49,4 +49,4 @@ private:
     void updateCodeNotePreview();
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -10,7 +10,7 @@
 #include "../../Models/ValidationModels.h"
 #include "../../Common/ConditionFormatter.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ConditionTableModel : public QAbstractTableModel
 {
@@ -85,4 +85,4 @@ private:
     void ApplyConditionLogicRules(AchievementCondition &cond);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

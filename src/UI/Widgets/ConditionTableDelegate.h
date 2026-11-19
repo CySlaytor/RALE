@@ -2,7 +2,7 @@
 
 #include <QStyledItemDelegate>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ConditionTableDelegate : public QStyledItemDelegate
 {
@@ -18,4 +18,4 @@ public:
     void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

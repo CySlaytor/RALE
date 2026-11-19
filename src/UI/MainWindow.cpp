@@ -4,6 +4,7 @@
 #include "../Utilities/LogicFormatter.h"
 #include "../Parsers/PointerTreeParser.h"
 #include "../Parsers/RichPresenceParser.h"
+#include "Dialogs/AboutDialog.h"
 #include "Dialogs/AssetDiffDialog.h"
 #include "Dialogs/TextDiffDialog.h"
 #include "Dialogs/MultiRegionDialog.h"
@@ -27,7 +28,7 @@
 #include <QProcess>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -188,9 +189,29 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow() = default;
 
+QIcon MainWindow::getThemeIcon(const QString &resourcePath) const
+{
+    return ThemeManager::getIcon(resourcePath, ThemeManager::CurrentTheme());
+}
+
+void MainWindow::updateThemeIcons()
+{
+    const auto actionsList = findChildren<QAction*>();
+    for (QAction *action : actionsList)
+    {
+        QVariant iconPathVar = action->property("iconPath");
+        if (iconPathVar.isValid())
+        {
+            action->setIcon(getThemeIcon(iconPathVar.toString()));
+        }
+    }
+    if (triggerEditor) triggerEditor->updateThemeIcons();
+    if (codeNoteEditor) codeNoteEditor->updateThemeIcons();
+}
+
 void MainWindow::InitializeUI()
 {
-    setWindowTitle("RA Logic Editor");
+    setWindowTitle("RetroAchievements Logic Editor");
     resize(1200, 700);
 
     auto *centralWidget = new QWidget(this);
@@ -369,29 +390,63 @@ void MainWindow::InitializeMainMenu()
 
     // File Menu
     auto *fileMenu = menuBar->addMenu("&File");
-    fileMenu->addAction("&Open...", this, &MainWindow::onOpenFile)->setShortcut(QKeySequence::Open);
-    fileMenu->addAction("&Save User File", this, &MainWindow::onSaveFile)->setShortcut(QKeySequence::Save);
+    auto *actOpen = fileMenu->addAction(getThemeIcon(":/icons/load.svg"), "&Open...", this, &MainWindow::onOpenFile);
+    actOpen->setShortcut(QKeySequence::Open);
+    actOpen->setProperty("iconPath", ":/icons/load.svg");
+
+    auto *actSave = fileMenu->addAction(getThemeIcon(":/icons/save.svg"), "&Save User File", this, &MainWindow::onSaveFile);
+    actSave->setShortcut(QKeySequence::Save);
+    actSave->setProperty("iconPath", ":/icons/save.svg");
+
     recentMenu = fileMenu->addMenu("Recent Files");
 
     // Edit Menu
     auto *editMenu = menuBar->addMenu("&Edit");
-    actUndo = editMenu->addAction("Undo", this, &MainWindow::onUndo);
+    actUndo = editMenu->addAction(getThemeIcon(":/icons/undo.svg"), "Undo", this, &MainWindow::onUndo);
     actUndo->setShortcut(QKeySequence::Undo);
-    actRedo = editMenu->addAction("Redo", this, &MainWindow::onRedo);
+    actUndo->setProperty("iconPath", ":/icons/undo.svg");
+
+    actRedo = editMenu->addAction(getThemeIcon(":/icons/redo.svg"), "Redo", this, &MainWindow::onRedo);
     actRedo->setShortcut(QKeySequence::Redo);
-    editMenu->addAction("Renumber Local IDs", this, &MainWindow::onRenumberLocalIDs);
-    editMenu->addAction("Clear Data / Reset...", this, &MainWindow::onClearDataReset);
+    actRedo->setProperty("iconPath", ":/icons/redo.svg");
+
+    auto *actRenumber = editMenu->addAction(getThemeIcon(":/icons/rename.svg"), "Renumber Local IDs", this, &MainWindow::onRenumberLocalIDs);
+    actRenumber->setProperty("iconPath", ":/icons/rename.svg");
+
+    auto *actClearData = editMenu->addAction(getThemeIcon(":/icons/refresh.svg"), "Clear Data / Reset...", this, &MainWindow::onClearDataReset);
+    actClearData->setProperty("iconPath", ":/icons/refresh.svg");
+
     editMenu->addSeparator();
-    editMenu->addAction("Revert Rich Presence", this, &MainWindow::onRevertRichPresence);
+
+    auto *actRevertRp = editMenu->addAction(getThemeIcon(":/icons/undo.svg"), "Revert Rich Presence", this, &MainWindow::onRevertRichPresence);
+    actRevertRp->setProperty("iconPath", ":/icons/undo.svg");
+
     editMenu->addSeparator();
-    editMenu->addAction("Settings...", this, &MainWindow::onSettings)->setShortcut(QKeySequence("Ctrl+,"));
+
+    auto *actSettings = editMenu->addAction(getThemeIcon(":/icons/settings.svg"), "Settings...", this, &MainWindow::onSettings);
+    actSettings->setShortcut(QKeySequence("Ctrl+,"));
+    actSettings->setProperty("iconPath", ":/icons/settings.svg");
 
     // View Menu
     auto *viewMenu = menuBar->addMenu("&View");
-    actViewReviewer = viewMenu->addAction("Logic Reviewer", this, &MainWindow::onToggleReviewer);
+    actViewReviewer = viewMenu->addAction(getThemeIcon(":/icons/hierarchy_fixer.svg"), "Logic Reviewer", this, &MainWindow::onToggleReviewer);
     actViewReviewer->setShortcut(QKeySequence(Qt::Key_F8));
     actViewReviewer->setCheckable(true);
-    viewMenu->addAction("View RP Diff", this, &MainWindow::onViewRpDiff);
+    actViewReviewer->setProperty("iconPath", ":/icons/hierarchy_fixer.svg");
+
+    auto *actRpDiff = viewMenu->addAction(getThemeIcon(":/icons/converter.svg"), "View RP Diff", this, &MainWindow::onViewRpDiff);
+    actRpDiff->setProperty("iconPath", ":/icons/converter.svg");
+
+    // Help Menu
+    auto *helpMenu = menuBar->addMenu("&Help");
+    actAbout = helpMenu->addAction(getThemeIcon(":/icons/about.svg"), "About RetroAchievements Logic Editor", this, &MainWindow::onAbout);
+    actAbout->setProperty("iconPath", ":/icons/about.svg");
+}
+
+void MainWindow::onAbout()
+{
+    AboutDialog dialog(this);
+    dialog.exec();
 }
 
 void MainWindow::onSettings()
@@ -402,38 +457,54 @@ void MainWindow::onSettings()
     // Re-apply live settings to CodeNoteEditor
     codeNoteEditor->SetUnicodeTree(AppSettings::Current.CodeNoteUnicodeTree);
     codeNoteEditor->SetIndentValues(AppSettings::Current.CodeNoteIndentDescriptions);
+    updateThemeIcons();
 }
 
 void MainWindow::InitializeAssetContextMenu()
 {
     assetContextMenu = new QMenu(this);
 
-    actNewAsset = assetContextMenu->addAction("New", this, &MainWindow::onNewAsset);
-    actDuplicateAsset = assetContextMenu->addAction("Duplicate", this, &MainWindow::onDuplicateAsset);
+    actNewAsset = assetContextMenu->addAction(getThemeIcon(":/icons/bookmark_add.svg"), "New", this, &MainWindow::onNewAsset);
+    actNewAsset->setProperty("iconPath", ":/icons/bookmark_add.svg");
+
+    actDuplicateAsset = assetContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Duplicate", this, &MainWindow::onDuplicateAsset);
     actDuplicateAsset->setShortcut(QKeySequence("Ctrl+D"));
-    actDeleteAsset = assetContextMenu->addAction("Delete", this, &MainWindow::onDeleteAsset);
+    actDuplicateAsset->setProperty("iconPath", ":/icons/copy.svg");
+
+    actDeleteAsset = assetContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Delete", this, &MainWindow::onDeleteAsset);
     actDeleteAsset->setShortcut(QKeySequence::Delete);
-    actResetAsset = assetContextMenu->addAction("Reset", this, &MainWindow::onResetAsset);
+    actDeleteAsset->setProperty("iconPath", ":/icons/delete.svg");
+
+    actResetAsset = assetContextMenu->addAction(getThemeIcon(":/icons/refresh.svg"), "Reset", this, &MainWindow::onResetAsset);
+    actResetAsset->setProperty("iconPath", ":/icons/refresh.svg");
 
     assetContextMenu->addSeparator();
 
-    actMoveUp = assetContextMenu->addAction("Move Up", this, &MainWindow::onMoveAssetUp);
+    actMoveUp = assetContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Up", this, &MainWindow::onMoveAssetUp);
     actMoveUp->setShortcut(QKeySequence("Alt+Up"));
-    actMoveDown = assetContextMenu->addAction("Move Down", this, &MainWindow::onMoveAssetDown);
+    actMoveUp->setProperty("iconPath", ":/icons/sort.svg");
+
+    actMoveDown = assetContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Down", this, &MainWindow::onMoveAssetDown);
     actMoveDown->setShortcut(QKeySequence("Alt+Down"));
+    actMoveDown->setProperty("iconPath", ":/icons/sort.svg");
 
     assetContextMenu->addSeparator();
 
-    actRestoreOrder = assetContextMenu->addAction("Restore Default Order", this, &MainWindow::onRestoreOrder);
+    actRestoreOrder = assetContextMenu->addAction(getThemeIcon(":/icons/refresh.svg"), "Restore Default Order", this, &MainWindow::onRestoreOrder);
+    actRestoreOrder->setProperty("iconPath", ":/icons/refresh.svg");
 
     assetContextMenu->addSeparator();
 
-    actRenumberIDs = assetContextMenu->addAction("Renumber Local IDs", this, &MainWindow::onRenumberLocalIDs);
-    actViewDiff = assetContextMenu->addAction("View Diff (Server/Local)", this, &MainWindow::onViewDiff);
+    actRenumberIDs = assetContextMenu->addAction(getThemeIcon(":/icons/rename.svg"), "Renumber Local IDs", this, &MainWindow::onRenumberLocalIDs);
+    actRenumberIDs->setProperty("iconPath", ":/icons/rename.svg");
+
+    actViewDiff = assetContextMenu->addAction(getThemeIcon(":/icons/converter.svg"), "View Diff (Server/Local)", this, &MainWindow::onViewDiff);
+    actViewDiff->setProperty("iconPath", ":/icons/converter.svg");
 
     assetContextMenu->addSeparator();
 
-    actRevertRegion = assetContextMenu->addAction("Revert Multi-Region...", this, &MainWindow::onRevertRegion);
+    actRevertRegion = assetContextMenu->addAction(getThemeIcon(":/icons/undo.svg"), "Revert Multi-Region...", this, &MainWindow::onRevertRegion);
+    actRevertRegion->setProperty("iconPath", ":/icons/undo.svg");
 
     achievementGrid->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(achievementGrid, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
@@ -623,7 +694,7 @@ void MainWindow::UpdateRecentMenu()
     {
         QString text = entry.GameTitle.isEmpty() ? entry.Path : QString("%1 | %2").arg(entry.GameTitle, entry.Path);
         QString path = entry.Path;
-        recentMenu->addAction(text, this, [this, path]() {
+        auto *action = recentMenu->addAction(text, this, [this, path]() {
             // Defer: LoadFiles rebuilds this menu, which would delete the QAction
             // whose triggered() signal is still on the stack.
             QTimer::singleShot(0, this, [this, path]() {
@@ -634,6 +705,8 @@ void MainWindow::UpdateRecentMenu()
                 }
             });
         });
+        action->setIcon(getThemeIcon(":/icons/load.svg"));
+        action->setProperty("iconPath", ":/icons/load.svg");
     }
 }
 
@@ -698,9 +771,9 @@ void MainWindow::LoadFiles(const QString &primaryPath)
         }
 
         if (_projectRepo.ServerData != nullptr)
-            this->setWindowTitle(QString("RA Logic Editor - %1").arg(_projectRepo.CurrentTitle));
+            this->setWindowTitle(QString("RetroAchievements Logic Editor - %1").arg(_projectRepo.CurrentTitle));
         else
-            this->setWindowTitle(QString("RA Logic Editor - %1").arg(QFileInfo(primaryPath).fileName()));
+            this->setWindowTitle(QString("RetroAchievements Logic Editor - %1").arg(QFileInfo(primaryPath).fileName()));
 
         int consoleId = (_projectRepo.ServerData != nullptr) ? _projectRepo.ServerData->ConsoleId : 0;
         codeNoteEditor->SetConsoleId(consoleId);
@@ -1027,7 +1100,7 @@ void MainWindow::RebuildNotesCache()
                         const auto targetNodes = _cachedNotesLookup.value(targetAddr);
                         _cachedNotesLookup.insert(sourceKey, targetNodes);
                         if (!targetNodes.isEmpty() && targetNodes[0]->Size > 1)
-                        {
+                            {
                             bool ok = false;
                             QString clean = sourceKey;
                             clean.remove("0x", Qt::CaseInsensitive);
@@ -2196,4 +2269,4 @@ bool MainWindow::IsAssetInLocalStore(const std::shared_ptr<IAssetItem> &item)
     return false;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

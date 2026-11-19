@@ -6,7 +6,7 @@
 #include <QMap>
 #include <QChar>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Centralizes all static definitions for RA Logic syntax
 class RaLogicSyntax
@@ -39,4 +39,4 @@ public:
     static bool IsPointerOrientedConsole(int consoleId);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

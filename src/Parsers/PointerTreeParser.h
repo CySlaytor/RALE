@@ -3,7 +3,7 @@
 #include "IPointerTreeParser.h"
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Parses raw Code Note text into a hierarchical tree of NoteNodes.
 // Handles standard RetroAchievements pointer notation, including Unicode box characters and PF2 array notation.
@@ -31,4 +31,4 @@ private:
     void CollectAllNodes(const std::shared_ptr<NoteNode> &node, QList<std::shared_ptr<NoteNode>> &flatList);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

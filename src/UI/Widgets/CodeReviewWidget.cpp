@@ -9,7 +9,7 @@
 #include <QUrl>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 CodeReviewWidget::CodeReviewWidget(QWidget *parent)
     : QWidget(parent)
@@ -231,4 +231,4 @@ void CodeReviewWidget::onItemActivated(QTreeWidgetItem * /*item*/, int /*column*
     TriggerIssueNavigation();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

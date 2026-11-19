@@ -4,7 +4,7 @@
 #include <QList>
 #include "../Models/SnippetModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class SnippetManager
 {
@@ -19,4 +19,4 @@ private:
     static QList<Snippet> _cache;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

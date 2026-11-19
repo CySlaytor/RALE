@@ -13,7 +13,7 @@
 #include <QKeyEvent>
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 CodeNoteEditorWidget::CodeNoteEditorWidget(QWidget *parent)
     : QWidget(parent)
@@ -43,6 +43,25 @@ CodeNoteEditorWidget::CodeNoteEditorWidget(QWidget *parent)
         AppSettings::Current.CodeNoteIndentDescriptions = checked;
         AppSettings::Save();
     });
+}
+
+QIcon CodeNoteEditorWidget::getThemeIcon(const QString &resourcePath) const
+{
+    return ThemeManager::getIcon(resourcePath, ThemeManager::CurrentTheme());
+}
+
+void CodeNoteEditorWidget::updateThemeIcons()
+{
+    if (!cmsNoteContext) return;
+    const auto actionsList = cmsNoteContext->actions();
+    for (QAction *action : actionsList)
+    {
+        QVariant iconPathVar = action->property("iconPath");
+        if (iconPathVar.isValid())
+        {
+            action->setIcon(getThemeIcon(iconPathVar.toString()));
+        }
+    }
 }
 
 void CodeNoteEditorWidget::InitializeUI()
@@ -111,16 +130,25 @@ void CodeNoteEditorWidget::InitializeUI()
     connect(txtNoteBody, &QPlainTextEdit::textChanged, this, &CodeNoteEditorWidget::onNoteBodyTextChanged);
 
     cmsNoteContext = new QMenu(this);
-    auto *actCut = cmsNoteContext->addAction("Cut", this, &CodeNoteEditorWidget::onCutClicked);
+    auto *actCut = cmsNoteContext->addAction(getThemeIcon(":/icons/cut.svg"), "Cut", this, &CodeNoteEditorWidget::onCutClicked);
     actCut->setShortcut(QKeySequence::Cut);
-    auto *actCopy = cmsNoteContext->addAction("Copy", this, &CodeNoteEditorWidget::onCopyClicked);
+    actCut->setProperty("iconPath", ":/icons/cut.svg");
+
+    auto *actCopy = cmsNoteContext->addAction(getThemeIcon(":/icons/copy.svg"), "Copy", this, &CodeNoteEditorWidget::onCopyClicked);
     actCopy->setShortcut(QKeySequence::Copy);
-    auto *actPaste = cmsNoteContext->addAction("Paste", this, &CodeNoteEditorWidget::onPasteClicked);
+    actCopy->setProperty("iconPath", ":/icons/copy.svg");
+
+    auto *actPaste = cmsNoteContext->addAction(getThemeIcon(":/icons/load.svg"), "Paste", this, &CodeNoteEditorWidget::onPasteClicked);
     actPaste->setShortcut(QKeySequence::Paste);
+    actPaste->setProperty("iconPath", ":/icons/load.svg");
+
     cmsNoteContext->addSeparator();
-    auto *actDelNode = cmsNoteContext->addAction("Intelligent Delete Node (Selected in Tree)", this, &CodeNoteEditorWidget::onDeleteNodeClicked);
+    auto *actDelNode = cmsNoteContext->addAction(getThemeIcon(":/icons/delete.svg"), "Intelligent Delete Node (Selected in Tree)", this, &CodeNoteEditorWidget::onDeleteNodeClicked);
+    actDelNode->setProperty("iconPath", ":/icons/delete.svg");
+
     cmsNoteContext->addSeparator();
-    cmsNoteContext->addAction("Multiply Selected Text (Inside Note)...", this, &CodeNoteEditorWidget::onMultiplySelectedTextClicked);
+    auto *actMultiply = cmsNoteContext->addAction(getThemeIcon(":/icons/copy.svg"), "Multiply Selected Text (Inside Note)...", this, &CodeNoteEditorWidget::onMultiplySelectedTextClicked);
+    actMultiply->setProperty("iconPath", ":/icons/copy.svg");
 
     connect(cmsNoteContext, &QMenu::aboutToShow, this, [this, actDelNode]() {
         actDelNode->setEnabled(!_viewModel->EditState.IsVirtual);
@@ -872,4 +900,4 @@ void CodeNoteEditorWidget::ExecuteBatchMultiply(
     emit NoteUpdated();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

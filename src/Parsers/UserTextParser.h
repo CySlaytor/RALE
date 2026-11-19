@@ -7,7 +7,7 @@
 #include "../Models/AssetModels.h"
 #include "../Models/LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class UserTextParser
 {
@@ -30,4 +30,4 @@ private:
     static QString CleanValue(const QString &val);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

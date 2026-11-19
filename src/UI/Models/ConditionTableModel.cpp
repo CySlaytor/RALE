@@ -6,7 +6,7 @@
 #include <QRegularExpression>
 #include <cstring>
 
-namespace RALogicEditor {
+namespace RALE {
 
 ConditionTableModel::ConditionTableModel(QObject *parent)
     : QAbstractTableModel(parent)
@@ -709,4 +709,4 @@ Qt::ItemFlags ConditionTableModel::flags(const QModelIndex &index) const
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

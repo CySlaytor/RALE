@@ -6,7 +6,7 @@
 #include "../Models/LogicModels.h"
 #include "../Models/NoteNode.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class CodeNoteModifier
 {
@@ -68,4 +68,4 @@ private:
     static NoteStyle DetectLocalStyle(const QString &parentLine, const NoteStyle &fallbackStyle);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

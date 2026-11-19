@@ -1,6 +1,6 @@
 #include "RegionDefinitions.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Dictionary mapping a canonical Region Name to a list of keywords
 const QMap<QString, QStringList> RegionDefinitions::Regions = {
@@ -50,4 +50,4 @@ bool RegionDefinitions::IsRegion(const QString &text, const QString &regionKey)
     return false;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -3,7 +3,7 @@
 #include "../Utilities/LogicFormatter.h"
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QList<ValidationIssue> LogicValidator::ValidateGroup(
     const AchievementConditionGroup &group,
@@ -547,4 +547,4 @@ void LogicValidator::CheckMissingNotes(
     }
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

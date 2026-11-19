@@ -1,0 +1,103 @@
+#include "AboutDialog.h"
+#include "../Styles/ThemeManager.h"
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+
+#ifndef VERSION_STRING
+#define VERSION_STRING "2.0.0"
+#endif
+
+namespace RALE {
+
+AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent) {
+    setWindowTitle("About RetroAchievements Logic Editor");
+    setModal(true);
+    setFixedSize(520, 430);
+    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
+
+    setupLayout();
+}
+
+AboutDialog::~AboutDialog() = default;
+
+void AboutDialog::setupLayout() {
+    auto *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(15, 15, 15, 15);
+    mainLayout->setSpacing(12);
+
+    auto *topLayout = new QHBoxLayout();
+    topLayout->setSpacing(15);
+
+    m_iconLabel = new QLabel(this);
+    QIcon appIcon(":/appicon.ico");
+    if (!appIcon.isNull()) {
+        m_iconLabel->setPixmap(appIcon.pixmap(QSize(64, 64)));
+    }
+    m_iconLabel->setAlignment(Qt::AlignTop);
+    topLayout->addWidget(m_iconLabel);
+
+    auto *titleContainer = new QVBoxLayout();
+    titleContainer->setSpacing(2);
+
+    m_titleLabel = new QLabel("RetroAchievements Logic Editor", this);
+    QFont titleFont = m_titleLabel->font();
+    titleFont.setPointSize(14);
+    titleFont.setBold(true);
+    m_titleLabel->setFont(titleFont);
+    titleContainer->addWidget(m_titleLabel);
+
+    QLabel *versionLabel = new QLabel(QString("Version %1").arg(VERSION_STRING), this);
+    QFont verFont = versionLabel->font();
+    verFont.setBold(true);
+    versionLabel->setFont(verFont);
+    titleContainer->addWidget(versionLabel);
+
+    titleContainer->addStretch();
+    topLayout->addLayout(titleContainer, 1);
+    mainLayout->addLayout(topLayout);
+
+    m_descLabel = new QLabel(this);
+    m_descLabel->setWordWrap(true);
+    m_descLabel->setTextFormat(Qt::RichText);
+    m_descLabel->setText(
+        "<p style='line-height: 120%;'>RetroAchievements Logic Editor (RALE) is a specialized logic authoring, review, "
+        "and optimization utility designed for RetroAchievements achievement developers and quality assurance teams.</p>"
+        "<p style='line-height: 120%;'>Originally created to replace manual text editor workflows, RALE provides rich condition "
+        "manipulation, code note hierarchy restructuring, multi-region generation, and live validation directly within a modern, "
+        "responsive environment.</p>");
+    mainLayout->addWidget(m_descLabel);
+
+    auto *divider = new QFrame(this);
+    divider->setFrameShape(QFrame::HLine);
+    divider->setFrameShadow(QFrame::Sunken);
+    mainLayout->addWidget(divider);
+
+    m_creditsLabel = new QLabel(this);
+    m_creditsLabel->setWordWrap(true);
+    m_creditsLabel->setTextFormat(Qt::RichText);
+    m_creditsLabel->setOpenExternalLinks(true);
+    m_creditsLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    m_creditsLabel->setText(
+        "<b>Project Contributors:</b>"
+        "<table cellspacing='4' cellpadding='0' style='margin-top: 5px;'>"
+        "<tr>"
+        "<td valign='top' style='width: 80px;'><b>Creator:</b></td>"
+        "<td valign='top'><a href='https://retroachievements.org/user/CySlaytor'>CySlaytor</a> &mdash; Core concept, logic architecture, "
+        "and tool design. Developed to streamline RetroAchievements logic authoring and verification.</td>"
+        "</tr>"
+        "</table>");
+    mainLayout->addWidget(m_creditsLabel, 1);
+
+    auto *buttonLayout = new QHBoxLayout();
+    m_closeButton = new QPushButton("Close", this);
+    m_closeButton->setObjectName("closeButton");
+    m_closeButton->setFixedWidth(75);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(m_closeButton);
+    mainLayout->addLayout(buttonLayout);
+
+    connect(m_closeButton, &QPushButton::clicked, this, &QDialog::accept);
+}
+
+} // namespace RALE

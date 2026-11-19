@@ -13,7 +13,7 @@
 #include "../../Models/NoteNode.h"
 #include "../Models/CodeNoteViewModel.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class CodeNoteEditorWidget : public QWidget
 {
@@ -57,6 +57,8 @@ public:
         int copies,
         int64_t stride,
         int startNum);
+
+    void updateThemeIcons();
 
 signals:
     void ReloadRequested();
@@ -112,10 +114,11 @@ private:
     bool _variableRefreshPending = false;
     bool _hasUnsavedChanges = false;
 
+    QIcon getThemeIcon(const QString &resourcePath) const;
     void InitializeUI();
     void ApplyFilter(bool autoSelectFirst = true);
     void RefreshVariableTreeDisplay();
     void UpdateStatusDisplay(const QString *overrideMsg = nullptr);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

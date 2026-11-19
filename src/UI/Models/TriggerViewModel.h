@@ -15,7 +15,7 @@
 #include "../../Services/ILogicGenerator.h"
 #include "../../Common/ConditionFormatter.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Responsibilty: Manages the state of the Logic being edited (Parsing, History, Generators).
 // Decouples the WinForms UI from the Business Logic.
@@ -92,4 +92,4 @@ private:
     void RestoreState(const TriggerEditorState &state);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

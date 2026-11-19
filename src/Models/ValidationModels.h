@@ -5,7 +5,7 @@
 #include <optional>
 #include "LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class IAssetItem;
 
@@ -49,4 +49,4 @@ public:
     }
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -9,7 +9,7 @@
 #include "../../Models/AssetModels.h"
 #include "../../Services/LogicOptimizer.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class LogicOptimizerDialog : public QDialog
 {
@@ -49,4 +49,4 @@ private:
     void ProcessSelectedAssets(std::function<int(std::shared_ptr<IAssetItem>)> action, const QString &actionName);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -10,7 +10,7 @@
 #include <memory>
 #include "../../Models/GeneratorModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 // A dialog to capture Copies, Stride, and select multiple Addresses for the Logic Generator
 class GeneratorConfigDialog : public QDialog
@@ -76,4 +76,4 @@ private:
     bool IsNodeTreeChecked(QTreeWidgetItem *item) const;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

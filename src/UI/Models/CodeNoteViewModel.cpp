@@ -6,7 +6,7 @@
 #include <QSet>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 namespace {
 
@@ -888,4 +888,4 @@ int64_t CodeNoteViewModel::ParseAddress(const QString &addr) const
     return ok ? result : -1;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

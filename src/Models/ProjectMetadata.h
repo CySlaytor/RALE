@@ -4,7 +4,7 @@
 #include <QStringList>
 #include <QMap>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ProjectMetadata
 {
@@ -13,4 +13,4 @@ public:
     QMap<int, QStringList> AssetGroupNames;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -6,7 +6,7 @@
 #include <memory>
 #include "../../Models/AssetModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class AssetTableModel : public QAbstractTableModel
 {
@@ -47,4 +47,4 @@ public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

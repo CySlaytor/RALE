@@ -8,7 +8,7 @@
 #include <QPointer>
 #include <functional>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ImageCache
 {
@@ -39,4 +39,4 @@ private:
     static std::unique_ptr<QNetworkAccessManager> _networkManager;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

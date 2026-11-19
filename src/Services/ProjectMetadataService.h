@@ -5,7 +5,7 @@
 #include "../Models/ProjectMetadata.h"
 #include "../Models/LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ProjectMetadataService
 {
@@ -21,4 +21,4 @@ public:
     void ApplyNamesToAsset(int assetId, QList<AchievementConditionGroup> &groups);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

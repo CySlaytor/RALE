@@ -6,4 +6,29 @@
         <file alias="dark_theme.qss">../src/UI/Styles/dark_theme.qss</file>
         <file alias="light_theme.qss">../src/UI/Styles/light_theme.qss</file>
     </qresource>
+    <qresource prefix="/icons">
+        <file alias="about.svg">icons/about.svg</file>
+        <file alias="attach.svg">icons/attach.svg</file>
+        <file alias="bookmark_add.svg">icons/bookmark_add.svg</file>
+        <file alias="converter.svg">icons/converter.svg</file>
+        <file alias="copy.svg">icons/copy.svg</file>
+        <file alias="copy_note.svg">icons/copy_note.svg</file>
+        <file alias="copy_ra.svg">icons/copy_ra.svg</file>
+        <file alias="cut.svg">icons/cut.svg</file>
+        <file alias="delete.svg">icons/delete.svg</file>
+        <file alias="find.svg">icons/find.svg</file>
+        <file alias="follow_pointer.svg">icons/follow_pointer.svg</file>
+        <file alias="hierarchy_fixer.svg">icons/hierarchy_fixer.svg</file>
+        <file alias="load.svg">icons/load.svg</file>
+        <file alias="range_finder.svg">icons/range_finder.svg</file>
+        <file alias="redo.svg">icons/redo.svg</file>
+        <file alias="refresh.svg">icons/refresh.svg</file>
+        <file alias="rename.svg">icons/rename.svg</file>
+        <file alias="save.svg">icons/save.svg</file>
+        <file alias="settings.svg">icons/settings.svg</file>
+        <file alias="sort.svg">icons/sort.svg</file>
+        <file alias="tutorial.svg">icons/tutorial.svg</file>
+        <file alias="undo.svg">icons/undo.svg</file>
+        <file alias="update.svg">icons/update.svg</file>
+    </qresource>
 </RCC>

@@ -1,6 +1,6 @@
 #include "AssetModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 QString RaAchievement::toString() const
 {
@@ -61,4 +61,4 @@ std::shared_ptr<RaLeaderboard> RaLeaderboard::cloneLeaderboard(bool newId) const
     return copy;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -2,7 +2,7 @@
 #include "AssetStrategies.h"
 #include "../Definitions/RaLogicSyntax.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 void MultiRegionBatchProcessor::ApplyMultiRegionToAsset(
     std::shared_ptr<IAssetItem> localItem,
@@ -144,4 +144,4 @@ void MultiRegionBatchProcessor::ApplyAddressSwap(Operand &op, const QList<Addres
     }
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

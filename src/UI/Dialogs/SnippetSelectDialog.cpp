@@ -5,7 +5,7 @@
 #include <QLabel>
 #include <QMessageBox>
 
-namespace RALogicEditor {
+namespace RALE {
 
 SnippetSelectDialog::SnippetSelectDialog(QWidget *parent)
     : QDialog(parent)
@@ -110,4 +110,4 @@ void SnippetSelectDialog::onItemDoubleClicked(QListWidgetItem * /*item*/)
     onBtnInsert();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

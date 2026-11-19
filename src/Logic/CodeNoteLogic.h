@@ -5,7 +5,7 @@
 #include <QList>
 #include <memory>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Ported from Pointer Finder 2.0
 // A tool to parse, merge, and clean up complex code notes with hierarchical pointer chains.
@@ -47,4 +47,4 @@ private:
         const QString &indentPrefix = "");
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

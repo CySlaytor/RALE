@@ -7,7 +7,7 @@
 #include <optional>
 #include "../../Models/SnippetModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class SnippetSelectDialog : public QDialog
 {
@@ -34,4 +34,4 @@ private:
     void LoadSnippets();
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

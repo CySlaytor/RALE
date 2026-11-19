@@ -10,8 +10,10 @@
 #include <QPropertyAnimation>
 #include <QEasingCurve>
 #include <QWidget>
+#include <QIcon>
+#include <QHash>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Forces classic Win32 dropdown positioning below the QComboBox across the entire app
 class ClassicDropdownStyle : public QProxyStyle {
@@ -169,12 +171,17 @@ public:
     // Configures a QComboBox with uniform item sizing, max visible items (default 8), and the Win32 selection delegate
     static void SetupComboBox(QComboBox *cb, int maxVisibleItems = 14);
 
+    // Resolves raw SVG XML data, colorizes paths dynamically using active visual themes, and caches standard raster sizes
+    static QIcon getIcon(const QString &resourcePath, Theme theme = _currentTheme);
+    static void clearCache();
+
 private:
     static Theme _currentTheme;
+    static QHash<QString, QIcon> _iconCache;
     static QString LoadStyleSheet(const QString &resourcePath);
 
     static void ApplyLightPalette(QApplication *app);
     static void ApplyDarkPalette(QApplication *app);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

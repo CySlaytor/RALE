@@ -3,7 +3,7 @@
 #include <QString>
 #include <QList>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class GeneratorRule
 {
@@ -49,4 +49,4 @@ public:
     }
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

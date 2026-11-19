@@ -4,7 +4,7 @@
 #include <QList>
 #include <cstdint>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class Operand
 {
@@ -102,4 +102,4 @@ public:
     }
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

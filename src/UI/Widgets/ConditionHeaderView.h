@@ -5,7 +5,7 @@
 #include <optional>
 #include <QColor>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ConditionTableModel;
 
@@ -31,4 +31,4 @@ private:
     std::optional<QColor> GetChainColor(const QString &flag) const;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

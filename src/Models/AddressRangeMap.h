@@ -3,7 +3,7 @@
 #include <QString>
 #include <cstdint>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class AddressRangeMap
 {
@@ -25,4 +25,4 @@ public:
     }
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -4,7 +4,7 @@
 #include <QList>
 #include <memory>
 
-namespace RALogicEditor {
+namespace RALE {
 
 enum class AssetState
 {
@@ -124,4 +124,4 @@ public:
     bool operator!=(const RaLeaderboard &other) const { return !(*this == other); }
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

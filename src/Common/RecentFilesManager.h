@@ -3,7 +3,7 @@
 #include <QString>
 #include <QList>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class RecentFileEntry
 {
@@ -32,4 +32,4 @@ private:
     QString GetFilePathTxt() const;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

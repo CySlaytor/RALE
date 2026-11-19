@@ -9,7 +9,7 @@
 #include "../Models/ValidationModels.h"
 #include "../Common/ConditionFormatter.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ILogicValidator
 {
@@ -24,4 +24,4 @@ public:
         const QList<ConditionFormatter::RangeEntry> *rangeCache = nullptr) = 0;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

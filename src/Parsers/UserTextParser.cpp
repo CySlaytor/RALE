@@ -3,7 +3,7 @@
 #include <QTextStream>
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 bool UserTextParser::UserData::operator==(const UserData &other) const
 {
@@ -179,4 +179,4 @@ QString UserTextParser::CleanValue(const QString &val)
     return trimmed;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

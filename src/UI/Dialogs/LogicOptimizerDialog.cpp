@@ -9,7 +9,7 @@
 #include <QStyleOptionViewItem>
 #include <QMouseEvent>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Delegate ensuring clean white cell backgrounds, 1px thin gridlines, and standard Windows Forms blue highlight
 class OptimizerTableDelegate : public QStyledItemDelegate
@@ -410,4 +410,4 @@ void LogicOptimizerDialog::onCloseClicked()
     close();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

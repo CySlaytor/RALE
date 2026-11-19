@@ -7,7 +7,7 @@
 #include <QList>
 #include "../../Models/ValidationModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class CodeReviewWidget : public QWidget
 {
@@ -42,4 +42,4 @@ private:
     void TriggerIssueNavigation();
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

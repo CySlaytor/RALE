@@ -3,7 +3,7 @@
 #include <QString>
 #include <cstdint>
 
-namespace RALogicEditor {
+namespace RALE {
 
 enum class NamingStyle
 {
@@ -49,4 +49,4 @@ private:
         int number);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

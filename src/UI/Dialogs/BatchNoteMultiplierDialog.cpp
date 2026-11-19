@@ -7,7 +7,7 @@
 #include <QLabel>
 #include <QMessageBox>
 
-namespace RALogicEditor {
+namespace RALE {
 
 int BatchNoteMultiplierDialog::_lastCopies = 1;
 QString BatchNoteMultiplierDialog::_lastStride = "0x0";
@@ -260,4 +260,4 @@ void BatchNoteMultiplierDialog::onBtnCancel()
     reject();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

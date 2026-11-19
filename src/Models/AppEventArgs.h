@@ -4,7 +4,7 @@
 #include <QList>
 #include <cstdint>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class PointerChainArgs
 {
@@ -18,4 +18,4 @@ public:
     }
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

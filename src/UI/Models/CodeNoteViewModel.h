@@ -10,7 +10,7 @@
 #include "../../Parsers/IPointerTreeParser.h"
 #include "../../Common/ConditionFormatter.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 // ViewModel to decouple complex pointer logic from the WinForms UI.
 // Maintains the state of notes, pointer trees, and virtual selections.
@@ -118,4 +118,4 @@ private:
     QMap<QString, QList<std::shared_ptr<NoteNode>>> NotesLookup();
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -5,7 +5,7 @@
 #include "../Models/RichPresence.h"
 #include "../Models/RegionConfig.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class RichPresenceService
 {
@@ -20,4 +20,4 @@ private:
     QString ApplyAddressMap(const QString &input, const QList<AddressRangeMap> &ranges);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

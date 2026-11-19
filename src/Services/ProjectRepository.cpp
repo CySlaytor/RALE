@@ -9,7 +9,7 @@
 #include <QSet>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 void ProjectRepository::LoadFiles(const QString &primaryPath, QString &userFilePath)
 {
@@ -484,4 +484,4 @@ void ProjectRepository::SaveRichPresence()
     }
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

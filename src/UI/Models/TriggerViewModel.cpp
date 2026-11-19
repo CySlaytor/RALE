@@ -1,6 +1,6 @@
 #include "TriggerViewModel.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Constructor Injection
 TriggerViewModel::TriggerViewModel(ILogicValidator &validator, ILogicGenerator &generator, QObject *parent)
@@ -228,4 +228,4 @@ QList<ValidationIssue> TriggerViewModel::ValidateCurrentLogic()
     return _validator.ValidateAsset(GetActiveGroups(), BoundAsset, NotesLookup, RangeCache);
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

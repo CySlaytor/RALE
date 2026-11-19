@@ -7,7 +7,7 @@
 #include <QDateTime>
 #include <QLocale>
 
-namespace RALogicEditor {
+namespace RALE {
 
 void RichPresenceMetadataService::Load(const QString &gameId)
 {
@@ -69,4 +69,4 @@ void RichPresenceMetadataService::SaveBackup(const QString &script)
     catch (...) {}
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

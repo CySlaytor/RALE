@@ -2,7 +2,7 @@
 
 #include <QString>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class UserSettings
 {
@@ -60,4 +60,4 @@ private:
     static QString GetSettingsPath();
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

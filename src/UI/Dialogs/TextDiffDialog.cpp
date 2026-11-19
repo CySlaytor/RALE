@@ -6,7 +6,7 @@
 #include <QScrollBar>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 TextDiffDialog::TextDiffDialog(
     const QString &title,
@@ -378,4 +378,4 @@ TextDiffDialog::DiffResult TextDiffDialog::ComputeWordDiff(const QString &left, 
     return res;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -5,7 +5,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace RALogicEditor {
+namespace RALE {
 
 UserSettings AppSettings::Current;
 
@@ -134,4 +134,4 @@ void AppSettings::Save()
     catch (...) { /* Ignore errors */ }
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

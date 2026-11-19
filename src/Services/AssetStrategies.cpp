@@ -2,7 +2,7 @@
 #include "../Parsers/AchievementParser.h"
 #include "../Utilities/LogicFormatter.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 QMap<QString, QList<AchievementConditionGroup>> AchievementStrategy::ParseLogic(const QString &logic) const
 {
@@ -131,4 +131,4 @@ QString LeaderboardStrategy::BuildLogic(const QMap<QString, QList<AchievementCon
     return sb;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

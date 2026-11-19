@@ -3,7 +3,7 @@
 #include "ProjectRepository.h"
 #include "../Utilities/LogicFormatter.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 QString UserFileSerializer::Serialize(
     const QString &gameTitle,
@@ -114,4 +114,4 @@ QString UserFileSerializer::Serialize(
     return sb;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -1,6 +1,6 @@
 #include "RichPresenceParser.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 RichPresenceScript RichPresenceParser::Parse(const QString &content)
 {
@@ -79,4 +79,4 @@ RichPresenceScript RichPresenceParser::Parse(const QString &content)
     return script;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

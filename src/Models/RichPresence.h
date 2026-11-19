@@ -4,7 +4,7 @@
 #include <QList>
 #include <optional>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class LookupEntry
 {
@@ -38,4 +38,4 @@ public:
     QString ToString() const;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

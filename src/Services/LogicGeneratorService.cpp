@@ -2,7 +2,7 @@
 #include <QRegularExpression>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 void LogicGeneratorService::ApplyGeneratorRules(
     QList<AchievementConditionGroup> &activeGroups,
@@ -111,4 +111,4 @@ void LogicGeneratorService::ApplyOffsetToOperand(Operand &op, const QString &tar
     }
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

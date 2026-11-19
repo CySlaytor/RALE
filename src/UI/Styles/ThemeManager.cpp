@@ -13,10 +13,12 @@
 #include <QListView>
 #include <QCursor>
 #include <QUrl>
+#include <QtSvg/QSvgRenderer>
 
-namespace RALogicEditor {
+namespace RALE {
 
 ThemeManager::Theme ThemeManager::_currentTheme = ThemeManager::Theme::Light;
+QHash<QString, QIcon> ThemeManager::_iconCache;
 
 // Event filter to prevent scrollbar layout thrashing during opening animation
 class ComboBoxScrollbarFilter : public QObject
@@ -118,54 +120,68 @@ void ThemeManager::SetupComboBox(QComboBox *cb, int maxVisibleItems)
         cb->setMaxVisibleItems(14);
 }
 
-static QString EnsureArrowIcon(const QString &fileName, const QColor &color, bool up = false)
+void ThemeManager::clearCache()
 {
-    QString tempPath = QDir::temp().filePath(fileName);
-    if (!QFile::exists(tempPath) || QFileInfo(tempPath).size() == 0)
-    {
-        QPixmap pix(7, 4);
-        pix.fill(Qt::transparent);
-        QPainter p(&pix);
-        p.setRenderHint(QPainter::Antialiasing, true);
-        p.setPen(Qt::NoPen);
-        p.setBrush(color);
-
-        QPolygonF poly;
-        if (up)
-        {
-            poly << QPointF(0.0, 4.0) << QPointF(7.0, 4.0) << QPointF(3.5, 0.0);
-        }
-        else
-        {
-            poly << QPointF(0.0, 0.0) << QPointF(7.0, 0.0) << QPointF(3.5, 4.0);
-        }
-        p.drawPolygon(poly);
-        p.end();
-
-        pix.save(tempPath, "PNG");
-    }
-    return QUrl::fromLocalFile(tempPath).toString();
+    _iconCache.clear();
 }
 
-// Generates an exact 1px tall pixel-perfect repeating background for the WinForms-style menu icon gutter
-static QString EnsureMenuGutterPixmap(const QString &fileName, int gutterWidth, const QColor &gutterColor, const QColor &borderColor, const QColor &bgColor)
+QIcon ThemeManager::getIcon(const QString &resourcePath, Theme theme)
 {
-    QString tempPath = QDir::temp().filePath(fileName);
-    if (!QFile::exists(tempPath) || QFileInfo(tempPath).size() == 0)
-    {
-        int totalWidth = 600;
-        QPixmap pix(totalWidth, 1);
-        pix.fill(bgColor);
-        QPainter p(&pix);
-        // Fill gutter strip
-        p.fillRect(0, 0, gutterWidth - 1, 1, gutterColor);
-        // 1px separator line
-        p.fillRect(gutterWidth - 1, 0, 1, 1, borderColor);
-        p.end();
-
-        pix.save(tempPath, "PNG");
+    QString themeName = (theme == Theme::Dark) ? "Dark" : "Light";
+    QString cacheKey = QString("%1_%2").arg(resourcePath, themeName);
+    if (_iconCache.contains(cacheKey)) {
+        return _iconCache.value(cacheKey);
     }
-    return QUrl::fromLocalFile(tempPath).toString();
+
+    QFile file(resourcePath);
+    if (!file.open(QFile::ReadOnly)) {
+        return QIcon(resourcePath);
+    }
+    QString svgContent = QString::fromUtf8(file.readAll());
+    file.close();
+
+    QString primaryColor;
+    QString accentColor;
+
+    if (theme == Theme::Light) {
+        if (resourcePath.contains("find.svg", Qt::CaseInsensitive)) {
+            primaryColor = "#666666";
+        } else {
+            primaryColor = "#3a3a3a";
+        }
+        accentColor = "#0056b3";
+    } else {
+        primaryColor = "#e0e0e0";
+        accentColor = "#7289da";
+    }
+
+    svgContent.replace("#e0e0e0", primaryColor, Qt::CaseInsensitive);
+    svgContent.replace("#7289da", accentColor, Qt::CaseInsensitive);
+
+    QByteArray svgData = svgContent.toUtf8();
+    QIcon icon;
+
+    const QList<int> standardSizes = {16, 20, 24, 32, 48, 64, 128, 256};
+    for (int size : standardSizes) {
+        QSvgRenderer renderer(svgData);
+        if (renderer.isValid()) {
+            QPixmap pixmap(size, size);
+            pixmap.fill(Qt::transparent);
+            QPainter painter(&pixmap);
+            painter.setRenderHint(QPainter::Antialiasing);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            renderer.render(&painter);
+            painter.end();
+            icon.addPixmap(pixmap);
+        }
+    }
+
+    if (icon.isNull()) {
+        return QIcon(resourcePath);
+    }
+
+    _iconCache.insert(cacheKey, icon);
+    return icon;
 }
 
 QRect RaStyle::subElementRect(SubElement element, const QStyleOption *option, const QWidget *widget) const
@@ -331,6 +347,7 @@ int RaStyle::styleHint(StyleHint hint, const QStyleOption *option, const QWidget
 void ThemeManager::ApplyTheme(Theme theme)
 {
     _currentTheme = theme;
+    clearCache();
 
     QApplication::setEffectEnabled(Qt::UI_AnimateTooltip, false);
     QApplication::setEffectEnabled(Qt::UI_FadeTooltip, false);
@@ -436,4 +453,4 @@ QString ThemeManager::LoadStyleSheet(const QString &resourcePath)
     return "";
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

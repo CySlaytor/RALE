@@ -7,7 +7,7 @@
 #include <QList>
 #include "../../Models/LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class BatchNoteMultiplierDialog : public QDialog
 {
@@ -59,4 +59,4 @@ private:
     void PopulateList(const QString &filter);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

@@ -5,7 +5,7 @@
 #include "../Models/LogicModels.h"
 #include "../Models/GeneratorModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ILogicGenerator
 {
@@ -17,4 +17,4 @@ public:
         const QMap<int, GeneratorDefinition> &generatorRules) = 0;
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

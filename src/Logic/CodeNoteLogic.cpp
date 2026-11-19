@@ -6,7 +6,7 @@
 #include <QMap>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Logic: Parses raw code note text, merges duplicate offsets, fixes hierarchy indentation, and sorts results.
 QString CodeNoteLogic::FixHierarchy(const QString &inputText, const QString &indentStylePref, bool indentDescriptions, int consoleId)
@@ -557,4 +557,4 @@ QString CodeNoteLogic::RebuildTextFromTree(
     return sb;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

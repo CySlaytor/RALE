@@ -3,7 +3,7 @@
 #include <QString>
 #include "../Models/RichPresence.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class RichPresenceParser
 {
@@ -11,4 +11,4 @@ public:
     static RichPresenceScript Parse(const QString &content);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

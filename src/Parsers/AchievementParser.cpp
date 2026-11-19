@@ -3,7 +3,7 @@
 #include <QRegularExpression>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QList<AchievementConditionGroup> AchievementParser::ParseAchievementTrigger(
     const QString &trigger,
@@ -281,4 +281,4 @@ Operand AchievementParser::ParseOperand(const QString &operandStr)
     return operand;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

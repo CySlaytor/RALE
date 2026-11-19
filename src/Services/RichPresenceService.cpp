@@ -2,7 +2,7 @@
 #include "../Utilities/LogicFormatter.h"
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 RichPresenceScript RichPresenceService::GenerateMultiRegion(
     const RichPresenceScript &sourceScript,
@@ -128,4 +128,4 @@ QString RichPresenceService::ApplyAddressMap(const QString &input, const QList<A
     return result;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

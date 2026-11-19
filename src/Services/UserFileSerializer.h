@@ -6,7 +6,7 @@
 #include "../Models/AssetModels.h"
 #include "../Parsers/UserTextParser.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class ProjectRepository;
 
@@ -21,4 +21,4 @@ public:
         ProjectRepository &repo);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

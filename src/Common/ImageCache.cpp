@@ -6,7 +6,7 @@
 #include <QPainter>
 #include <QNetworkReply>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QMap<QString, QPixmap> ImageCache::_memoryCache;
 QMap<QString, QList<ImageCache::CallbackEntry>> ImageCache::_pendingCallbacks;
@@ -198,4 +198,4 @@ QPixmap ImageCache::CreatePlaceholder()
     return pix;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

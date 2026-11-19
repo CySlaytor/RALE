@@ -5,7 +5,7 @@
 #include <memory>
 #include <cstdint>
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Represents a node in the pointer tree structure (e.g., +0x4)
 class NoteNode
@@ -36,4 +36,4 @@ public:
     }
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

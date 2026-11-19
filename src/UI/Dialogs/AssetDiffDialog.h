@@ -8,7 +8,7 @@
 #include "../../Models/AssetModels.h"
 #include "../../Models/LogicModels.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class AssetDiffDialog : public QDialog
 {
@@ -37,4 +37,4 @@ private:
     void UpdateDiffStats(const QStringList &serverLines, const QStringList &localLines);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

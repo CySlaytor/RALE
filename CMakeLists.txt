@@ -6,7 +6,7 @@ else()
     set(CMAKE_PREFIX_PATH "C:/Qt/6.11.2/msvc2022_64") # Local fallback path
 endif()
 
-project(RALogicEditor VERSION 2.0.0 LANGUAGES CXX)
+project(RALE VERSION 2.0.0 LANGUAGES CXX)
 
 # Enable folders in the Visual Studio Solution Explorer. This automatically 
 # moves utility projects (ALL_BUILD, ZERO_CHECK) into a subfolder.
@@ -23,13 +23,13 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # Collect all source and header files recursively
-file(GLOB_RECURSE SOURCES 
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     "src/*.cpp"
     "src/*.h"
 )
 
 # Collect resources so they are also visible in the IDE Solution Explorer
-file(GLOB_RECURSE RESOURCE_ICONS "resources/icons/*.svg")
+file(GLOB_RECURSE RESOURCE_ICONS CONFIGURE_DEPENDS "resources/icons/*.svg")
 set(RESOURCES 
     resources/resources.qrc
     ${RESOURCE_ICONS}
@@ -48,6 +48,11 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/resources" PREFIX "Resources" FIL
 
 if(WIN32)
     add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${RESOURCES})
+
+    # Add src/ to include directories to allow clean modular imports
+    target_include_directories(${PROJECT_NAME} PRIVATE 
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
 
     # Inject compile definitions dynamically into CL.exe and RC.exe
     target_compile_definitions(${PROJECT_NAME} PRIVATE
@@ -107,6 +112,10 @@ if(WIN32)
 else()
     add_executable(${PROJECT_NAME} ${SOURCES} ${RESOURCES})
     
+    target_include_directories(${PROJECT_NAME} PRIVATE 
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
+
     target_compile_definitions(${PROJECT_NAME} PRIVATE
         VERSION_STRING="${PROJECT_VERSION}"
     )

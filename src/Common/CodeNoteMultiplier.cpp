@@ -3,7 +3,7 @@
 #include <QStringList>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QString CodeNoteMultiplier::GenerateText(
     const QString &templateText,
@@ -166,4 +166,4 @@ QString CodeNoteMultiplier::ApplyNaming(
     return input;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

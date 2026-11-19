@@ -11,7 +11,7 @@
 #include "../../Models/LogicModels.h"
 #include "../../Models/RegionConfig.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 class MultiRegionDialog : public QDialog
 {
@@ -60,4 +60,4 @@ private:
     void ParseOperand(const QString &raw, Operand &op);
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

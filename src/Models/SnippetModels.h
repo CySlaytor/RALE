@@ -2,7 +2,7 @@
 
 #include <QString>
 
-namespace RALogicEditor {
+namespace RALE {
 
 class Snippet
 {
@@ -16,4 +16,4 @@ public:
     void setLogicCode(const QString &value) { Logic = value; }
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

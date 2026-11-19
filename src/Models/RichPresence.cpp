@@ -1,7 +1,7 @@
 #include "RichPresence.h"
 #include <QStringBuilder>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QString RichPresenceScript::ToString() const
 {
@@ -45,4 +45,4 @@ QString RichPresenceScript::ToString() const
     return result;
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

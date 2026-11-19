@@ -7,7 +7,7 @@
 #include "../Models/LogicModels.h"
 #include "../Models/NoteNode.h"
 
-namespace RALogicEditor {
+namespace RALE {
 
 // Responsibility: Formats raw model data into display strings (Values, Aliases)
 class ConditionFormatter
@@ -61,4 +61,4 @@ private:
     };
 };
 
-} // namespace RALogicEditor
+} // namespace RALE

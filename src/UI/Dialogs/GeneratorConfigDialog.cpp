@@ -6,7 +6,7 @@
 #include <QMessageBox>
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 QString GeneratorConfigDialog::_lastCopies = "1";
 QString GeneratorConfigDialog::_lastStride = "0x0";
@@ -362,4 +362,4 @@ void GeneratorConfigDialog::onBtnCancel()
     reject();
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

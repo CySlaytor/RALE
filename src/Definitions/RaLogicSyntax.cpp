@@ -1,7 +1,7 @@
 #include "RaLogicSyntax.h"
 #include <QRegularExpression>
 
-namespace RALogicEditor {
+namespace RALE {
 
 const QString RaLogicSyntax::NO_FLAG_TEXT = "(No Flag)";
 const QString RaLogicSyntax::NO_OPERATOR_TEXT = "(None)";
@@ -165,4 +165,4 @@ QString RaLogicSyntax::GetPlatformPointerMask(int consoleId)
     }
 }
 
-} // namespace RALogicEditor
+} // namespace RALE

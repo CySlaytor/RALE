@@ -26,7 +26,7 @@
 #include <QSignalBlocker>
 #include <algorithm>
 
-namespace RALogicEditor {
+namespace RALE {
 
 static LogicValidator staticValidator;
 static LogicGeneratorService staticGenerator;
@@ -119,6 +119,24 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget *parent)
             _viewModel.UpdateLogic(true);
         }, Qt::QueuedConnection);
     });
+}
+
+QIcon TriggerEditorWidget::getThemeIcon(const QString &resourcePath) const
+{
+    return ThemeManager::getIcon(resourcePath, ThemeManager::CurrentTheme());
+}
+
+void TriggerEditorWidget::updateThemeIcons()
+{
+    const auto actionsList = findChildren<QAction*>();
+    for (QAction *action : actionsList)
+    {
+        QVariant iconPathVar = action->property("iconPath");
+        if (iconPathVar.isValid())
+        {
+            action->setIcon(getThemeIcon(iconPathVar.toString()));
+        }
+    }
 }
 
 void TriggerEditorWidget::InitializeUI()
@@ -361,11 +379,20 @@ void TriggerEditorWidget::InitializeUI()
 
     // Context Menus
     toolsContextMenu = new QMenu(this);
-    actCreateGenerator = toolsContextMenu->addAction("Create Generator...", this, &TriggerEditorWidget::onCreateGeneratorClicked);
-    actCommitGenerator = toolsContextMenu->addAction("Commit Generator (Bake)", this, &TriggerEditorWidget::onCommitGeneratorClicked);
-    actMultiRegion = toolsContextMenu->addAction("Multi-Region Support...", this, &TriggerEditorWidget::onMultiRegionClicked);
-    actLogicOptimizer = toolsContextMenu->addAction("Logic Optimizer (Length)...", this, &TriggerEditorWidget::onLogicOptimizerClicked);
-    actBatchMultiply = toolsContextMenu->addAction("Batch Multiply Notes...", this, &TriggerEditorWidget::onBatchMultiplyNotesClicked);
+    actCreateGenerator = toolsContextMenu->addAction(getThemeIcon(":/icons/range_finder.svg"), "Create Generator...", this, &TriggerEditorWidget::onCreateGeneratorClicked);
+    actCreateGenerator->setProperty("iconPath", ":/icons/range_finder.svg");
+
+    actCommitGenerator = toolsContextMenu->addAction(getThemeIcon(":/icons/save.svg"), "Commit Generator (Bake)", this, &TriggerEditorWidget::onCommitGeneratorClicked);
+    actCommitGenerator->setProperty("iconPath", ":/icons/save.svg");
+
+    actMultiRegion = toolsContextMenu->addAction(getThemeIcon(":/icons/converter.svg"), "Multi-Region Support...", this, &TriggerEditorWidget::onMultiRegionClicked);
+    actMultiRegion->setProperty("iconPath", ":/icons/converter.svg");
+
+    actLogicOptimizer = toolsContextMenu->addAction(getThemeIcon(":/icons/hierarchy_fixer.svg"), "Logic Optimizer (Length)...", this, &TriggerEditorWidget::onLogicOptimizerClicked);
+    actLogicOptimizer->setProperty("iconPath", ":/icons/hierarchy_fixer.svg");
+
+    actBatchMultiply = toolsContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Batch Multiply Notes...", this, &TriggerEditorWidget::onBatchMultiplyNotesClicked);
+    actBatchMultiply->setProperty("iconPath", ":/icons/copy.svg");
 
     // Wire up dynamic enablement for Tools menu items matching WinForms ToolsContextMenu_Opening
     connect(toolsContextMenu, &QMenu::aboutToShow, this, [this]() {
@@ -380,10 +407,17 @@ void TriggerEditorWidget::InitializeUI()
     });
 
     groupsContextMenu = new QMenu(this);
-    actAddGroup = groupsContextMenu->addAction("Add Group", this, &TriggerEditorWidget::onAddGroupClicked);
-    actRemoveGroup = groupsContextMenu->addAction("Remove Group", this, &TriggerEditorWidget::onRemoveGroupClicked);
+    actAddGroup = groupsContextMenu->addAction(getThemeIcon(":/icons/bookmark_add.svg"), "Add Group", this, &TriggerEditorWidget::onAddGroupClicked);
+    actAddGroup->setProperty("iconPath", ":/icons/bookmark_add.svg");
+
+    actRemoveGroup = groupsContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Remove Group", this, &TriggerEditorWidget::onRemoveGroupClicked);
+    actRemoveGroup->setProperty("iconPath", ":/icons/delete.svg");
+
     groupsContextMenu->addSeparator();
-    actRemoveAllAltGroups = groupsContextMenu->addAction("Remove All Alt Groups", this, &TriggerEditorWidget::onRemoveAllAltGroupsClicked);
+
+    actRemoveAllAltGroups = groupsContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Remove All Alt Groups", this, &TriggerEditorWidget::onRemoveAllAltGroupsClicked);
+    actRemoveAllAltGroups->setProperty("iconPath", ":/icons/delete.svg");
+
     groupsList->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(groupsList, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
         groupsContextMenu->exec(groupsList->mapToGlobal(pos));
@@ -399,29 +433,55 @@ void TriggerEditorWidget::InitializeUI()
     });
 
     gridContextMenu = new QMenu(this);
-    auto *actMoveUp = gridContextMenu->addAction("Move Up", this, [this]() { MoveSelected(-1); });
+    auto *actMoveUp = gridContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Up", this, [this]() { MoveSelected(-1); });
     actMoveUp->setShortcut(QKeySequence("Alt+Up"));
-    auto *actMoveDown = gridContextMenu->addAction("Move Down", this, [this]() { MoveSelected(1); });
+    actMoveUp->setProperty("iconPath", ":/icons/sort.svg");
+
+    auto *actMoveDown = gridContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Down", this, [this]() { MoveSelected(1); });
     actMoveDown->setShortcut(QKeySequence("Alt+Down"));
+    actMoveDown->setProperty("iconPath", ":/icons/sort.svg");
+
     gridContextMenu->addSeparator();
-    gridContextMenu->addAction("Add Condition", this, &TriggerEditorWidget::AddCondition);
-    auto *actDup = gridContextMenu->addAction("Duplicate", this, &TriggerEditorWidget::DuplicateSelected);
+
+    auto *actAddCond = gridContextMenu->addAction(getThemeIcon(":/icons/bookmark_add.svg"), "Add Condition", this, &TriggerEditorWidget::AddCondition);
+    actAddCond->setProperty("iconPath", ":/icons/bookmark_add.svg");
+
+    auto *actDup = gridContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Duplicate", this, &TriggerEditorWidget::DuplicateSelected);
     actDup->setShortcut(QKeySequence("Ctrl+D"));
-    auto *actDel = gridContextMenu->addAction("Delete", this, &TriggerEditorWidget::DeleteSelected);
+    actDup->setProperty("iconPath", ":/icons/copy.svg");
+
+    auto *actDel = gridContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Delete", this, &TriggerEditorWidget::DeleteSelected);
     actDel->setShortcut(QKeySequence::Delete);
+    actDel->setProperty("iconPath", ":/icons/delete.svg");
+
     gridContextMenu->addSeparator();
-    gridContextMenu->addAction("Extend Selection by Pattern", this, &TriggerEditorWidget::ExtendSelectionByPattern);
-    auto *actCut = gridContextMenu->addAction("Cut Logic", this, &TriggerEditorWidget::CutSelected);
+
+    auto *actExtend = gridContextMenu->addAction(getThemeIcon(":/icons/range_finder.svg"), "Extend Selection by Pattern", this, &TriggerEditorWidget::ExtendSelectionByPattern);
+    actExtend->setProperty("iconPath", ":/icons/range_finder.svg");
+
+    auto *actCut = gridContextMenu->addAction(getThemeIcon(":/icons/cut.svg"), "Cut Logic", this, &TriggerEditorWidget::CutSelected);
     actCut->setShortcut(QKeySequence::Cut);
-    auto *actCopyLogic = gridContextMenu->addAction("Copy Logic", this, &TriggerEditorWidget::CopySelectedLogic);
+    actCut->setProperty("iconPath", ":/icons/cut.svg");
+
+    auto *actCopyLogic = gridContextMenu->addAction(getThemeIcon(":/icons/copy_ra.svg"), "Copy Logic", this, &TriggerEditorWidget::CopySelectedLogic);
     actCopyLogic->setShortcut(QKeySequence::Copy);
-    auto *actCopyRow = gridContextMenu->addAction("Copy Row", this, &TriggerEditorWidget::CopySelectedRows);
+    actCopyLogic->setProperty("iconPath", ":/icons/copy_ra.svg");
+
+    auto *actCopyRow = gridContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Copy Row", this, &TriggerEditorWidget::CopySelectedRows);
     actCopyRow->setShortcut(QKeySequence("Ctrl+Shift+C"));
-    auto *actPaste = gridContextMenu->addAction("Paste Logic", this, [this]() { PasteLogic(); });
+    actCopyRow->setProperty("iconPath", ":/icons/copy.svg");
+
+    auto *actPaste = gridContextMenu->addAction(getThemeIcon(":/icons/load.svg"), "Paste Logic", this, [this]() { PasteLogic(); });
     actPaste->setShortcut(QKeySequence::Paste);
+    actPaste->setProperty("iconPath", ":/icons/load.svg");
+
     gridContextMenu->addSeparator();
-    gridContextMenu->addAction("Save Selected Rows to Snippet Library...", this, &TriggerEditorWidget::onSaveAsSnippetClicked);
-    gridContextMenu->addAction("Insert Snippet from Library...", this, &TriggerEditorWidget::onInsertSnippetClicked);
+
+    auto *actSaveSnip = gridContextMenu->addAction(getThemeIcon(":/icons/copy_note.svg"), "Save Selected Rows to Snippet Library...", this, &TriggerEditorWidget::onSaveAsSnippetClicked);
+    actSaveSnip->setProperty("iconPath", ":/icons/copy_note.svg");
+
+    auto *actInsertSnip = gridContextMenu->addAction(getThemeIcon(":/icons/load.svg"), "Insert Snippet from Library...", this, &TriggerEditorWidget::onInsertSnippetClicked);
+    actInsertSnip->setProperty("iconPath", ":/icons/load.svg");
 
     conditionGrid->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(conditionGrid, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
@@ -2637,4 +2697,4 @@ void TriggerEditorWidget::onInsertSnippetClicked()
     }
 }
 
-} // namespace RALogicEditor
+} // namespace RALE
