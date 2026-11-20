@@ -1,14 +1,14 @@
 #pragma once
 
-#include <QString>
 #include "../Models/RichPresence.h"
+
+#include <QString>
 
 namespace RALE {
 
-class RichPresenceParser
-{
-public:
-    static RichPresenceScript Parse(const QString &content);
+class RichPresenceParser {
+  public:
+    static RichPresenceScript Parse(const QString& content);
 };
 
 } // namespace RALE

@@ -1,27 +1,26 @@
 #pragma once
 
 #include <QString>
+
 #include <optional>
 
 namespace RALE {
 
 // Persists backup metadata for Rich Presence to allow reverting changes
-class RichPresenceMetadataService
-{
-public:
-    class RichPresenceBackup
-    {
-    public:
+class RichPresenceMetadataService {
+  public:
+    class RichPresenceBackup {
+      public:
         QString OriginalScript = "";
         QString Timestamp = "";
     };
 
     std::optional<RichPresenceBackup> CurrentBackup;
 
-    void Load(const QString &gameId);
-    void SaveBackup(const QString &script);
+    void Load(const QString& gameId);
+    void SaveBackup(const QString& script);
 
-private:
+  private:
     QString _path = "";
 };
 

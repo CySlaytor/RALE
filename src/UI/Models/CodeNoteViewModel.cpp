@@ -1,9 +1,12 @@
 #include "CodeNoteViewModel.h"
-#include "../../Common/CodeNoteModifier.h"
+
 #include "../../Common/AppSettings.h"
+#include "../../Common/CodeNoteModifier.h"
 #include "../../Utilities/LogicFormatter.h"
+
 #include <QRegularExpression>
 #include <QSet>
+
 #include <algorithm>
 
 namespace RALE {
@@ -11,15 +14,13 @@ namespace RALE {
 namespace {
 
 // Finds the owning shared_ptr for a raw node pointer anywhere in the tree.
-std::shared_ptr<NoteNode> FindNodeByRawPointer(
-    const QList<std::shared_ptr<NoteNode>> &nodes,
-    const NoteNode *target)
-{
-    for (const auto &node : nodes)
-    {
-        if (node.get() == target) return node;
+std::shared_ptr<NoteNode> FindNodeByRawPointer(const QList<std::shared_ptr<NoteNode>>& nodes, const NoteNode* target) {
+    for (const auto& node : nodes) {
+        if (node.get() == target)
+            return node;
         auto found = FindNodeByRawPointer(node->Children, target);
-        if (found != nullptr) return found;
+        if (found != nullptr)
+            return found;
     }
     return nullptr;
 }
@@ -27,39 +28,29 @@ std::shared_ptr<NoteNode> FindNodeByRawPointer(
 } // namespace
 
 // Constructor Injection
-CodeNoteViewModel::CodeNoteViewModel(IPointerTreeParser &parser, QObject *parent)
-    : QObject(parent), _parser(parser)
-{
-}
+CodeNoteViewModel::CodeNoteViewModel(IPointerTreeParser& parser, QObject* parent) : QObject(parent), _parser(parser) {}
 
 #pragma region Undo / Redo
 
-void CodeNoteViewModel::PushUndoState()
-{
-    if (CurrentBaseNote != nullptr)
-    {
+void CodeNoteViewModel::PushUndoState() {
+    if (CurrentBaseNote != nullptr) {
         // Only push if the state is actually different from the top of the stack
-        if (_undoStack.isEmpty() || _undoStack.top() != CurrentBaseNote->Note)
-        {
+        if (_undoStack.isEmpty() || _undoStack.top() != CurrentBaseNote->Note) {
             _undoStack.push(CurrentBaseNote->Note);
             _redoStack.clear();
         }
     }
 }
 
-void CodeNoteViewModel::Undo()
-{
-    if (CurrentBaseNote != nullptr && !_undoStack.isEmpty())
-    {
+void CodeNoteViewModel::Undo() {
+    if (CurrentBaseNote != nullptr && !_undoStack.isEmpty()) {
         _redoStack.push(CurrentBaseNote->Note);
         QString previous = _undoStack.pop();
 
         CurrentBaseNote->Note = previous;
 
-        for (auto &n : AllNotes)
-        {
-            if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0)
-            {
+        for (auto& n : AllNotes) {
+            if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
                 n.Note = previous;
                 break;
             }
@@ -74,19 +65,15 @@ void CodeNoteViewModel::Undo()
     }
 }
 
-void CodeNoteViewModel::Redo()
-{
-    if (CurrentBaseNote != nullptr && !_redoStack.isEmpty())
-    {
+void CodeNoteViewModel::Redo() {
+    if (CurrentBaseNote != nullptr && !_redoStack.isEmpty()) {
         _undoStack.push(CurrentBaseNote->Note);
         QString next = _redoStack.pop();
 
         CurrentBaseNote->Note = next;
 
-        for (auto &n : AllNotes)
-        {
-            if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0)
-            {
+        for (auto& n : AllNotes) {
+            if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
                 n.Note = next;
                 break;
             }
@@ -104,59 +91,52 @@ void CodeNoteViewModel::Redo()
 
 // -- Logic --
 
-void CodeNoteViewModel::RebuildRangeCache()
-{
+void CodeNoteViewModel::RebuildRangeCache() {
     _rangeCache.clear();
     QMap<int64_t, std::shared_ptr<NoteNode>> rootNodesByAddr;
     QSet<int64_t> rangedStarts;
 
     // Rebuild Range Cache
-    for (const auto &note : AllNotes)
-    {
+    for (const auto& note : AllNotes) {
         int64_t startAddr = ParseAddress(note.Address);
-        if (startAddr != -1)
-        {
+        if (startAddr != -1) {
             auto nodes = _parser.ParseNoteText(note.Note);
-            if (!nodes.isEmpty())
-            {
+            if (!nodes.isEmpty()) {
                 auto rootNode = nodes.first();
                 rootNodesByAddr.insert(startAddr, rootNode);
-                if (rootNode->Size > 1 && !rangedStarts.contains(startAddr))
-                {
+                if (rootNode->Size > 1 && !rangedStarts.contains(startAddr)) {
                     rangedStarts.insert(startAddr);
                     int64_t endAddr = startAddr + rootNode->Size;
-                    _rangeCache.append(RangeCacheEntry{ startAddr, endAddr, note, rootNode });
+                    _rangeCache.append(RangeCacheEntry{startAddr, endAddr, note, rootNode});
                 }
             }
         }
     }
 
-    static const QRegularExpression structRegex(
-        QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"),
-        QRegularExpression::MultilineOption);
+    static const QRegularExpression structRegex(QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"), QRegularExpression::MultilineOption);
     static const QRegularExpression referralRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
 
-    for (const auto &note : AllNotes)
-    {
-        if (structRegex.match(note.Note).hasMatch()) continue;
+    for (const auto& note : AllNotes) {
+        if (structRegex.match(note.Note).hasMatch())
+            continue;
         auto match = referralRegex.match(note.Note);
-        if (!match.hasMatch()) continue;
+        if (!match.hasMatch())
+            continue;
 
         int64_t sourceAddr = ParseAddress(note.Address);
         int64_t targetAddr = ParseAddress(match.captured(1));
-        if (sourceAddr == -1 || targetAddr == -1 || rangedStarts.contains(sourceAddr)) continue;
+        if (sourceAddr == -1 || targetAddr == -1 || rangedStarts.contains(sourceAddr))
+            continue;
 
         auto targetRoot = rootNodesByAddr.value(targetAddr, nullptr);
-        if (targetRoot != nullptr && targetRoot->Size > 1)
-        {
+        if (targetRoot != nullptr && targetRoot->Size > 1) {
             rangedStarts.insert(sourceAddr);
-            _rangeCache.append(RangeCacheEntry{ sourceAddr, sourceAddr + targetRoot->Size, note, targetRoot });
+            _rangeCache.append(RangeCacheEntry{sourceAddr, sourceAddr + targetRoot->Size, note, targetRoot});
         }
     }
 }
 
-void CodeNoteViewModel::LoadNotes(const QList<CodeNote> &notes)
-{
+void CodeNoteViewModel::LoadNotes(const QList<CodeNote>& notes) {
     AllNotes = notes;
     if (AllNotes.isEmpty())
         CurrentBaseNote = nullptr;
@@ -164,25 +144,19 @@ void CodeNoteViewModel::LoadNotes(const QList<CodeNote> &notes)
     emit NotesLoaded();
 }
 
-void CodeNoteViewModel::BatchMultiplyNotes(
-    const QList<CodeNote> &sourceNotes,
-    const QString &searchKeyword,
-    const QString &replacePattern,
-    int copies,
-    int64_t stride,
-    int startNum)
-{
-    if (sourceNotes.isEmpty()) return;
+void CodeNoteViewModel::BatchMultiplyNotes(const QList<CodeNote>& sourceNotes, const QString& searchKeyword, const QString& replacePattern,
+                                           int copies, int64_t stride, int startNum) {
+    if (sourceNotes.isEmpty())
+        return;
 
     QList<CodeNote> newNotes;
 
-    for (const auto &baseNote : sourceNotes)
-    {
+    for (const auto& baseNote : sourceNotes) {
         int64_t baseAddr = ParseAddress(baseNote.Address);
-        if (baseAddr == -1) continue;
+        if (baseAddr == -1)
+            continue;
 
-        for (int i = 0; i < copies; i++)
-        {
+        for (int i = 0; i < copies; i++) {
             int num = startNum + i;
             int64_t newAddr = baseAddr + (stride * (i + 1));
             QString newAddrStr = QString("0x%1").arg(newAddr, 0, 16);
@@ -190,8 +164,7 @@ void CodeNoteViewModel::BatchMultiplyNotes(
             QString newNoteText = baseNote.Note;
 
             // Only perform text replacement if fields are provided
-            if (!searchKeyword.isEmpty())
-            {
+            if (!searchKeyword.isEmpty()) {
                 QString replacement = replacePattern;
                 replacement.replace("{N}", QString::number(num));
                 // Apply replacement globally inside the note text, ignoring case
@@ -210,9 +183,8 @@ void CodeNoteViewModel::BatchMultiplyNotes(
     AllNotes.append(newNotes);
 
     // Sort by Address to keep the combo box list clean
-    std::sort(AllNotes.begin(), AllNotes.end(), [this](const CodeNote &a, const CodeNote &b) {
-        return ParseAddress(a.Address) < ParseAddress(b.Address);
-    });
+    std::sort(AllNotes.begin(), AllNotes.end(),
+              [this](const CodeNote& a, const CodeNote& b) { return ParseAddress(a.Address) < ParseAddress(b.Address); });
 
     RebuildRangeCache();
 
@@ -220,28 +192,23 @@ void CodeNoteViewModel::BatchMultiplyNotes(
     emit NotesLoaded();
 }
 
-void CodeNoteViewModel::ApplyCloneStrideNotes(
-    const QList<CodeNote> &generatedNotes,
-    int &outAddedCount,
-    int &outUpdatedCount)
-{
+void CodeNoteViewModel::ApplyCloneStrideNotes(const QList<CodeNote>& generatedNotes, int& outAddedCount, int& outUpdatedCount) {
     outAddedCount = 0;
     outUpdatedCount = 0;
-    if (generatedNotes.isEmpty()) return;
+    if (generatedNotes.isEmpty())
+        return;
 
-    for (const auto &gen : generatedNotes)
-    {
+    for (const auto& gen : generatedNotes) {
         int64_t targetAddr = ParseAddress(gen.Address);
-        if (targetAddr == -1) continue;
+        if (targetAddr == -1)
+            continue;
 
         QString normalizedNote = gen.Note;
         normalizedNote.replace("\r\n", "\n").replace('\r', '\n').replace("\n", "\r\n");
 
         bool foundExisting = false;
-        for (auto &existing : AllNotes)
-        {
-            if (ParseAddress(existing.Address) == targetAddr)
-            {
+        for (auto& existing : AllNotes) {
+            if (ParseAddress(existing.Address) == targetAddr) {
                 existing.Note = normalizedNote;
                 foundExisting = true;
                 outUpdatedCount++;
@@ -249,8 +216,7 @@ void CodeNoteViewModel::ApplyCloneStrideNotes(
             }
         }
 
-        if (!foundExisting)
-        {
+        if (!foundExisting) {
             CodeNote note;
             note.Address = gen.Address;
             note.Note = normalizedNote;
@@ -261,9 +227,8 @@ void CodeNoteViewModel::ApplyCloneStrideNotes(
     }
 
     // Sort by Address to keep the combo box list clean
-    std::sort(AllNotes.begin(), AllNotes.end(), [this](const CodeNote &a, const CodeNote &b) {
-        return ParseAddress(a.Address) < ParseAddress(b.Address);
-    });
+    std::sort(AllNotes.begin(), AllNotes.end(),
+              [this](const CodeNote& a, const CodeNote& b) { return ParseAddress(a.Address) < ParseAddress(b.Address); });
 
     RebuildRangeCache();
     ClearEditState();
@@ -272,9 +237,9 @@ void CodeNoteViewModel::ApplyCloneStrideNotes(
     emit NotesLoaded();
 }
 
-void CodeNoteViewModel::IntelligentDelete(const std::shared_ptr<NoteNode> &target)
-{
-    if (CurrentBaseNote == nullptr || target == nullptr || target->IndentLevel == -2) return; // Cannot delete full note from here
+void CodeNoteViewModel::IntelligentDelete(const std::shared_ptr<NoteNode>& target) {
+    if (CurrentBaseNote == nullptr || target == nullptr || target->IndentLevel == -2)
+        return; // Cannot delete full note from here
 
     PushUndoState();
 
@@ -282,19 +247,16 @@ void CodeNoteViewModel::IntelligentDelete(const std::shared_ptr<NoteNode> &targe
     std::shared_ptr<NoteNode> highestToDelete = target;
     NoteNode* current = target->Parent;
 
-    while (current != nullptr && current->IndentLevel >= 0)
-    {
+    while (current != nullptr && current->IndentLevel >= 0) {
         // If this parent only has 1 child, it's an orphan once we delete the target.
-        if (current->Children.size() == 1)
-        {
+        if (current->Children.size() == 1) {
             // The parent may be nested below the top level, so search the whole tree
             // instead of only CurrentParsedNodes (which holds the root + top-level nodes).
             auto parentPtr = FindNodeByRawPointer(CurrentParsedNodes, current);
-            if (parentPtr != nullptr) highestToDelete = parentPtr;
+            if (parentPtr != nullptr)
+                highestToDelete = parentPtr;
             current = current->Parent;
-        }
-        else
-        {
+        } else {
             break;
         }
     }
@@ -305,10 +267,8 @@ void CodeNoteViewModel::IntelligentDelete(const std::shared_ptr<NoteNode> &targe
     // 3. Apply update
     CurrentBaseNote->Note = updatedNote;
 
-    for (auto &n : AllNotes)
-    {
-        if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0)
-        {
+    for (auto& n : AllNotes) {
+        if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
             n.Note = updatedNote;
             break;
         }
@@ -326,10 +286,10 @@ void CodeNoteViewModel::IntelligentDelete(const std::shared_ptr<NoteNode> &targe
     // because of ClearEditState) and aggressively overwrite the note we just successfully deleted from.
 }
 
-void CodeNoteViewModel::SelectBaseNote(const CodeNote &note)
-{
+void CodeNoteViewModel::SelectBaseNote(const CodeNote& note) {
     // Auto-commit any pending edits before switching context
-    if (EditState.IsDirty) CommitEditState();
+    if (EditState.IsDirty)
+        CommitEditState();
 
     CurrentBaseNote = std::make_shared<CodeNote>(note);
     _undoStack.clear(); // Reset undo stack on new note selection
@@ -340,9 +300,7 @@ void CodeNoteViewModel::SelectBaseNote(const CodeNote &note)
     // Check for Redirection (Refer to $0x...)
     // Logic: If the note is essentially empty (no structure) AND has a referral, follow it.
     // We check if the note has actual pointer structure (plus/dots). If not, we assume it's a stub.
-    static const QRegularExpression structRegex(
-        QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"),
-        QRegularExpression::MultilineOption);
+    static const QRegularExpression structRegex(QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"), QRegularExpression::MultilineOption);
     bool hasStructure = structRegex.match(note.Note).hasMatch();
 
     static const QRegularExpression referralRegex(R"(refer to \$0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
@@ -354,23 +312,22 @@ void CodeNoteViewModel::SelectBaseNote(const CodeNote &note)
 
     QString contentToParse = note.Note;
 
-    if (!hasStructure && referralMatch.hasMatch())
-    {
+    if (!hasStructure && referralMatch.hasMatch()) {
         QString targetAddr = referralMatch.captured(1);
         // Find the target note
         // Normalize both to lower hex
         QString cleanTarget = targetAddr.toLower();
-        while (cleanTarget.startsWith('0') && cleanTarget.length() > 1) cleanTarget = cleanTarget.mid(1);
+        while (cleanTarget.startsWith('0') && cleanTarget.length() > 1)
+            cleanTarget = cleanTarget.mid(1);
 
-        for (const auto &n : AllNotes)
-        {
+        for (const auto& n : AllNotes) {
             QString nAddr = n.Address;
             nAddr.remove("0x", Qt::CaseInsensitive);
             nAddr = nAddr.toLower();
-            while (nAddr.startsWith('0') && nAddr.length() > 1) nAddr = nAddr.mid(1);
+            while (nAddr.startsWith('0') && nAddr.length() > 1)
+                nAddr = nAddr.mid(1);
 
-            if (nAddr == cleanTarget)
-            {
+            if (nAddr == cleanTarget) {
                 IsRedirected = true;
                 RedirectedContent = n.Note;
                 RedirectTargetAddress = n.Address;
@@ -387,16 +344,14 @@ void CodeNoteViewModel::SelectBaseNote(const CodeNote &note)
     emit NoteContentChanged();
 }
 
-void CodeNoteViewModel::UpdateNoteContent(const QString &newText)
-{
-    if (CurrentBaseNote == nullptr || EditState.IsVirtual || IsRedirected) return;
+void CodeNoteViewModel::UpdateNoteContent(const QString& newText) {
+    if (CurrentBaseNote == nullptr || EditState.IsVirtual || IsRedirected)
+        return;
 
     CurrentBaseNote->Note = newText;
 
-    for (auto &n : AllNotes)
-    {
-        if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0)
-        {
+    for (auto& n : AllNotes) {
+        if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
             n.Note = newText;
             break;
         }
@@ -409,14 +364,13 @@ void CodeNoteViewModel::UpdateNoteContent(const QString &newText)
 
 // Called by text box on every keystroke
 // This updates the buffer but NOT the underlying CodeNote.
-void CodeNoteViewModel::UpdateBufferedText(const QString &newText)
-{
-    if (CurrentBaseNote == nullptr || IsRedirected) return;
+void CodeNoteViewModel::UpdateBufferedText(const QString& newText) {
+    if (CurrentBaseNote == nullptr || IsRedirected)
+        return;
 
     // If we weren't in a specific edit state, we are now editing the Root note (default fallback)
-    if (EditState.TargetNode == nullptr && !EditState.IsVirtual)
-    {
-        // Root editing context is usually handled by SelectBaseNote, 
+    if (EditState.TargetNode == nullptr && !EditState.IsVirtual) {
+        // Root editing context is usually handled by SelectBaseNote,
         // but if user just starts typing, we assume root.
     }
 
@@ -426,9 +380,9 @@ void CodeNoteViewModel::UpdateBufferedText(const QString &newText)
 
 // Commits the buffered text into the actual Code Note structure.
 // Called by Save (Ctrl+S) or Navigation.
-void CodeNoteViewModel::CommitEditState()
-{
-    if (!EditState.IsDirty || CurrentBaseNote == nullptr || IsRedirected) return;
+void CodeNoteViewModel::CommitEditState() {
+    if (!EditState.IsDirty || CurrentBaseNote == nullptr || IsRedirected)
+        return;
 
     QString updatedBaseNote = "";
 
@@ -437,45 +391,25 @@ void CodeNoteViewModel::CommitEditState()
     QString styleStr = AppSettings::Current.CodeNoteUnicodeTree ? "Unicode Tree (├─)" : "Plusses (+)";
     bool indentDescriptions = AppSettings::Current.CodeNoteIndentDescriptions;
 
-    if (EditState.IsVirtual)
-    {
+    if (EditState.IsVirtual) {
         // Inject new pointer chain
-        if (EditState.ChainOffsets.isEmpty()) return;
+        if (EditState.ChainOffsets.isEmpty())
+            return;
 
-        updatedBaseNote = CodeNoteModifier::InjectNoteContent(
-            CurrentBaseNote->Note,
-            EditState.ChainOffsets,
-            EditState.DisplayText,
-            style,
-            styleStr,
-            indentDescriptions
-        );
-    }
-    else
-    {
+        updatedBaseNote = CodeNoteModifier::InjectNoteContent(CurrentBaseNote->Note, EditState.ChainOffsets, EditState.DisplayText, style,
+                                                              styleStr, indentDescriptions);
+    } else {
         // Update existing node
-        if (EditState.TargetNode != nullptr)
-        {
+        if (EditState.TargetNode != nullptr) {
             // If editing Root, simple replace
-            if (EditState.TargetNode->IndentLevel == -2)
-            {
+            if (EditState.TargetNode->IndentLevel == -2) {
                 updatedBaseNote = EditState.DisplayText;
-            }
-            else
-            {
+            } else {
                 // Splicing for child node
-                updatedBaseNote = CodeNoteModifier::UpdateRealNode(
-                    CurrentBaseNote->Note,
-                    EditState.TargetNode,
-                    EditState.DisplayText,
-                    style,
-                    styleStr,
-                    indentDescriptions
-                );
+                updatedBaseNote = CodeNoteModifier::UpdateRealNode(CurrentBaseNote->Note, EditState.TargetNode, EditState.DisplayText,
+                                                                   style, styleStr, indentDescriptions);
             }
-        }
-        else
-        {
+        } else {
             // Fallback -> editing root
             updatedBaseNote = EditState.DisplayText;
         }
@@ -491,10 +425,8 @@ void CodeNoteViewModel::CommitEditState()
     CurrentBaseNote->Note = updatedBaseNote;
 
     // Synchronize the committed change back into AllNotes
-    for (auto &n : AllNotes)
-    {
-        if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0)
-        {
+    for (auto& n : AllNotes) {
+        if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
             n.Note = updatedBaseNote;
             break;
         }
@@ -515,57 +447,51 @@ void CodeNoteViewModel::CommitEditState()
     emit NoteContentChanged();
 
     // Restore Selection
-    if (!savedOffsets.isEmpty())
-    {
+    if (!savedOffsets.isEmpty()) {
         HighlightVariable(savedOffsets);
-    }
-    else if (!savedNodeOffset.isEmpty())
-    {
+    } else if (!savedNodeOffset.isEmpty()) {
         // Try to find the node we just edited by offset string match
         auto node = FindNodeByOffsetString(savedNodeOffset);
-        if (node != nullptr) RequestNodeSelection(node);
+        if (node != nullptr)
+            RequestNodeSelection(node);
     }
 }
 
-std::shared_ptr<NoteNode> CodeNoteViewModel::FindNodeByOffsetString(const QString &offset)
-{
+std::shared_ptr<NoteNode> CodeNoteViewModel::FindNodeByOffsetString(const QString& offset) {
     QStack<std::shared_ptr<NoteNode>> stack;
-    for (const auto &n : CurrentParsedNodes) stack.push(n);
+    for (const auto& n : CurrentParsedNodes)
+        stack.push(n);
 
-    while (!stack.isEmpty())
-    {
+    while (!stack.isEmpty()) {
         auto n = stack.pop();
-        if (n->Offset == offset) return n;
-        for (const auto &c : n->Children) stack.push(c);
+        if (n->Offset == offset)
+            return n;
+        for (const auto& c : n->Children)
+            stack.push(c);
     }
     return nullptr;
 }
 
 // Set up state for editing a Real Node
-void CodeNoteViewModel::RequestNodeSelection(std::shared_ptr<NoteNode> node)
-{
+void CodeNoteViewModel::RequestNodeSelection(std::shared_ptr<NoteNode> node) {
     // If we were editing something else and it's dirty, commit it first
-    if (EditState.IsDirty) CommitEditState();
+    if (EditState.IsDirty)
+        CommitEditState();
 
     QString content = "";
     // Extract content logic
-    if (node->IndentLevel == -2)
-    {
+    if (node->IndentLevel == -2) {
         // If redirected, use redirected content, else real note
         content = IsRedirected ? RedirectedContent : (CurrentBaseNote != nullptr ? CurrentBaseNote->Note : "");
-    }
-    else
-    {
+    } else {
         // Combine Description + Content so user can edit the header description (Title/Size)
         // and the body content together.
         QString sb;
-        if (!node->Description.trimmed().isEmpty())
-        {
+        if (!node->Description.trimmed().isEmpty()) {
             sb += node->Description + "\n";
         }
 
-        if (!node->Content.trimmed().isEmpty())
-        {
+        if (!node->Content.trimmed().isEmpty()) {
             sb += node->Content;
         }
 
@@ -573,30 +499,28 @@ void CodeNoteViewModel::RequestNodeSelection(std::shared_ptr<NoteNode> node)
     }
 
     QString desc = node->Description;
-    if (desc.isEmpty()) desc = node->Offset;
+    if (desc.isEmpty())
+        desc = node->Offset;
 
     // Set TargetNode BEFORE setting edit state to avoid race conditions in UI update
     EditState.TargetNode = node;
 
-    SetEditState(
-        false, // IsVirtual
-        desc,
-        content, // Initial Text
-        "", "", "", // Logic strings not needed for real editing display
-        nullptr
-    );
+    SetEditState(false, // IsVirtual
+                 desc,
+                 content,    // Initial Text
+                 "", "", "", // Logic strings not needed for real editing display
+                 nullptr);
 
     emit SelectionRequested(node);
 }
 
-std::tuple<QString, QString, QString> CodeNoteViewModel::GetSelectedLogic(const std::shared_ptr<NoteNode> &uiSelectedNode)
-{
-    if (EditState.IsVirtual)
-    {
+std::tuple<QString, QString, QString> CodeNoteViewModel::GetSelectedLogic(const std::shared_ptr<NoteNode>& uiSelectedNode) {
+    if (EditState.IsVirtual) {
         return std::make_tuple(EditState.LogicCode, EditState.LogicType, EditState.LogicSize);
     }
 
-    if (CurrentBaseNote == nullptr || uiSelectedNode == nullptr) return std::make_tuple("", "", "");
+    if (CurrentBaseNote == nullptr || uiSelectedNode == nullptr)
+        return std::make_tuple("", "", "");
 
     // If redirected, we still generate logic using the BASE NOTE address
     // because the user is on the PAL note (e.g. 0x1234), but looking at USA structure.
@@ -606,45 +530,41 @@ std::tuple<QString, QString, QString> CodeNoteViewModel::GetSelectedLogic(const 
     return _parser.GeneratePointerLogic(*CurrentBaseNote, uiSelectedNode, ConsoleId);
 }
 
-void CodeNoteViewModel::ClearEditState()
-{
+void CodeNoteViewModel::ClearEditState() {
     EditState = EditorState();
     emit EditStateChanged();
 }
 
-void CodeNoteViewModel::HighlightAddress(const QString &address)
-{
-    if (EditState.IsDirty) CommitEditState();
+void CodeNoteViewModel::HighlightAddress(const QString& address) {
+    if (EditState.IsDirty)
+        CommitEditState();
 
-    if (address.isEmpty()) return;
+    if (address.isEmpty())
+        return;
     QString hex = address.trimmed();
-    if (hex.startsWith("0x", Qt::CaseInsensitive)) hex = hex.mid(2);
+    if (hex.startsWith("0x", Qt::CaseInsensitive))
+        hex = hex.mid(2);
     bool ok = false;
     int64_t targetVal = hex.toLongLong(&ok, 16);
-    if (!ok) return;
+    if (!ok)
+        return;
 
     // 1. Exact Match
-    for (const auto &n : AllNotes)
-    {
-        if (ParseAddress(n.Address) == targetVal)
-        {
+    for (const auto& n : AllNotes) {
+        if (ParseAddress(n.Address) == targetVal) {
             SelectBaseNote(n);
             return;
         }
     }
 
     // 2. Range Match
-    for (const auto &r : _rangeCache)
-    {
-        if (targetVal >= r.Start && targetVal < r.End && r.Node != nullptr)
-        {
+    for (const auto& r : _rangeCache) {
+        if (targetVal >= r.Start && targetVal < r.End && r.Node != nullptr) {
             // Resolve the live note by address: RangeCacheEntry holds a snapshot taken
             // during LoadNotes, and using it would discard edits made since then.
             CodeNote liveNote = r.Note;
-            for (const auto &n : AllNotes)
-            {
-                if (n.Address.compare(r.Note.Address, Qt::CaseInsensitive) == 0)
-                {
+            for (const auto& n : AllNotes) {
+                if (n.Address.compare(r.Note.Address, Qt::CaseInsensitive) == 0) {
                     liveNote = n;
                     break;
                 }
@@ -653,26 +573,22 @@ void CodeNoteViewModel::HighlightAddress(const QString &address)
 
             int64_t delta = targetVal - r.Start;
             QString desc = r.Node->Description;
-            if (desc.isEmpty() || desc == "Full Note")
-            {
+            if (desc.isEmpty() || desc == "Full Note") {
                 QString norm = r.Node->Content;
                 norm.replace("\r\n", "\n").replace('\r', '\n');
                 QStringList parts = norm.split('\n', Qt::SkipEmptyParts);
-                if (!parts.isEmpty()) desc = parts.first().trimmed();
+                if (!parts.isEmpty())
+                    desc = parts.first().trimmed();
             }
 
             QString virtualDesc = QString("%1 +0x%2").arg(desc, QString::number(delta, 16).toUpper());
 
             // Setup Virtual Mode
-            QList<int64_t> offsets = { delta };
-            SetEditState(
-                true,
-                QString("[Indirect from %1] %2").arg(liveNote.Address, virtualDesc),
-                virtualDesc, // Default Text
-                QString("0x%1").arg(targetVal, 0, 16),
-                "Mem",
-                "8-bit",
-                &offsets // Treat as offset from base
+            QList<int64_t> offsets = {delta};
+            SetEditState(true, QString("[Indirect from %1] %2").arg(liveNote.Address, virtualDesc),
+                         virtualDesc, // Default Text
+                         QString("0x%1").arg(targetVal, 0, 16), "Mem", "8-bit",
+                         &offsets // Treat as offset from base
             );
             return;
         }
@@ -687,9 +603,8 @@ void CodeNoteViewModel::HighlightAddress(const QString &address)
 
     // Add to collection and sort to maintain order
     AllNotes.append(newNote);
-    std::sort(AllNotes.begin(), AllNotes.end(), [this](const CodeNote &a, const CodeNote &b) {
-        return ParseAddress(a.Address) < ParseAddress(b.Address);
-    });
+    std::sort(AllNotes.begin(), AllNotes.end(),
+              [this](const CodeNote& a, const CodeNote& b) { return ParseAddress(a.Address) < ParseAddress(b.Address); });
 
     RebuildRangeCache();
 
@@ -701,95 +616,84 @@ void CodeNoteViewModel::HighlightAddress(const QString &address)
 }
 
 // Helper to provide NotesLookup for Range Array Indexing Filtering
-QMap<QString, QList<std::shared_ptr<NoteNode>>> CodeNoteViewModel::NotesLookup()
-{
+QMap<QString, QList<std::shared_ptr<NoteNode>>> CodeNoteViewModel::NotesLookup() {
     QMap<QString, QList<std::shared_ptr<NoteNode>>> lookup;
-    for (const auto &note : AllNotes)
-    {
+    for (const auto& note : AllNotes) {
         // Last duplicate wins, matching the C# dictionary indexer.
         lookup[LogicFormatter::NormalizeAddress(note.Address)] = _parser.ParseNoteText(note.Note);
     }
     return lookup;
 }
 
-void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets)
-{
-    if (EditState.IsDirty) CommitEditState();
+void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
+    if (EditState.IsDirty)
+        CommitEditState();
 
-    if (offsets.isEmpty()) return;
+    if (offsets.isEmpty())
+        return;
 
     // Re-apply Array Indexing Filter just in case it wasn't cleaned by the caller
-    while (offsets.size() > 1)
-    {
+    while (offsets.size() > 1) {
         int64_t baseAddr = offsets[0];
-        if (ConditionFormatter::GetEffectiveNote(NotesLookup(), baseAddr) == nullptr)
-        {
+        if (ConditionFormatter::GetEffectiveNote(NotesLookup(), baseAddr) == nullptr) {
             offsets.removeAt(0);
-        }
-        else
-        {
+        } else {
             break;
         }
     }
 
     QString baseHex = QString("0x%1").arg(offsets[0], 0, 16);
-    for (const auto &n : AllNotes)
-    {
-        if (n.Address.compare(baseHex, Qt::CaseInsensitive) == 0)
-        {
+    for (const auto& n : AllNotes) {
+        if (n.Address.compare(baseHex, Qt::CaseInsensitive) == 0) {
             SelectBaseNote(n);
             break;
         }
     }
 
-    if (CurrentBaseNote == nullptr || CurrentParsedNodes.isEmpty()) return;
+    if (CurrentBaseNote == nullptr || CurrentParsedNodes.isEmpty())
+        return;
 
-    const auto &nodes = CurrentParsedNodes;
+    const auto& nodes = CurrentParsedNodes;
     std::shared_ptr<NoteNode> bestMatchNode = nullptr;
     int matchedDepth = 0;
     int64_t finalRemainder = 0;
 
-    auto ParseOffsetString = [](const QString &offsetStr) -> int64_t {
+    auto ParseOffsetString = [](const QString& offsetStr) -> int64_t {
         QString clean = offsetStr.trimmed();
         clean.remove('|').remove('+').remove('-').remove("0x", Qt::CaseInsensitive);
         bool ok = false;
         int64_t val = clean.toLongLong(&ok, 16);
-        if (ok)
-        {
-            if (offsetStr.contains('-')) return -val;
+        if (ok) {
+            if (offsetStr.contains('-'))
+                return -val;
             return val;
         }
         return std::numeric_limits<int64_t>::min();
     };
 
     QList<std::shared_ptr<NoteNode>> rootNodes;
-    for (const auto &n : nodes)
-    {
+    for (const auto& n : nodes) {
         if (n->IndentLevel == 0 || (n->Parent != nullptr && n->Parent->IndentLevel == -1) || (n->Parent == nullptr && n->IndentLevel != -2))
             rootNodes.append(n);
     }
 
     // Skip the base address since we're already at the root of its note
     // offsets[0] is the base address, offsets[1] is the first actual inner offset
-    if (offsets.size() <= 1) return;
+    if (offsets.size() <= 1)
+        return;
 
     std::shared_ptr<NoteNode> current = nullptr;
-    for (const auto &n : rootNodes)
-    {
-        if (ParseOffsetString(n->Offset) == offsets[1])
-        {
+    for (const auto& n : rootNodes) {
+        if (ParseOffsetString(n->Offset) == offsets[1]) {
             current = n;
             break;
         }
     }
 
-    if (current == nullptr)
-    {
-        for (const auto &n : rootNodes)
-        {
+    if (current == nullptr) {
+        for (const auto& n : rootNodes) {
             int64_t start = ParseOffsetString(n->Offset);
-            if (start != std::numeric_limits<int64_t>::min() && offsets[1] >= start && offsets[1] < start + n->Size)
-            {
+            if (start != std::numeric_limits<int64_t>::min() && offsets[1] >= start && offsets[1] < start + n->Size) {
                 current = n;
                 finalRemainder = offsets[1] - start;
                 break;
@@ -797,32 +701,29 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets)
         }
     }
 
-    if (current != nullptr)
-    {
+    if (current != nullptr) {
         bestMatchNode = current;
         matchedDepth = 2; // Matched base + first offset
 
         // Continue matching even if we have a remainder (Array/Struct coverage logic)
-        while (matchedDepth < offsets.size())
-        {
+        while (matchedDepth < offsets.size()) {
             int64_t nextOffset = offsets[matchedDepth];
 
             // Try direct children or direct range match exactly at this specific level
             std::shared_ptr<NoteNode> nextNode = nullptr;
-            for (const auto &n : current->Children)
-            {
-                if (ParseOffsetString(n->Offset) == nextOffset) { nextNode = n; break; }
+            for (const auto& n : current->Children) {
+                if (ParseOffsetString(n->Offset) == nextOffset) {
+                    nextNode = n;
+                    break;
+                }
             }
 
             int64_t stepRemainder = 0;
 
-            if (nextNode == nullptr)
-            {
-                for (const auto &n : current->Children)
-                {
+            if (nextNode == nullptr) {
+                for (const auto& n : current->Children) {
                     int64_t start = ParseOffsetString(n->Offset);
-                    if (start != std::numeric_limits<int64_t>::min() && nextOffset >= start && nextOffset < start + n->Size)
-                    {
+                    if (start != std::numeric_limits<int64_t>::min() && nextOffset >= start && nextOffset < start + n->Size) {
                         nextNode = n;
                         stepRemainder = nextOffset - start;
                         break;
@@ -830,53 +731,47 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets)
                 }
             }
 
-            if (nextNode != nullptr)
-            {
+            if (nextNode != nullptr) {
                 current = nextNode;
                 bestMatchNode = current;
                 matchedDepth++;
                 finalRemainder += stepRemainder;
-            }
-            else
-            {
+            } else {
                 // BREAK OUT IMMEDIATELY if we can't find the next node as a direct child!
                 break;
             }
         }
     }
 
-    if (bestMatchNode != nullptr && matchedDepth == offsets.size() && finalRemainder == 0)
-    {
+    if (bestMatchNode != nullptr && matchedDepth == offsets.size() && finalRemainder == 0) {
         // Exact match found -> Real Node Editing Mode
         RequestNodeSelection(bestMatchNode);
         return;
     }
 
     // Partial Match or No Match -> Virtual Mode
-    if (bestMatchNode != nullptr)
-    {
+    if (bestMatchNode != nullptr) {
         auto [baseLogic, type, size] = _parser.GeneratePointerLogic(*CurrentBaseNote, bestMatchNode, ConsoleId);
 
-        QString baseAddrStr = CurrentBaseNote->Address.startsWith("0x", Qt::CaseInsensitive)
-            ? CurrentBaseNote->Address.mid(2)
-            : CurrentBaseNote->Address;
+        QString baseAddrStr =
+            CurrentBaseNote->Address.startsWith("0x", Qt::CaseInsensitive) ? CurrentBaseNote->Address.mid(2) : CurrentBaseNote->Address;
 
         QString sbLogic = QString("I:0x%1").arg(baseAddrStr);
         for (int i = 1; i < offsets.size(); i++) // Skip base
         {
             sbLogic += "_";
-            if (i == offsets.size() - 1) sbLogic += QString("0x%1").arg(offsets[i], 0, 16);
-            else sbLogic += QString("I:0x%1").arg(offsets[i], 0, 16);
+            if (i == offsets.size() - 1)
+                sbLogic += QString("0x%1").arg(offsets[i], 0, 16);
+            else
+                sbLogic += QString("I:0x%1").arg(offsets[i], 0, 16);
         }
 
         QString desc = bestMatchNode->Description.trimmed();
         // Only append remainders for the parts we didn't traverse
-        for (int i = matchedDepth; i < offsets.size(); i++)
-        {
+        for (int i = matchedDepth; i < offsets.size(); i++) {
             desc += QString(" +0x%1").arg(QString::number(offsets[i], 16).toUpper());
         }
-        if (finalRemainder != 0)
-        {
+        if (finalRemainder != 0) {
             desc += QString(" +0x%1").arg(QString::number(finalRemainder, 16).toUpper());
         }
 
@@ -886,19 +781,18 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets)
         return;
     }
 
-    if (bestMatchNode == nullptr)
-    {
-        QString baseAddrStr = CurrentBaseNote->Address.startsWith("0x", Qt::CaseInsensitive)
-            ? CurrentBaseNote->Address.mid(2)
-            : CurrentBaseNote->Address;
+    if (bestMatchNode == nullptr) {
+        QString baseAddrStr =
+            CurrentBaseNote->Address.startsWith("0x", Qt::CaseInsensitive) ? CurrentBaseNote->Address.mid(2) : CurrentBaseNote->Address;
 
         QString sb = QString("I:0x%1").arg(baseAddrStr);
 
-        for (int i = 1; i < offsets.size(); i++)
-        {
+        for (int i = 1; i < offsets.size(); i++) {
             sb += "_";
-            if (i == offsets.size() - 1) sb += QString("0x%1").arg(offsets[i], 0, 16);
-            else sb += QString("I:0x%1").arg(offsets[i], 0, 16);
+            if (i == offsets.size() - 1)
+                sb += QString("0x%1").arg(offsets[i], 0, 16);
+            else
+                sb += QString("I:0x%1").arg(offsets[i], 0, 16);
         }
 
         QString desc = QString("%1 Chain").arg(CurrentBaseNote->Address);
@@ -911,15 +805,8 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets)
     }
 }
 
-void CodeNoteViewModel::SetEditState(
-    bool isVirtual,
-    const QString &description,
-    const QString &displayText,
-    const QString &logicCode,
-    const QString &type,
-    const QString &size,
-    const QList<int64_t> *offsets)
-{
+void CodeNoteViewModel::SetEditState(bool isVirtual, const QString& description, const QString& displayText, const QString& logicCode,
+                                     const QString& type, const QString& size, const QList<int64_t>* offsets) {
     EditState.IsVirtual = isVirtual;
     EditState.Description = description;
     EditState.DisplayText = displayText;
@@ -932,11 +819,12 @@ void CodeNoteViewModel::SetEditState(
     emit EditStateChanged();
 }
 
-int64_t CodeNoteViewModel::ParseAddress(const QString &addr) const
-{
-    if (addr.isEmpty()) return -1;
+int64_t CodeNoteViewModel::ParseAddress(const QString& addr) const {
+    if (addr.isEmpty())
+        return -1;
     QString hex = addr.trimmed();
-    if (hex.startsWith("0x", Qt::CaseInsensitive)) hex = hex.mid(2);
+    if (hex.startsWith("0x", Qt::CaseInsensitive))
+        hex = hex.mid(2);
     bool ok = false;
     int64_t result = hex.toLongLong(&ok, 16);
     return ok ? result : -1;

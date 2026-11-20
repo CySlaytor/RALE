@@ -1,24 +1,24 @@
 #pragma once
 
-#include <QAbstractTableModel>
-#include <QList>
-#include <QMap>
-#include <memory>
-#include <optional>
+#include "../../Common/ConditionFormatter.h"
 #include "../../Models/LogicModels.h"
 #include "../../Models/NoteNode.h"
 #include "../../Models/ValidationModels.h"
-#include "../../Common/ConditionFormatter.h"
+
+#include <QAbstractTableModel>
+#include <QList>
+#include <QMap>
+
+#include <memory>
+#include <optional>
 
 namespace RALE {
 
-class ConditionTableModel : public QAbstractTableModel
-{
+class ConditionTableModel : public QAbstractTableModel {
     Q_OBJECT
 
-public:
-    enum Column
-    {
+  public:
+    enum Column {
         ColID = 0,
         ColFlag = 1,
         ColLType = 2,
@@ -32,57 +32,51 @@ public:
         ColumnCount = 10
     };
 
-    explicit ConditionTableModel(QObject *parent = nullptr);
+    explicit ConditionTableModel(QObject* parent = nullptr);
 
-    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
-    int columnCount(const QModelIndex &parent = QModelIndex()) const override;
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
-    bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
+    int columnCount(const QModelIndex& parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    bool setData(const QModelIndex& index, const QVariant& value, int role = Qt::EditRole) override;
     QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
-    Qt::ItemFlags flags(const QModelIndex &index) const override;
+    Qt::ItemFlags flags(const QModelIndex& index) const override;
 
-    void SetGroup(
-        AchievementConditionGroup *group,
-        bool readOnly,
-        bool showDecimal,
-        bool showAliases,
-        bool collapseChains,
-        const QMap<QString, QList<std::shared_ptr<NoteNode>>> *notesLookup,
-        const QList<ConditionFormatter::RangeEntry> *rangeCache,
-        const QList<ValidationIssue> *issues = nullptr);
+    void SetGroup(AchievementConditionGroup* group, bool readOnly, bool showDecimal, bool showAliases, bool collapseChains,
+                  const QMap<QString, QList<std::shared_ptr<NoteNode>>>* notesLookup,
+                  const QList<ConditionFormatter::RangeEntry>* rangeCache, const QList<ValidationIssue>* issues = nullptr);
 
-    void SetIssues(const QList<ValidationIssue> *issues);
+    void SetIssues(const QList<ValidationIssue>* issues);
 
     AchievementCondition* GetConditionAtRow(int visualRow);
     int GetModelIndexForVisualRow(int visualRow) const;
-    int GetVisualRowForCondition(const AchievementCondition *cond) const;
+    int GetVisualRowForCondition(const AchievementCondition* cond) const;
 
     // Helper to support bulk column context menu updates across selected visual rows
-    void BulkUpdateConditions(const QList<int> &visualRows, int column, const QString &value);
+    void BulkUpdateConditions(const QList<int>& visualRows, int column, const QString& value);
 
-signals:
+  signals:
     void ConditionDataChanged();
 
-private:
-    AchievementConditionGroup *_group = nullptr;
+  private:
+    AchievementConditionGroup* _group = nullptr;
     bool _readOnly = false;
     bool _showDecimal = false;
     bool _showAliases = false;
     bool _collapseChains = false;
 
-    const QMap<QString, QList<std::shared_ptr<NoteNode>>> *_notesLookup = nullptr;
-    const QList<ConditionFormatter::RangeEntry> *_rangeCache = nullptr;
-    const QList<ValidationIssue> *_issues = nullptr;
+    const QMap<QString, QList<std::shared_ptr<NoteNode>>>* _notesLookup = nullptr;
+    const QList<ConditionFormatter::RangeEntry>* _rangeCache = nullptr;
+    const QList<ValidationIssue>* _issues = nullptr;
 
     QList<int> _visualToModelMap; // Maps visual row to group->Conditions index
 
     void RebuildVisualMap();
-    std::optional<ValidationIssue> GetIssueForCondition(const AchievementCondition &cond) const;
+    std::optional<ValidationIssue> GetIssueForCondition(const AchievementCondition& cond) const;
 
-    void HandleFlagChange(AchievementCondition &cond, const QString &oldFlag);
-    void HandleOperatorChange(AchievementCondition &cond, const QString &oldOp);
-    void HandleTypeChange(Operand &op, const QString &newType, const QString &refSize, const Operand *copyFrom = nullptr);
-    void ApplyConditionLogicRules(AchievementCondition &cond);
+    void HandleFlagChange(AchievementCondition& cond, const QString& oldFlag);
+    void HandleOperatorChange(AchievementCondition& cond, const QString& oldOp);
+    void HandleTypeChange(Operand& op, const QString& newType, const QString& refSize, const Operand* copyFrom = nullptr);
+    void ApplyConditionLogicRules(AchievementCondition& cond);
 };
 
 } // namespace RALE

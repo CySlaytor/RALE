@@ -1,23 +1,24 @@
 #include "SettingsDialog.h"
+
 #include "../../Common/AppSettings.h"
 #include "../Styles/ThemeManager.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QFormLayout>
-#include <QGroupBox>
-#include <QLabel>
-#include <QMessageBox>
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QMessageBox>
 #include <QProcess>
+#include <QVBoxLayout>
+
 #include <algorithm>
 
 namespace RALE {
 
-SettingsDialog::SettingsDialog(QWidget *parent)
-    : QDialog(parent)
-{
+SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Settings");
     setModal(true);
     resize(500, 360);
@@ -40,35 +41,30 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     loadPositionSettings();
 }
 
-void SettingsDialog::loadPositionSettings()
-{
+void SettingsDialog::loadPositionSettings() {
     QPoint p;
     QSize s;
-    if (AppSettings::LoadDialogGeometry("SettingsDialog", p, s))
-    {
+    if (AppSettings::LoadDialogGeometry("SettingsDialog", p, s)) {
         move(p);
-        if (s.isValid())
-        {
+        if (s.isValid()) {
             resize(std::max(s.width(), 450), std::max(s.height(), 320));
         }
     }
 }
 
-void SettingsDialog::savePositionSettings()
-{
-    if (m_isResetting) return;
+void SettingsDialog::savePositionSettings() {
+    if (m_isResetting)
+        return;
     AppSettings::SaveDialogGeometry("SettingsDialog", pos(), size());
 }
 
-void SettingsDialog::done(int r)
-{
+void SettingsDialog::done(int r) {
     savePositionSettings();
     QDialog::done(r);
 }
 
-void SettingsDialog::setupLayout()
-{
-    auto *mainLayout = new QVBoxLayout(this);
+void SettingsDialog::setupLayout() {
+    auto* mainLayout = new QVBoxLayout(this);
 
     m_tabWidget = new QTabWidget(this);
     setupGeneralTab();
@@ -84,17 +80,16 @@ void SettingsDialog::setupLayout()
     connect(m_closeButton, &QPushButton::clicked, this, &QDialog::accept);
 }
 
-void SettingsDialog::setupGeneralTab()
-{
-    auto *tab = new QWidget(this);
-    auto *layout = new QVBoxLayout(tab);
+void SettingsDialog::setupGeneralTab() {
+    auto* tab = new QWidget(this);
+    auto* layout = new QVBoxLayout(tab);
 
-    auto *themeGroup = new QGroupBox("Appearance", tab);
-    auto *themeLayout = new QHBoxLayout(themeGroup);
+    auto* themeGroup = new QGroupBox("Appearance", tab);
+    auto* themeLayout = new QHBoxLayout(themeGroup);
     themeLayout->addWidget(new QLabel("Active Theme:", themeGroup));
     m_themeCombo = new QComboBox(themeGroup);
     ThemeManager::SetupComboBox(m_themeCombo, 8);
-    m_themeCombo->addItems({ "Dark", "Light" });
+    m_themeCombo->addItems({"Dark", "Light"});
     themeLayout->addWidget(m_themeCombo);
     themeLayout->addStretch();
     layout->addWidget(themeGroup);
@@ -113,14 +108,13 @@ void SettingsDialog::setupGeneralTab()
     connect(m_resetAllButton, &QPushButton::clicked, this, &SettingsDialog::onResetAllClicked);
 }
 
-void SettingsDialog::setupCodeNotesTab()
-{
-    auto *tab = new QWidget(this);
-    auto *tabLayout = new QVBoxLayout(tab);
+void SettingsDialog::setupCodeNotesTab() {
+    auto* tab = new QWidget(this);
+    auto* tabLayout = new QVBoxLayout(tab);
 
     // Header row with QA standards help button
-    auto *headerRow = new QHBoxLayout();
-    auto *noteHeaderDesc = new QLabel("Configure code note indirection levels and formatting standards:", tab);
+    auto* headerRow = new QHBoxLayout();
+    auto* noteHeaderDesc = new QLabel("Configure code note indirection levels and formatting standards:", tab);
     m_codeNoteHelpBtn = new QPushButton("?", tab);
     m_codeNoteHelpBtn->setFixedSize(22, 22);
     m_codeNoteHelpBtn->setAutoDefault(false);
@@ -132,10 +126,10 @@ void SettingsDialog::setupCodeNotesTab()
     headerRow->addWidget(m_codeNoteHelpBtn);
     tabLayout->addLayout(headerRow);
 
-    auto *contentLayout = new QHBoxLayout();
+    auto* contentLayout = new QHBoxLayout();
 
-    auto *formattingGroup = new QGroupBox("Formatting Options", tab);
-    auto *formLayout = new QFormLayout(formattingGroup);
+    auto* formattingGroup = new QGroupBox("Formatting Options", tab);
+    auto* formLayout = new QFormLayout(formattingGroup);
     m_prefixEdit = new QLineEdit(formattingGroup);
     m_suffixEdit = new QLineEdit(formattingGroup);
     m_alignCheck = new QCheckBox("Align Suffixes Vertically", formattingGroup);
@@ -149,8 +143,8 @@ void SettingsDialog::setupCodeNotesTab()
     formLayout->addRow(m_autoPopulatePointersCheck);
     contentLayout->addWidget(formattingGroup, 3);
 
-    auto *previewGroup = new QGroupBox("Live Preview", tab);
-    auto *previewLayout = new QVBoxLayout(previewGroup);
+    auto* previewGroup = new QGroupBox("Live Preview", tab);
+    auto* previewLayout = new QVBoxLayout(previewGroup);
     m_previewEdit = new QPlainTextEdit(previewGroup);
     m_previewEdit->setReadOnly(true);
     m_previewEdit->setMinimumWidth(210);
@@ -173,22 +167,20 @@ void SettingsDialog::setupCodeNotesTab()
     connect(m_autoPopulatePointersCheck, &QCheckBox::checkStateChanged, this, &SettingsDialog::onCodeNoteSettingChanged);
 }
 
-void SettingsDialog::onThemeChanged(const QString &themeName)
-{
-    if (m_isInitializing) return;
+void SettingsDialog::onThemeChanged(const QString& themeName) {
+    if (m_isInitializing)
+        return;
 
-    auto theme = (themeName.compare("Dark", Qt::CaseInsensitive) == 0)
-        ? ThemeManager::Theme::Dark
-        : ThemeManager::Theme::Light;
+    auto theme = (themeName.compare("Dark", Qt::CaseInsensitive) == 0) ? ThemeManager::Theme::Dark : ThemeManager::Theme::Light;
 
     ThemeManager::ApplyTheme(theme);
     AppSettings::Current.Theme = (theme == ThemeManager::Theme::Dark) ? "Dark" : "Light";
     AppSettings::Save();
 }
 
-void SettingsDialog::onCodeNoteSettingChanged()
-{
-    if (m_isInitializing) return;
+void SettingsDialog::onCodeNoteSettingChanged() {
+    if (m_isInitializing)
+        return;
 
     AppSettings::Current.CodeNotePrefix = m_prefixEdit->text();
     AppSettings::Current.CodeNoteSuffix = m_suffixEdit->text();
@@ -202,12 +194,13 @@ void SettingsDialog::onCodeNoteSettingChanged()
     updateCodeNotePreview();
 }
 
-void SettingsDialog::updateCodeNotePreview()
-{
+void SettingsDialog::updateCodeNotePreview() {
     QString prefix = m_prefixEdit->text();
-    if (prefix.isEmpty()) prefix = "+";
+    if (prefix.isEmpty())
+        prefix = "+";
     QString suffix = m_suffixEdit->text();
-    if (suffix.isEmpty()) suffix = "=";
+    if (suffix.isEmpty())
+        suffix = "=";
 
     bool align = m_alignCheck->isChecked();
     bool suffixLastOnly = m_suffixLastLineCheck->isChecked() && m_suffixLastLineCheck->isEnabled();
@@ -219,22 +212,20 @@ void SettingsDialog::updateCodeNotePreview()
     lines << QString("%1%2%3").arg(prefix + prefix, "+", "0x1C");
 
     int maxLen = 0;
-    if (align)
-    {
-        for (const auto &l : lines) maxLen = std::max(maxLen, static_cast<int>(l.length()));
+    if (align) {
+        for (const auto& l : lines)
+            maxLen = std::max(maxLen, static_cast<int>(l.length()));
     }
 
     QStringList formatted;
-    for (int i = 0; i < lines.size(); ++i)
-    {
+    for (int i = 0; i < lines.size(); ++i) {
         QString l = lines[i];
         QString s = (!suffixLastOnly || (i == lines.size() - 1)) ? suffix : "";
         QString pad = align ? QString(maxLen - l.length(), ' ') : "";
         formatted << QString("%1%2%3").arg(l, pad, s);
     }
 
-    if (autoPopulate)
-    {
+    if (autoPopulate) {
         formatted[0].append("[32-bit] Pointer");
         formatted[1].append("[32-bit] Pointer");
     }
@@ -252,18 +243,17 @@ void SettingsDialog::updateCodeNotePreview()
     m_previewEdit->setPlainText(preview);
 }
 
-void SettingsDialog::onCodeNoteHelpClicked()
-{
+void SettingsDialog::onCodeNoteHelpClicked() {
     QDialog helpDialog(this);
     helpDialog.setWindowTitle("Recommended Code Note Structure");
     helpDialog.resize(620, 560);
     helpDialog.setWindowFlags(helpDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-    auto *layout = new QVBoxLayout(&helpDialog);
+    auto* layout = new QVBoxLayout(&helpDialog);
     layout->setContentsMargins(14, 12, 14, 12);
     layout->setSpacing(6);
 
-    auto *titleLabel = new QLabel("<b>Hierarchical Code Note Standards</b>", &helpDialog);
+    auto* titleLabel = new QLabel("<b>Hierarchical Code Note Standards</b>", &helpDialog);
     titleLabel->setObjectName("settingsHelpTitleLabel");
     layout->addWidget(titleLabel);
 
@@ -272,25 +262,30 @@ void SettingsDialog::onCodeNoteHelpClicked()
     QString codeFg = isDark ? "#e2e4e9" : "#2b2d31";
     QString codeBorder = isDark ? "#3d4149" : "#c4c7cc";
 
-    auto codeBadge = [&](const QString &text) -> QString {
-        return QString("<span style='background-color: %1; color: %2; border: 1px solid %3; font-family: Consolas, monospace; font-size: 11px;'>&nbsp;%4&nbsp;</span>")
+    auto codeBadge = [&](const QString& text) -> QString {
+        return QString("<span style='background-color: %1; color: %2; border: 1px solid %3; font-family: Consolas, monospace; font-size: "
+                       "11px;'>&nbsp;%4&nbsp;</span>")
             .arg(codeBg, codeFg, codeBorder, text.toHtmlEscaped());
     };
 
-    auto *descLabel = new QLabel(
+    auto* descLabel = new QLabel(
         QString(
             "<p style='line-height: 125%; margin: 0; padding: 0;'>RetroAchievements QA and Code Review (CR) teams encourage adopting "
             "standardized hierarchical code note formatting for all new sets and updates:</p>"
             "<ul style='margin-top: 4px; margin-bottom: 4px; margin-left: -28px; padding-left: 0; line-height: 130%;'>"
             "<li style='margin-bottom: 5px;'><b>Structure and Maintainability:</b> Consistent indentation and clear offset chains keep "
             "multi-level pointer notes transparent and easy to review, maintain, or update across achievement sets.</li>"
-            "<li style='margin-bottom: 5px;'><b>Pointers (%1) vs. Enums (%2):</b> Plusses (%1) are now used exclusively for pointer indirection jumps, "
-            "while dots (%2) are now used exclusively for value enumerations, establishing an immediate visual distinction between structural memory offsets and variable states.</li>"
-            "<li style='margin-bottom: 5px;'><b>Indenting Enums:</b> Value enumerations now level up with dots matching the nesting depth of their parent variable "
+            "<li style='margin-bottom: 5px;'><b>Pointers (%1) vs. Enums (%2):</b> Plusses (%1) are now used exclusively for pointer "
+            "indirection jumps, "
+            "while dots (%2) are now used exclusively for value enumerations, establishing an immediate visual distinction between "
+            "structural memory offsets and variable states.</li>"
+            "<li style='margin-bottom: 5px;'><b>Indenting Enums:</b> Value enumerations now level up with dots matching the nesting depth "
+            "of their parent variable "
             "(e.g., %3 directly beneath %4), keeping complex bitfield and state structures intuitive to read.</li>"
             "<li style='margin-bottom: 5px;'><b>Pointer Type Annotations:</b> Use %5 followed by an explicit pointer template such as %6 "
             "or %7 according to the platform architecture.</li>"
-            "<li style='margin-bottom: 2px;'><b>Pipelines (%8) for Array Elements:</b> Pipelines are now reserved exclusively for documenting "
+            "<li style='margin-bottom: 2px;'><b>Pipelines (%8) for Array Elements:</b> Pipelines are now reserved exclusively for "
+            "documenting "
             "<b>array structures</b> and indexed element offsets (e.g., %9).</li>"
             "</ul>")
             .arg(codeBadge("+"), codeBadge("."), codeBadge("...0x00=Idle"), codeBadge("++0x28"))
@@ -302,7 +297,7 @@ void SettingsDialog::onCodeNoteHelpClicked()
 
     layout->addWidget(new QLabel("<b>Exemplary Recommended Structure:</b>", &helpDialog));
 
-    auto *exampleEdit = new QPlainTextEdit(&helpDialog);
+    auto* exampleEdit = new QPlainTextEdit(&helpDialog);
     exampleEdit->setReadOnly(true);
     exampleEdit->setMinimumHeight(210);
     QFont monoFont("Consolas", 9);
@@ -327,7 +322,7 @@ void SettingsDialog::onCodeNoteHelpClicked()
                               "....0x02=Sniper Rifle");
     layout->addWidget(exampleEdit, 1);
 
-    auto *closeBtn = new QPushButton("Close", &helpDialog);
+    auto* closeBtn = new QPushButton("Close", &helpDialog);
     closeBtn->setObjectName("closeButton");
     closeBtn->setAutoDefault(false);
     closeBtn->setDefault(false);
@@ -337,20 +332,18 @@ void SettingsDialog::onCodeNoteHelpClicked()
     helpDialog.exec();
 }
 
-void SettingsDialog::onResetAllClicked()
-{
-    auto result = QMessageBox::critical(this, "Confirm Reset All Settings",
-                                        "This will reset ALL application settings, including window geometry, theme, and code note options.\n\n"
-                                        "The settings.ini file will be deleted and the application will restart.\n\n"
-                                        "Are you sure you want to proceed?",
-                                        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+void SettingsDialog::onResetAllClicked() {
+    auto result =
+        QMessageBox::critical(this, "Confirm Reset All Settings",
+                              "This will reset ALL application settings, including window geometry, theme, and code note options.\n\n"
+                              "The settings.ini file will be deleted and the application will restart.\n\n"
+                              "Are you sure you want to proceed?",
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
-    if (result == QMessageBox::Yes)
-    {
+    if (result == QMessageBox::Yes) {
         m_isResetting = true;
         QString settingsFile = QDir(QCoreApplication::applicationDirPath()).filePath("settings.ini");
-        if (QFile::exists(settingsFile))
-        {
+        if (QFile::exists(settingsFile)) {
             QFile::remove(settingsFile);
         }
 

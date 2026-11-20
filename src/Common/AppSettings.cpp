@@ -1,34 +1,29 @@
 #include "AppSettings.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
-#include <QSettings>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSettings>
 
 namespace RALE {
 
 UserSettings AppSettings::Current;
 
-QString AppSettings::GetSettingsPath()
-{
-    return QDir(QCoreApplication::applicationDirPath()).filePath("settings.ini");
-}
+QString AppSettings::GetSettingsPath() { return QDir(QCoreApplication::applicationDirPath()).filePath("settings.ini"); }
 
-void AppSettings::MigrateFromJsonIfPresent(const QString &jsonPath)
-{
-    if (!QFile::exists(jsonPath)) return;
+void AppSettings::MigrateFromJsonIfPresent(const QString& jsonPath) {
+    if (!QFile::exists(jsonPath))
+        return;
 
-    try
-    {
+    try {
         QFile file(jsonPath);
-        if (file.open(QIODevice::ReadOnly | QIODevice::Text))
-        {
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QByteArray json = file.readAll();
             file.close();
             auto doc = QJsonDocument::fromJson(json);
-            if (doc.isObject())
-            {
+            if (doc.isObject()) {
                 auto obj = doc.object();
                 Current.ShowLogicReviewer = obj.value("ShowLogicReviewer").toBool(Current.ShowLogicReviewer);
                 Current.Theme = obj.value("Theme").toString(Current.Theme);
@@ -57,8 +52,10 @@ void AppSettings::MigrateFromJsonIfPresent(const QString &jsonPath)
                 Current.CodeNotePrefix = obj.value("CodeNotePrefix").toString(Current.CodeNotePrefix);
                 Current.CodeNoteSuffix = obj.value("CodeNoteSuffix").toString(Current.CodeNoteSuffix);
                 Current.CodeNoteAlignSuffixes = obj.value("CodeNoteAlignSuffixes").toBool(Current.CodeNoteAlignSuffixes);
-                Current.CodeNoteSuffixOnLastLineOnly = obj.value("CodeNoteSuffixOnLastLineOnly").toBool(Current.CodeNoteSuffixOnLastLineOnly);
-                Current.CodeNoteAutoPopulatePointers = obj.value("CodeNoteAutoPopulatePointers").toBool(Current.CodeNoteAutoPopulatePointers);
+                Current.CodeNoteSuffixOnLastLineOnly =
+                    obj.value("CodeNoteSuffixOnLastLineOnly").toBool(Current.CodeNoteSuffixOnLastLineOnly);
+                Current.CodeNoteAutoPopulatePointers =
+                    obj.value("CodeNoteAutoPopulatePointers").toBool(Current.CodeNoteAutoPopulatePointers);
 
                 if (obj.contains("CodeNoteUnicodeTree"))
                     Current.CodeNoteUnicodeTree = obj.value("CodeNoteUnicodeTree").toBool(Current.CodeNoteUnicodeTree);
@@ -73,28 +70,24 @@ void AppSettings::MigrateFromJsonIfPresent(const QString &jsonPath)
         }
         Save();
         QFile::remove(jsonPath);
+    } catch (...) {
     }
-    catch (...) {}
 }
 
-void AppSettings::Load()
-{
+void AppSettings::Load() {
     QString iniPath = GetSettingsPath();
     QString legacyJsonPath = QDir(QCoreApplication::applicationDirPath()).filePath("settings.json");
 
-    if (!QFile::exists(iniPath) && QFile::exists(legacyJsonPath))
-    {
+    if (!QFile::exists(iniPath) && QFile::exists(legacyJsonPath)) {
         MigrateFromJsonIfPresent(legacyJsonPath);
         return;
     }
 
-    if (!QFile::exists(iniPath))
-    {
+    if (!QFile::exists(iniPath)) {
         return;
     }
 
-    try
-    {
+    try {
         QSettings ini(iniPath, QSettings::IniFormat);
 
         ini.beginGroup("General");
@@ -158,14 +151,12 @@ void AppSettings::Load()
         Current.Generator_Stride = ini.value("Generator_Stride", Current.Generator_Stride).toString();
         Current.Generator_IsArray = ini.value("Generator_IsArray", Current.Generator_IsArray).toBool();
         ini.endGroup();
+    } catch (...) { /* Ignore errors, use defaults */
     }
-    catch (...) { /* Ignore errors, use defaults */ }
 }
 
-void AppSettings::Save()
-{
-    try
-    {
+void AppSettings::Save() {
+    try {
         QSettings ini(GetSettingsPath(), QSettings::IniFormat);
 
         ini.beginGroup("General");
@@ -229,73 +220,64 @@ void AppSettings::Save()
         ini.setValue("Generator_Stride", Current.Generator_Stride);
         ini.setValue("Generator_IsArray", Current.Generator_IsArray);
         ini.endGroup();
+    } catch (...) { /* Ignore errors */
     }
-    catch (...) { /* Ignore errors */ }
 }
 
-void AppSettings::SaveDialogGeometry(const QString &dialogName, const QPoint &pos, const QSize &size)
-{
-    try
-    {
+void AppSettings::SaveDialogGeometry(const QString& dialogName, const QPoint& pos, const QSize& size) {
+    try {
         QSettings ini(GetSettingsPath(), QSettings::IniFormat);
         ini.beginGroup("DialogPositions");
-        if (size.isValid() && size.width() > 0 && size.height() > 0)
-        {
+        if (size.isValid() && size.width() > 0 && size.height() > 0) {
             ini.setValue(dialogName, QString("%1, %2, %3, %4").arg(pos.x()).arg(pos.y()).arg(size.width()).arg(size.height()));
-        }
-        else
-        {
+        } else {
             ini.setValue(dialogName, QString("%1, %2").arg(pos.x()).arg(pos.y()));
         }
         ini.endGroup();
+    } catch (...) {
     }
-    catch (...) {}
 }
 
-bool AppSettings::LoadDialogGeometry(const QString &dialogName, QPoint &pos, QSize &size)
-{
-    try
-    {
+bool AppSettings::LoadDialogGeometry(const QString& dialogName, QPoint& pos, QSize& size) {
+    try {
         QString iniPath = GetSettingsPath();
-        if (!QFile::exists(iniPath)) return false;
+        if (!QFile::exists(iniPath))
+            return false;
 
         QSettings ini(iniPath, QSettings::IniFormat);
         ini.beginGroup("DialogPositions");
-        if (!ini.contains(dialogName)) return false;
+        if (!ini.contains(dialogName))
+            return false;
 
         QString val = ini.value(dialogName).toString();
         ini.endGroup();
 
-        if (val.startsWith("@ByteArray")) return false;
+        if (val.startsWith("@ByteArray"))
+            return false;
 
         QStringList parts = val.split(',');
-        if (parts.size() >= 4)
-        {
+        if (parts.size() >= 4) {
             bool okX = false, okY = false, okW = false, okH = false;
             int x = parts[0].trimmed().toInt(&okX);
             int y = parts[1].trimmed().toInt(&okY);
             int w = parts[2].trimmed().toInt(&okW);
             int h = parts[3].trimmed().toInt(&okH);
-            if (okX && okY && okW && okH)
-            {
+            if (okX && okY && okW && okH) {
                 pos = QPoint(x, y);
                 size = QSize(w, h);
                 return true;
             }
-        }
-        else if (parts.size() >= 2)
-        {
+        } else if (parts.size() >= 2) {
             bool okX = false, okY = false;
             int x = parts[0].trimmed().toInt(&okX);
             int y = parts[1].trimmed().toInt(&okY);
-            if (okX && okY)
-            {
+            if (okX && okY) {
                 pos = QPoint(x, y);
                 return true;
             }
         }
+    } catch (...) {
     }
-    catch (...) {}
     return false;
 }
 

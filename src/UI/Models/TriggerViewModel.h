@@ -1,32 +1,33 @@
 #pragma once
 
-#include <QObject>
-#include <QString>
-#include <QList>
-#include <QMap>
-#include <memory>
+#include "../../Common/ConditionFormatter.h"
 #include "../../Models/AssetModels.h"
 #include "../../Models/LogicModels.h"
 #include "../../Models/NoteNode.h"
 #include "../../Models/ValidationModels.h"
-#include "../../Services/HistoryManager.h"
 #include "../../Services/AssetStrategies.h"
-#include "../../Services/ILogicValidator.h"
+#include "../../Services/HistoryManager.h"
 #include "../../Services/ILogicGenerator.h"
-#include "../../Common/ConditionFormatter.h"
+#include "../../Services/ILogicValidator.h"
+
+#include <QList>
+#include <QMap>
+#include <QObject>
+#include <QString>
+
+#include <memory>
 
 namespace RALE {
 
 // Responsibilty: Manages the state of the Logic being edited (Parsing, History, Generators).
 // Decouples the WinForms UI from the Business Logic.
-class TriggerViewModel : public QObject
-{
+class TriggerViewModel : public QObject {
     Q_OBJECT
 
-public:
+  public:
     // Injected Services
-    ILogicValidator &_validator;
-    ILogicGenerator &_generator;
+    ILogicValidator& _validator;
+    ILogicGenerator& _generator;
 
     // History Manager handles Undo/Redo stacks
     HistoryManager<TriggerEditorState> _history;
@@ -51,18 +52,18 @@ public:
     QMap<int, GeneratorDefinition> GeneratorRules;
 
     // References for Validation (Set by View)
-    const QMap<QString, QList<std::shared_ptr<NoteNode>>> *NotesLookup = nullptr;
-    const QList<ConditionFormatter::RangeEntry> *RangeCache = nullptr;
+    const QMap<QString, QList<std::shared_ptr<NoteNode>>>* NotesLookup = nullptr;
+    const QList<ConditionFormatter::RangeEntry>* RangeCache = nullptr;
 
     // History Properties
     bool CanUndo() const { return _history.CanUndo(); }
     bool CanRedo() const { return _history.CanRedo(); }
 
     // Constructor Injection
-    TriggerViewModel(ILogicValidator &validator, ILogicGenerator &generator, QObject *parent = nullptr);
+    TriggerViewModel(ILogicValidator& validator, ILogicGenerator& generator, QObject* parent = nullptr);
 
     void LoadAsset(std::shared_ptr<IAssetItem> asset);
-    void SelectSegment(const QString &segmentName);
+    void SelectSegment(const QString& segmentName);
 
     // Commits changes to the Asset and the History stack
     void UpdateLogic(bool pushUndo = true);
@@ -80,16 +81,16 @@ public:
     // Expose validation via the injected service
     QList<ValidationIssue> ValidateCurrentLogic();
 
-signals:
+  signals:
     // Events - Nullable
     void LogicChanged();
     void SegmentsChanged(); // Fired when loading new asset
     void HistoryChanged();  // Fired when undo stack changes
 
-private:
+  private:
     // Helper to update state from text directly (e.g. paste or undo)
-    void SetStateFromLogic(const QString &logic);
-    void RestoreState(const TriggerEditorState &state);
+    void SetStateFromLogic(const QString& logic);
+    void RestoreState(const TriggerEditorState& state);
 };
 
 } // namespace RALE

@@ -1,27 +1,26 @@
 #pragma once
 
-#include <QString>
 #include <QApplication>
-#include <QProxyStyle>
-#include <QStyledItemDelegate>
 #include <QComboBox>
-#include <QListView>
-#include <QEvent>
-#include <QPropertyAnimation>
 #include <QEasingCurve>
-#include <QWidget>
-#include <QIcon>
+#include <QEvent>
 #include <QHash>
+#include <QIcon>
+#include <QListView>
+#include <QPropertyAnimation>
+#include <QProxyStyle>
+#include <QString>
+#include <QStyledItemDelegate>
+#include <QWidget>
 
 namespace RALE {
 
 // Forces classic Win32 dropdown positioning below the QComboBox across the entire app
 class ClassicDropdownStyle : public QProxyStyle {
-public:
+  public:
     explicit ClassicDropdownStyle(QStyle* baseStyle = nullptr) : QProxyStyle(baseStyle) {}
 
-    int styleHint(StyleHint hint, const QStyleOption* option = nullptr,
-                  const QWidget* widget = nullptr,
+    int styleHint(StyleHint hint, const QStyleOption* option = nullptr, const QWidget* widget = nullptr,
                   QStyleHintReturn* returnData = nullptr) const override {
         if (hint == QStyle::SH_ComboBox_Popup) {
             return 0; // 0 = false: drop down directly below the combobox
@@ -31,7 +30,7 @@ public:
 };
 
 class GlobalComboBoxConfigurator : public QObject {
-public:
+  public:
     explicit GlobalComboBoxConfigurator(QObject* parent = nullptr) : QObject(parent) {}
 
     static void configureComboBox(QComboBox* combo) {
@@ -52,7 +51,7 @@ public:
         combo->setView(popupView);
     }
 
-protected:
+  protected:
     bool eventFilter(QObject* obj, QEvent* event) override {
         if (event->type() == QEvent::Polish) {
             if (auto* combo = qobject_cast<QComboBox*>(obj)) {
@@ -136,52 +135,48 @@ class TooltipAnimationFilter : public QObject {
 };
 
 // Custom proxy style ensuring vector checkboxes and clean combobox arrows across all platforms
-class RaStyle : public ClassicDropdownStyle
-{
-public:
+class RaStyle : public ClassicDropdownStyle {
+  public:
     using ClassicDropdownStyle::ClassicDropdownStyle;
 
-    void drawPrimitive(PrimitiveElement element, const QStyleOption *option, QPainter *painter, const QWidget *widget = nullptr) const override;
-    QRect subElementRect(SubElement element, const QStyleOption *option, const QWidget *widget = nullptr) const override;
-    int styleHint(StyleHint hint, const QStyleOption *option = nullptr, const QWidget *widget = nullptr, QStyleHintReturn *returnData = nullptr) const override;
+    void drawPrimitive(PrimitiveElement element, const QStyleOption* option, QPainter* painter,
+                       const QWidget* widget = nullptr) const override;
+    QRect subElementRect(SubElement element, const QStyleOption* option, const QWidget* widget = nullptr) const override;
+    int styleHint(StyleHint hint, const QStyleOption* option = nullptr, const QWidget* widget = nullptr,
+                  QStyleHintReturn* returnData = nullptr) const override;
 };
 
 // Delegate ensuring 1:1 Windows Forms blue highlight (#0078D7) for current/hovered dropdown items
-class RaComboBoxDelegate : public QStyledItemDelegate
-{
+class RaComboBoxDelegate : public QStyledItemDelegate {
     Q_OBJECT
-public:
-    explicit RaComboBoxDelegate(QObject *parent = nullptr);
+  public:
+    explicit RaComboBoxDelegate(QObject* parent = nullptr);
 
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
-    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
 };
 
-class ThemeManager
-{
-public:
-    enum class Theme {
-        Dark,
-        Light
-    };
+class ThemeManager {
+  public:
+    enum class Theme { Dark, Light };
 
     static void ApplyTheme(Theme theme);
     static Theme CurrentTheme();
 
     // Configures a QComboBox with uniform item sizing, max visible items (default 8), and the Win32 selection delegate
-    static void SetupComboBox(QComboBox *cb, int maxVisibleItems = 14);
+    static void SetupComboBox(QComboBox* cb, int maxVisibleItems = 14);
 
     // Resolves raw SVG XML data, colorizes paths dynamically using active visual themes, and caches standard raster sizes
-    static QIcon getIcon(const QString &resourcePath, Theme theme = _currentTheme);
+    static QIcon getIcon(const QString& resourcePath, Theme theme = _currentTheme);
     static void clearCache();
 
-private:
+  private:
     static Theme _currentTheme;
     static QHash<QString, QIcon> _iconCache;
-    static QString LoadStyleSheet(const QString &resourcePath);
+    static QString LoadStyleSheet(const QString& resourcePath);
 
-    static void ApplyLightPalette(QApplication *app);
-    static void ApplyDarkPalette(QApplication *app);
+    static void ApplyLightPalette(QApplication* app);
+    static void ApplyDarkPalette(QApplication* app);
 };
 
 } // namespace RALE

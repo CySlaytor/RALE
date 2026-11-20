@@ -1,39 +1,39 @@
 #pragma once
 
-#include <QWidget>
-#include <QTreeWidget>
+#include "../../Models/ValidationModels.h"
+
 #include <QComboBox>
 #include <QLabel>
 #include <QList>
-#include "../../Models/ValidationModels.h"
+#include <QTreeWidget>
+#include <QWidget>
 
 namespace RALE {
 
-class CodeReviewWidget : public QWidget
-{
+class CodeReviewWidget : public QWidget {
     Q_OBJECT
 
-public:
-    explicit CodeReviewWidget(QWidget *parent = nullptr);
+  public:
+    explicit CodeReviewWidget(QWidget* parent = nullptr);
 
-    void SetIssues(const QList<ValidationIssue> &issues);
+    void SetIssues(const QList<ValidationIssue>& issues);
 
     int FilterIndex() const;
     void SetFilterIndex(int index);
 
-signals:
-    void IssueSelected(const ValidationIssue &issue);
+  signals:
+    void IssueSelected(const ValidationIssue& issue);
 
-private slots:
+  private slots:
     void onFilterChanged();
-    void onItemDoubleClicked(QTreeWidgetItem *item, int column);
-    void onItemActivated(QTreeWidgetItem *item, int column);
+    void onItemDoubleClicked(QTreeWidgetItem* item, int column);
+    void onItemActivated(QTreeWidgetItem* item, int column);
 
-private:
-    QComboBox *cmbFilter = nullptr;
-    QLabel *lblStatus = nullptr;
-    QLabel *lblHeader = nullptr;
-    QTreeWidget *listIssues = nullptr;
+  private:
+    QComboBox* cmbFilter = nullptr;
+    QLabel* lblStatus = nullptr;
+    QLabel* lblHeader = nullptr;
+    QTreeWidget* listIssues = nullptr;
 
     QList<ValidationIssue> _allIssues;
     QList<ValidationIssue> _filteredIssues;

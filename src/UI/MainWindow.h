@@ -1,54 +1,55 @@
 #pragma once
 
-#include <QMainWindow>
-#include <QTableView>
-#include <QComboBox>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QSplitter>
-#include <QMenu>
-#include <memory>
+#include "../Common/RecentFilesManager.h"
+#include "../Services/HistoryManager.h"
+#include "../Services/LogicValidator.h"
+#include "../Services/MultiRegionBatchProcessor.h"
+#include "../Services/ProjectRepository.h"
+#include "../Services/RichPresenceMetadataService.h"
+#include "../Services/RichPresenceService.h"
+#include "../Services/UserFileSerializer.h"
 #include "Models/AssetTableModel.h"
-#include "Widgets/TriggerEditorWidget.h"
+#include "Styles/ThemeManager.h"
 #include "Widgets/CodeNoteEditorWidget.h"
 #include "Widgets/CodeReviewWidget.h"
-#include "Styles/ThemeManager.h"
-#include "../Services/ProjectRepository.h"
-#include "../Services/HistoryManager.h"
-#include "../Services/MultiRegionBatchProcessor.h"
-#include "../Services/UserFileSerializer.h"
-#include "../Services/RichPresenceService.h"
-#include "../Services/RichPresenceMetadataService.h"
-#include "../Services/LogicValidator.h"
-#include "../Common/RecentFilesManager.h"
+#include "Widgets/TriggerEditorWidget.h"
+
+#include <QComboBox>
+#include <QLineEdit>
+#include <QMainWindow>
+#include <QMenu>
+#include <QPushButton>
+#include <QSplitter>
+#include <QTableView>
+
+#include <memory>
 
 namespace RALE {
 
 class MultiRegionDialog;
 class BatchNoteMultiplierDialog;
 
-class MainWindow : public QMainWindow
-{
+class MainWindow : public QMainWindow {
     Q_OBJECT
 
-public:
-    explicit MainWindow(QWidget *parent = nullptr);
+  public:
+    explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
-    void LoadFiles(const QString &primaryPath);
+    void LoadFiles(const QString& primaryPath);
     void updateThemeIcons();
 
-protected:
-    void closeEvent(QCloseEvent *event) override;
-    void showEvent(QShowEvent *event) override;
-    bool eventFilter(QObject *watched, QEvent *event) override;
+  protected:
+    void closeEvent(QCloseEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
-private slots:
+  private slots:
     void onAssetSelectionChanged();
-    void onAssetDoubleClicked(const QModelIndex &index);
+    void onAssetDoubleClicked(const QModelIndex& index);
 
     void onFilterChanged();
-    void onSearchTextChanged(const QString &text);
+    void onSearchTextChanged(const QString& text);
 
     void onNewAsset();
     void onDuplicateAsset();
@@ -71,14 +72,14 @@ private slots:
     void onRevertRegion();
     void onLogicOptimizer();
 
-    void onMultiRegionBatch(MultiRegionDialog *dialog);
-    void onBatchMultiplyNotes(BatchNoteMultiplierDialog *dialog);
+    void onMultiRegionBatch(MultiRegionDialog* dialog);
+    void onBatchMultiplyNotes(BatchNoteMultiplierDialog* dialog);
 
     void onUndo();
     void onRedo();
     void onReload();
 
-private:
+  private:
     ProjectRepository _projectRepo;
     HistoryManager<UserTextParser::UserData> _mainHistory;
     RecentFilesManager _recentFiles;
@@ -104,46 +105,46 @@ private:
     bool _notesCacheDirty = true;
     void RebuildNotesCache();
 
-    QComboBox *cmbAssetType = nullptr;
-    QComboBox *cmbCategory = nullptr;
-    QComboBox *cmbSource = nullptr;
-    QLineEdit *txtAssetSearch = nullptr;
+    QComboBox* cmbAssetType = nullptr;
+    QComboBox* cmbCategory = nullptr;
+    QComboBox* cmbSource = nullptr;
+    QLineEdit* txtAssetSearch = nullptr;
 
-    QTableView *achievementGrid = nullptr;
+    QTableView* achievementGrid = nullptr;
     AssetTableModel _assetModel;
-    AssetTableDelegate *_assetDelegate = nullptr;
+    AssetTableDelegate* _assetDelegate = nullptr;
 
-    QPushButton *btnAddAsset = nullptr;
-    QPushButton *btnDuplicateAsset = nullptr;
-    QPushButton *btnDeleteAsset = nullptr;
+    QPushButton* btnAddAsset = nullptr;
+    QPushButton* btnDuplicateAsset = nullptr;
+    QPushButton* btnDeleteAsset = nullptr;
 
-    TriggerEditorWidget *triggerEditor = nullptr;
-    CodeNoteEditorWidget *codeNoteEditor = nullptr;
-    CodeReviewWidget *codeReviewControl = nullptr;
+    TriggerEditorWidget* triggerEditor = nullptr;
+    CodeNoteEditorWidget* codeNoteEditor = nullptr;
+    CodeReviewWidget* codeReviewControl = nullptr;
 
-    QSplitter *splitMain = nullptr;
-    QSplitter *splitEditor = nullptr;
-    QSplitter *splitMiddle = nullptr;
+    QSplitter* splitMain = nullptr;
+    QSplitter* splitEditor = nullptr;
+    QSplitter* splitMiddle = nullptr;
 
-    QMenu *recentMenu = nullptr;
-    QAction *actUndo = nullptr;
-    QAction *actRedo = nullptr;
-    QAction *actViewReviewer = nullptr;
-    QAction *actAbout = nullptr;
+    QMenu* recentMenu = nullptr;
+    QAction* actUndo = nullptr;
+    QAction* actRedo = nullptr;
+    QAction* actViewReviewer = nullptr;
+    QAction* actAbout = nullptr;
 
-    QMenu *assetContextMenu = nullptr;
-    QAction *actNewAsset = nullptr;
-    QAction *actDuplicateAsset = nullptr;
-    QAction *actDeleteAsset = nullptr;
-    QAction *actResetAsset = nullptr;
-    QAction *actMoveUp = nullptr;
-    QAction *actMoveDown = nullptr;
-    QAction *actRestoreOrder = nullptr;
-    QAction *actRenumberIDs = nullptr;
-    QAction *actViewDiff = nullptr;
-    QAction *actRevertRegion = nullptr;
+    QMenu* assetContextMenu = nullptr;
+    QAction* actNewAsset = nullptr;
+    QAction* actDuplicateAsset = nullptr;
+    QAction* actDeleteAsset = nullptr;
+    QAction* actResetAsset = nullptr;
+    QAction* actMoveUp = nullptr;
+    QAction* actMoveDown = nullptr;
+    QAction* actRestoreOrder = nullptr;
+    QAction* actRenumberIDs = nullptr;
+    QAction* actViewDiff = nullptr;
+    QAction* actRevertRegion = nullptr;
 
-    QIcon getThemeIcon(const QString &resourcePath) const;
+    QIcon getThemeIcon(const QString& resourcePath) const;
     void InitializeUI();
     void InitializeFilters();
     void InitializeMainMenu();
@@ -163,17 +164,17 @@ private:
     void ReloadDataView();
     void PopulateList();
     void LoadSelectedAsset();
-    void UpdateAssetState(const std::shared_ptr<IAssetItem> &item);
+    void UpdateAssetState(const std::shared_ptr<IAssetItem>& item);
     void UpdateSelectionUI();
-    void SelectAssetInGrid(const std::shared_ptr<IAssetItem> &asset);
+    void SelectAssetInGrid(const std::shared_ptr<IAssetItem>& asset);
     void RunGlobalValidation();
 
-    void EnsureAssetIsLocal(const std::shared_ptr<IAssetItem> &asset);
+    void EnsureAssetIsLocal(const std::shared_ptr<IAssetItem>& asset);
     void EnsureAssetIsLocal();
-    QString InvertOperator(const QString &op);
-    void ApplyBulkEdit(const std::shared_ptr<IAssetItem> &sourceTemplate);
+    QString InvertOperator(const QString& op);
+    void ApplyBulkEdit(const std::shared_ptr<IAssetItem>& sourceTemplate);
     void MoveAsset(int direction);
-    bool IsAssetInLocalStore(const std::shared_ptr<IAssetItem> &item);
+    bool IsAssetInLocalStore(const std::shared_ptr<IAssetItem>& item);
 };
 
 } // namespace RALE

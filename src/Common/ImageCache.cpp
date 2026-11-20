@@ -1,10 +1,11 @@
 #include "ImageCache.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QPainter>
 #include <QNetworkReply>
+#include <QPainter>
 
 namespace RALE {
 
@@ -13,16 +14,15 @@ QMap<QString, QList<ImageCache::CallbackEntry>> ImageCache::_pendingCallbacks;
 QString ImageCache::LocalBadgeDirectory = "";
 std::unique_ptr<QNetworkAccessManager> ImageCache::_networkManager = nullptr;
 
-QString ImageCache::GetCacheDir()
-{
+QString ImageCache::GetCacheDir() {
     // Saves to bin/Debug/Cache/Badges
     QString dir = QDir(QCoreApplication::applicationDirPath()).filePath("Cache/Badges");
-    if (!QDir(dir).exists()) QDir().mkpath(dir);
+    if (!QDir(dir).exists())
+        QDir().mkpath(dir);
     return dir;
 }
 
-void ImageCache::Clear()
-{
+void ImageCache::Clear() {
     _memoryCache.clear();
     _pendingCallbacks.clear();
     LocalBadgeDirectory = "";
@@ -30,24 +30,21 @@ void ImageCache::Clear()
 
 /// Attempts to locate the "Badge" directory relative to the loaded file.
 /// Standard RA Structure: ~RACache\Data\User.txt -> ~RACache\Badge\Image.png
-void ImageCache::ConfigureLocalPaths(const QString &loadedFilePath)
-{
+void ImageCache::ConfigureLocalPaths(const QString& loadedFilePath) {
     LocalBadgeDirectory = "";
-    if (loadedFilePath.isEmpty()) return;
+    if (loadedFilePath.isEmpty())
+        return;
 
-    try
-    {
+    try {
         QFileInfo fi(loadedFilePath);
         QDir dataDir = fi.dir();
 
         // 1. Check sibling "Badge" directory (Standard RA)
         // loadedFilePath is inside "Data", so we go up one level and look for "Badge"
         QDir parentDir = dataDir;
-        if (parentDir.cdUp())
-        {
+        if (parentDir.cdUp()) {
             QString siblingBadgeDir = parentDir.filePath("Badge");
-            if (QDir(siblingBadgeDir).exists())
-            {
+            if (QDir(siblingBadgeDir).exists()) {
                 LocalBadgeDirectory = siblingBadgeDir;
                 return;
             }
@@ -55,16 +52,14 @@ void ImageCache::ConfigureLocalPaths(const QString &loadedFilePath)
 
         // 2. Check subdirectory "Badge" (Non-standard / Flat)
         QString subBadgeDir = dataDir.filePath("Badge");
-        if (QDir(subBadgeDir).exists())
-        {
+        if (QDir(subBadgeDir).exists()) {
             LocalBadgeDirectory = subBadgeDir;
         }
+    } catch (...) { /* Ignore path errors */
     }
-    catch (...) { /* Ignore path errors */ }
 }
 
-QPixmap ImageCache::GetBadge(const QString &badgeName, std::function<void(const QPixmap &)> callback, QObject *context)
-{
+QPixmap ImageCache::GetBadge(const QString& badgeName, std::function<void(const QPixmap&)> callback, QObject* context) {
     if (badgeName.isEmpty() || badgeName == "00000")
         return CreatePlaceholder();
 
@@ -72,15 +67,13 @@ QPixmap ImageCache::GetBadge(const QString &badgeName, std::function<void(const 
     QString cleanName = badgeName;
 
     // Strip directory info (local\)
-    if (cleanName.contains('\\') || cleanName.contains('/'))
-    {
+    if (cleanName.contains('\\') || cleanName.contains('/')) {
         cleanName = QFileInfo(cleanName).fileName();
     }
 
     // Remove extension to normalize cache key
     // (RA Badges are typically accessed by hash, saved as .png)
-    if (cleanName.endsWith(".png", Qt::CaseInsensitive))
-    {
+    if (cleanName.endsWith(".png", Qt::CaseInsensitive)) {
         cleanName = QFileInfo(cleanName).completeBaseName();
     }
 
@@ -90,14 +83,11 @@ QPixmap ImageCache::GetBadge(const QString &badgeName, std::function<void(const 
 
     // 2. Check Local RA Directory (The "Clever" Lookup)
     // If we detected a Badge folder near the User.txt, check there first.
-    if (!LocalBadgeDirectory.isEmpty())
-    {
+    if (!LocalBadgeDirectory.isEmpty()) {
         QString raLocalPath = QDir(LocalBadgeDirectory).filePath(QString("%1.png").arg(cleanName));
-        if (QFile::exists(raLocalPath))
-        {
+        if (QFile::exists(raLocalPath)) {
             QPixmap pix = LoadImageSafe(raLocalPath);
-            if (!pix.isNull())
-            {
+            if (!pix.isNull()) {
                 _memoryCache.insert(cleanName, pix);
                 return pix;
             }
@@ -106,58 +96,50 @@ QPixmap ImageCache::GetBadge(const QString &badgeName, std::function<void(const 
 
     // 3. Check Internal App Cache
     QString appCachePath = QDir(GetCacheDir()).filePath(QString("%1.png").arg(cleanName));
-    if (QFile::exists(appCachePath))
-    {
+    if (QFile::exists(appCachePath)) {
         QPixmap pix = LoadImageSafe(appCachePath);
-        if (!pix.isNull())
-        {
+        if (!pix.isNull()) {
             _memoryCache.insert(cleanName, pix);
             return pix;
         }
     }
 
     // 4. Download from RA
-    if (_pendingCallbacks.contains(cleanName))
-    {
-        if (callback) _pendingCallbacks[cleanName].append(CallbackEntry{ context, context != nullptr, callback });
+    if (_pendingCallbacks.contains(cleanName)) {
+        if (callback)
+            _pendingCallbacks[cleanName].append(CallbackEntry{context, context != nullptr, callback});
         return CreatePlaceholder();
     }
 
-    if (callback) _pendingCallbacks[cleanName].append(CallbackEntry{ context, context != nullptr, callback });
+    if (callback)
+        _pendingCallbacks[cleanName].append(CallbackEntry{context, context != nullptr, callback});
 
-    if (!_networkManager)
-    {
+    if (!_networkManager) {
         _networkManager = std::make_unique<QNetworkAccessManager>();
         // Ensure network manager is cleaned up prior to QCoreApplication exit to prevent static destructor assertions
-        if (qApp)
-        {
-            QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
-                _networkManager.reset();
-            });
+        if (qApp) {
+            QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() { _networkManager.reset(); });
         }
     }
 
     QUrl url(QString("https://media.retroachievements.org/Badge/%1.png").arg(cleanName));
     QNetworkRequest request(url);
-    QNetworkReply *reply = _networkManager->get(request);
+    QNetworkReply* reply = _networkManager->get(request);
 
     QObject::connect(reply, &QNetworkReply::finished, [reply, cleanName, appCachePath]() {
         reply->deleteLater();
         QPixmap resultPixmap;
 
-        if (reply->error() == QNetworkReply::NoError)
-        {
+        if (reply->error() == QNetworkReply::NoError) {
             QByteArray data = reply->readAll();
             QFile file(appCachePath);
-            if (file.open(QIODevice::WriteOnly))
-            {
+            if (file.open(QIODevice::WriteOnly)) {
                 file.write(data);
                 file.close();
             }
 
             QPixmap pix;
-            if (pix.loadFromData(data))
-            {
+            if (pix.loadFromData(data)) {
                 _memoryCache.insert(cleanName, pix);
                 resultPixmap = pix;
             }
@@ -167,11 +149,9 @@ QPixmap ImageCache::GetBadge(const QString &badgeName, std::function<void(const 
             resultPixmap = CreatePlaceholder();
 
         auto callbacks = _pendingCallbacks.take(cleanName);
-        for (const auto &entry : callbacks)
-        {
+        for (const auto& entry : callbacks) {
             // Verify context object has not been destroyed before invoking callback
-            if (entry.callback && (!entry.hasContext || !entry.context.isNull()))
-            {
+            if (entry.callback && (!entry.hasContext || !entry.context.isNull())) {
                 entry.callback(resultPixmap);
             }
         }
@@ -180,15 +160,13 @@ QPixmap ImageCache::GetBadge(const QString &badgeName, std::function<void(const 
     return CreatePlaceholder();
 }
 
-QPixmap ImageCache::LoadImageSafe(const QString &path)
-{
+QPixmap ImageCache::LoadImageSafe(const QString& path) {
     QPixmap pix;
     pix.load(path);
     return pix;
 }
 
-QPixmap ImageCache::CreatePlaceholder()
-{
+QPixmap ImageCache::CreatePlaceholder() {
     QPixmap pix(64, 64);
     pix.fill(Qt::lightGray);
     QPainter p(&pix);

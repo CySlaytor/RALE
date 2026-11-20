@@ -1,18 +1,20 @@
 #pragma once
 
-#include <QString>
-#include <QList>
-#include <memory>
 #include "ProjectMetadataService.h"
+
 #include "../Models/AssetModels.h"
 #include "../Models/RichPresence.h"
 #include "../Parsers/UserTextParser.h"
 
+#include <QList>
+#include <QString>
+
+#include <memory>
+
 namespace RALE {
 
-class ProjectRepository
-{
-public:
+class ProjectRepository {
+  public:
     std::shared_ptr<RaRoot> ServerData = nullptr;
     std::shared_ptr<UserTextParser::UserData> LocalData = nullptr;
     std::shared_ptr<RichPresenceScript> RichPresence = nullptr;
@@ -25,13 +27,13 @@ public:
     QString CurrentGameId = "";
     QString CurrentTitle = "";
 
-    void LoadFiles(const QString &primaryPath, QString &userFilePath);
+    void LoadFiles(const QString& primaryPath, QString& userFilePath);
 
     // Checks if a note matches exactly what is on the server (Address and Content)
-    bool IsNoteSynced(const CodeNote &note) const;
+    bool IsNoteSynced(const CodeNote& note) const;
 
     // Safely deletes the local note modification and restores the pristine server copy
-    void RevertNote(const QString &address);
+    void RevertNote(const QString& address);
 
     // Merges Server and Local lists based on IDs to determine Sync status
     // Modified: Now preserves the natural reading order of the JSON files rather than forcing numerical ID sorts
@@ -42,12 +44,12 @@ public:
     void EnsureLocalDataExists();
     void SaveRichPresence();
 
-private:
+  private:
     QList<CodeNote> _serverNotes; // Store original server notes for comparison
 
-    void LoadServerLogic(const QString &filepath);
-    void LoadAndMergeNotes(const QString &notesPath);
-    bool AreAssetsEqual(const IAssetItem &a, const IAssetItem &b) const;
+    void LoadServerLogic(const QString& filepath);
+    void LoadAndMergeNotes(const QString& notesPath);
+    bool AreAssetsEqual(const IAssetItem& a, const IAssetItem& b) const;
 };
 
 } // namespace RALE

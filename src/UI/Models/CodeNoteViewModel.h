@@ -1,26 +1,27 @@
 #pragma once
 
-#include <QObject>
-#include <QString>
-#include <QList>
-#include <QStack>
-#include <memory>
+#include "../../Common/ConditionFormatter.h"
 #include "../../Models/LogicModels.h"
 #include "../../Models/NoteNode.h"
 #include "../../Parsers/IPointerTreeParser.h"
-#include "../../Common/ConditionFormatter.h"
+
+#include <QList>
+#include <QObject>
+#include <QStack>
+#include <QString>
+
+#include <memory>
 
 namespace RALE {
 
 // ViewModel to decouple complex pointer logic from the WinForms UI.
 // Maintains the state of notes, pointer trees, and virtual selections.
-class CodeNoteViewModel : public QObject
-{
+class CodeNoteViewModel : public QObject {
     Q_OBJECT
 
-public:
+  public:
     // Injected Parser Dependency
-    IPointerTreeParser &_parser;
+    IPointerTreeParser& _parser;
 
     // Active project platform ConsoleId (e.g. 19 = Wii, 16 = GameCube, 21 = PS2, 5 = GBA, etc.)
     int ConsoleId = 0;
@@ -55,9 +56,8 @@ public:
     // -- Virtual/Edit State --
     // Unified State for both Virtual (Ghost) and Real (Existing) edits.
     // This acts as a buffer: changing DisplayText does not immediately affect the CodeNote.
-    class EditorState
-    {
-    public:
+    class EditorState {
+      public:
         bool IsVirtual = false; // True if creating new node, False if editing existing node
         bool IsDirty = false;   // Tracks if the user has modified the text
         QString Description = "";
@@ -75,7 +75,7 @@ public:
     EditorState EditState;
 
     // Constructor Injection
-    explicit CodeNoteViewModel(IPointerTreeParser &parser, QObject *parent = nullptr);
+    explicit CodeNoteViewModel(IPointerTreeParser& parser, QObject* parent = nullptr);
 
     // Undo / Redo
     void PushUndoState();
@@ -83,39 +83,41 @@ public:
     void Redo();
 
     // -- Logic --
-    void LoadNotes(const QList<CodeNote> &notes);
-    void BatchMultiplyNotes(const QList<CodeNote> &sourceNotes, const QString &searchKeyword, const QString &replacePattern, int copies, int64_t stride, int startNum);
-    void ApplyCloneStrideNotes(const QList<CodeNote> &generatedNotes, int &outAddedCount, int &outUpdatedCount);
-    void IntelligentDelete(const std::shared_ptr<NoteNode> &target);
-    void SelectBaseNote(const CodeNote &note);
-    void UpdateNoteContent(const QString &newText);
-    void UpdateBufferedText(const QString &newText);
+    void LoadNotes(const QList<CodeNote>& notes);
+    void BatchMultiplyNotes(const QList<CodeNote>& sourceNotes, const QString& searchKeyword, const QString& replacePattern, int copies,
+                            int64_t stride, int startNum);
+    void ApplyCloneStrideNotes(const QList<CodeNote>& generatedNotes, int& outAddedCount, int& outUpdatedCount);
+    void IntelligentDelete(const std::shared_ptr<NoteNode>& target);
+    void SelectBaseNote(const CodeNote& note);
+    void UpdateNoteContent(const QString& newText);
+    void UpdateBufferedText(const QString& newText);
     void CommitEditState();
     // By value: committing a pending edit re-parses and frees the old tree, so the
     // caller's node must stay alive across that implicit commit.
     void RequestNodeSelection(std::shared_ptr<NoteNode> node);
-    std::tuple<QString, QString, QString> GetSelectedLogic(const std::shared_ptr<NoteNode> &uiSelectedNode);
+    std::tuple<QString, QString, QString> GetSelectedLogic(const std::shared_ptr<NoteNode>& uiSelectedNode);
     void ClearEditState();
-    void HighlightAddress(const QString &address);
+    void HighlightAddress(const QString& address);
     void HighlightVariable(QList<int64_t> offsets);
 
     const QList<CodeNote>& GetAllNotes() const { return AllNotes; }
 
-signals:
+  signals:
     // -- Events --
     void NotesLoaded();
     void NoteContentChanged();
     void EditStateChanged(); // Changed from VirtualStateChanged to reflect unified editing
     void SelectionRequested(std::shared_ptr<NoteNode> node);
 
-private:
+  private:
     QStack<QString> _undoStack;
     QStack<QString> _redoStack;
 
     void RebuildRangeCache();
-    std::shared_ptr<NoteNode> FindNodeByOffsetString(const QString &offset);
-    void SetEditState(bool isVirtual, const QString &description, const QString &displayText, const QString &logicCode, const QString &type, const QString &size, const QList<int64_t> *offsets);
-    int64_t ParseAddress(const QString &addr) const;
+    std::shared_ptr<NoteNode> FindNodeByOffsetString(const QString& offset);
+    void SetEditState(bool isVirtual, const QString& description, const QString& displayText, const QString& logicCode, const QString& type,
+                      const QString& size, const QList<int64_t>* offsets);
+    int64_t ParseAddress(const QString& addr) const;
     QMap<QString, QList<std::shared_ptr<NoteNode>>> NotesLookup();
 };
 

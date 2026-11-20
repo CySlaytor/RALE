@@ -1,25 +1,20 @@
 #pragma once
 
+#include "LogicModels.h"
+
 #include <QString>
+
 #include <memory>
 #include <optional>
-#include "LogicModels.h"
 
 namespace RALE {
 
 class IAssetItem;
 
-enum class FeedbackSeverity
-{
-    None = 0,
-    Info = 1,
-    Warning = 2,
-    Error = 3
-};
+enum class FeedbackSeverity { None = 0, Info = 1, Warning = 2, Error = 3 };
 
-class ValidationIssue
-{
-public:
+class ValidationIssue {
+  public:
     FeedbackSeverity Severity = FeedbackSeverity::None;
     QString Title = "";
     QString Description = "";
@@ -33,20 +28,10 @@ public:
 
     ValidationIssue() = default;
 
-    ValidationIssue(FeedbackSeverity severity,
-                    const QString &title,
-                    const QString &description,
-                    const std::optional<AchievementCondition> &target = std::nullopt,
-                    const QString &wikiUrl = "",
+    ValidationIssue(FeedbackSeverity severity, const QString& title, const QString& description,
+                    const std::optional<AchievementCondition>& target = std::nullopt, const QString& wikiUrl = "",
                     std::shared_ptr<IAssetItem> asset = nullptr)
-        : Severity(severity),
-          Title(title),
-          Description(description),
-          WikiUrl(wikiUrl),
-          Target(target),
-          Asset(asset)
-    {
-    }
+        : Severity(severity), Title(title), Description(description), WikiUrl(wikiUrl), Target(target), Asset(asset) {}
 };
 
 } // namespace RALE

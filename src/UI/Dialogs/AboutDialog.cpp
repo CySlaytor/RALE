@@ -1,6 +1,8 @@
 #include "AboutDialog.h"
+
 #include "../../Common/AppSettings.h"
 #include "../Styles/ThemeManager.h"
+
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -11,7 +13,7 @@
 
 namespace RALE {
 
-AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent) {
+AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("About RetroAchievements Logic Editor");
     setModal(true);
     setFixedSize(520, 430);
@@ -31,9 +33,7 @@ void AboutDialog::loadPositionSettings() {
     }
 }
 
-void AboutDialog::savePositionSettings() {
-    AppSettings::SaveDialogGeometry("AboutDialog", pos());
-}
+void AboutDialog::savePositionSettings() { AppSettings::SaveDialogGeometry("AboutDialog", pos()); }
 
 void AboutDialog::done(int r) {
     savePositionSettings();
@@ -41,11 +41,11 @@ void AboutDialog::done(int r) {
 }
 
 void AboutDialog::setupLayout() {
-    auto *mainLayout = new QVBoxLayout(this);
+    auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(15, 15, 15, 15);
     mainLayout->setSpacing(12);
 
-    auto *topLayout = new QHBoxLayout();
+    auto* topLayout = new QHBoxLayout();
     topLayout->setSpacing(15);
 
     m_iconLabel = new QLabel(this);
@@ -56,7 +56,7 @@ void AboutDialog::setupLayout() {
     m_iconLabel->setAlignment(Qt::AlignTop);
     topLayout->addWidget(m_iconLabel);
 
-    auto *titleContainer = new QVBoxLayout();
+    auto* titleContainer = new QVBoxLayout();
     titleContainer->setSpacing(2);
 
     m_titleLabel = new QLabel("RetroAchievements Logic Editor", this);
@@ -66,7 +66,7 @@ void AboutDialog::setupLayout() {
     m_titleLabel->setFont(titleFont);
     titleContainer->addWidget(m_titleLabel);
 
-    QLabel *versionLabel = new QLabel(QString("Version %1").arg(VERSION_STRING), this);
+    QLabel* versionLabel = new QLabel(QString("Version %1").arg(VERSION_STRING), this);
     QFont verFont = versionLabel->font();
     verFont.setBold(true);
     versionLabel->setFont(verFont);
@@ -87,7 +87,7 @@ void AboutDialog::setupLayout() {
         "responsive environment.</p>");
     mainLayout->addWidget(m_descLabel);
 
-    auto *divider = new QFrame(this);
+    auto* divider = new QFrame(this);
     divider->setFrameShape(QFrame::HLine);
     divider->setFrameShadow(QFrame::Sunken);
     mainLayout->addWidget(divider);
@@ -105,10 +105,15 @@ void AboutDialog::setupLayout() {
         "<td valign='top'><a href='https://retroachievements.org/user/CySlaytor'>CySlaytor</a> &mdash; Core concept, logic architecture, "
         "and tool design. Developed to streamline RetroAchievements logic authoring and verification.</td>"
         "</tr>"
+        "<tr>"
+        "<td valign='top'><b>Artwork:</b></td>"
+        "<td valign='top'><a href='https://retroachievements.org/user/ZeeRA'>ZeeRA</a> &mdash; Original design of the application's "
+        "graphic icon (the LE logo).</td>"
+        "</tr>"
         "</table>");
     mainLayout->addWidget(m_creditsLabel, 1);
 
-    auto *buttonLayout = new QHBoxLayout();
+    auto* buttonLayout = new QHBoxLayout();
     m_closeButton = new QPushButton("Close", this);
     m_closeButton->setObjectName("closeButton");
     m_closeButton->setFixedWidth(75);

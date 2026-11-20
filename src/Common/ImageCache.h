@@ -1,37 +1,37 @@
 #pragma once
 
-#include <QString>
-#include <QPixmap>
-#include <QMap>
 #include <QList>
+#include <QMap>
 #include <QNetworkAccessManager>
+#include <QPixmap>
 #include <QPointer>
+#include <QString>
+
 #include <functional>
 
 namespace RALE {
 
-class ImageCache
-{
-public:
+class ImageCache {
+  public:
     static void Clear();
 
     /// Attempts to locate the "Badge" directory relative to the loaded file.
     /// Standard RA Structure: ~RACache\Data\User.txt -> ~RACache\Badge\Image.png
-    static void ConfigureLocalPaths(const QString &loadedFilePath);
+    static void ConfigureLocalPaths(const QString& loadedFilePath);
 
-    static QPixmap GetBadge(const QString &badgeName, std::function<void(const QPixmap &)> callback = nullptr, QObject *context = nullptr);
+    static QPixmap GetBadge(const QString& badgeName, std::function<void(const QPixmap&)> callback = nullptr, QObject* context = nullptr);
 
     static QString LocalBadgeDirectory;
 
-private:
+  private:
     static QString GetCacheDir();
     static QPixmap CreatePlaceholder();
-    static QPixmap LoadImageSafe(const QString &path);
+    static QPixmap LoadImageSafe(const QString& path);
 
     struct CallbackEntry {
         QPointer<QObject> context;
         bool hasContext = false;
-        std::function<void(const QPixmap &)> callback;
+        std::function<void(const QPixmap&)> callback;
     };
 
     static QMap<QString, QPixmap> _memoryCache;

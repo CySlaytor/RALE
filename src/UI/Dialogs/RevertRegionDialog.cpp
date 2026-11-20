@@ -1,55 +1,49 @@
 #include "RevertRegionDialog.h"
+
 #include "../../Common/AppSettings.h"
 #include "../Styles/ThemeManager.h"
-#include <QVBoxLayout>
+
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QVBoxLayout>
 
 namespace RALE {
 
-RevertRegionDialog::RevertRegionDialog(const QStringList &detectedRegions, QWidget *parent)
-    : QDialog(parent)
-{
+RevertRegionDialog::RevertRegionDialog(const QStringList& detectedRegions, QWidget* parent) : QDialog(parent) {
     InitializeUI();
     cmbRegions->clear();
-    for (const auto &r : detectedRegions)
+    for (const auto& r : detectedRegions)
         cmbRegions->addItem(r);
-    if (cmbRegions->count() > 0) cmbRegions->setCurrentIndex(0);
+    if (cmbRegions->count() > 0)
+        cmbRegions->setCurrentIndex(0);
     loadPositionSettings();
 }
 
-void RevertRegionDialog::loadPositionSettings()
-{
+void RevertRegionDialog::loadPositionSettings() {
     QPoint p;
     QSize s;
-    if (AppSettings::LoadDialogGeometry("RevertRegionDialog", p, s))
-    {
+    if (AppSettings::LoadDialogGeometry("RevertRegionDialog", p, s)) {
         move(p);
     }
 }
 
-void RevertRegionDialog::savePositionSettings()
-{
-    AppSettings::SaveDialogGeometry("RevertRegionDialog", pos());
-}
+void RevertRegionDialog::savePositionSettings() { AppSettings::SaveDialogGeometry("RevertRegionDialog", pos()); }
 
-void RevertRegionDialog::done(int r)
-{
+void RevertRegionDialog::done(int r) {
     savePositionSettings();
     QDialog::done(r);
 }
 
-void RevertRegionDialog::InitializeUI()
-{
+void RevertRegionDialog::InitializeUI() {
     setWindowTitle("Revert Multi-Region");
     setMinimumSize(320, 105);
 
-    auto *mainLayout = new QVBoxLayout(this);
+    auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(12, 12, 12, 12);
     mainLayout->setSpacing(8);
     mainLayout->addWidget(new QLabel("Select Region to Keep (Base):", this));
 
-    auto *row = new QHBoxLayout();
+    auto* row = new QHBoxLayout();
     cmbRegions = new QComboBox(this);
     ThemeManager::SetupComboBox(cmbRegions, 14);
     row->addWidget(cmbRegions, 1);
@@ -63,8 +57,7 @@ void RevertRegionDialog::InitializeUI()
     adjustSize();
 }
 
-void RevertRegionDialog::onBtnOK()
-{
+void RevertRegionDialog::onBtnOK() {
     SelectedRegion = cmbRegions->currentText();
     accept();
 }

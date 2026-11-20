@@ -1,18 +1,18 @@
 #pragma once
 
+#include "../Models/LogicModels.h"
+
+#include <QList>
+#include <QMap>
 #include <QString>
 #include <QStringList>
-#include <QMap>
-#include <QList>
-#include "../Models/LogicModels.h"
 
 namespace RALE {
 
-// Interface to abstract differences between Achievement logic (Core/Alts) 
+// Interface to abstract differences between Achievement logic (Core/Alts)
 // and Leaderboard logic (Start/Cancel/Submit/Value)
-class IAssetStrategy
-{
-public:
+class IAssetStrategy {
+  public:
     virtual ~IAssetStrategy() = default;
 
     virtual bool isLeaderboard() const = 0;
@@ -21,34 +21,32 @@ public:
     virtual QStringList GetSegmentNames() const = 0;
 
     // Parses the raw logic string into a dictionary of segment names -> condition groups
-    virtual QMap<QString, QList<AchievementConditionGroup>> ParseLogic(const QString &logic) const = 0;
+    virtual QMap<QString, QList<AchievementConditionGroup>> ParseLogic(const QString& logic) const = 0;
 
     // Rebuilds the full logic string from the segments
-    virtual QString BuildLogic(const QMap<QString, QList<AchievementConditionGroup>> &segments) const = 0;
+    virtual QString BuildLogic(const QMap<QString, QList<AchievementConditionGroup>>& segments) const = 0;
 };
 
-class AchievementStrategy : public IAssetStrategy
-{
-public:
+class AchievementStrategy : public IAssetStrategy {
+  public:
     bool isLeaderboard() const override { return false; }
 
-    QStringList GetSegmentNames() const override { return { "Core" }; }
+    QStringList GetSegmentNames() const override { return {"Core"}; }
 
-    QMap<QString, QList<AchievementConditionGroup>> ParseLogic(const QString &logic) const override;
+    QMap<QString, QList<AchievementConditionGroup>> ParseLogic(const QString& logic) const override;
 
-    QString BuildLogic(const QMap<QString, QList<AchievementConditionGroup>> &segments) const override;
+    QString BuildLogic(const QMap<QString, QList<AchievementConditionGroup>>& segments) const override;
 };
 
-class LeaderboardStrategy : public IAssetStrategy
-{
-public:
+class LeaderboardStrategy : public IAssetStrategy {
+  public:
     bool isLeaderboard() const override { return true; }
 
-    QStringList GetSegmentNames() const override { return { "Start", "Cancel", "Submit", "Value" }; }
+    QStringList GetSegmentNames() const override { return {"Start", "Cancel", "Submit", "Value"}; }
 
-    QMap<QString, QList<AchievementConditionGroup>> ParseLogic(const QString &logic) const override;
+    QMap<QString, QList<AchievementConditionGroup>> ParseLogic(const QString& logic) const override;
 
-    QString BuildLogic(const QMap<QString, QList<AchievementConditionGroup>> &segments) const override;
+    QString BuildLogic(const QMap<QString, QList<AchievementConditionGroup>>& segments) const override;
 };
 
 } // namespace RALE

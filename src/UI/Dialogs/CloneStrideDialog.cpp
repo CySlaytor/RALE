@@ -1,5 +1,7 @@
 #include "CloneStrideDialog.h"
+
 #include "../../Common/AppSettings.h"
+
 #include <QApplication>
 #include <QClipboard>
 #include <QGridLayout>
@@ -9,16 +11,13 @@
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QVBoxLayout>
+
 #include <algorithm>
 
 namespace RALE {
 
-CloneStrideDialog::CloneStrideDialog(
-    const QString &currentAddress,
-    const QString &currentNoteText,
-    QWidget *parent)
-    : QDialog(parent), m_originalNoteText(currentNoteText)
-{
+CloneStrideDialog::CloneStrideDialog(const QString& currentAddress, const QString& currentNoteText, QWidget* parent)
+    : QDialog(parent), m_originalNoteText(currentNoteText) {
     QString cleanAddr = currentAddress.trimmed();
     if (cleanAddr.startsWith("0x", Qt::CaseInsensitive))
         cleanAddr = cleanAddr.mid(2);
@@ -43,33 +42,25 @@ CloneStrideDialog::CloneStrideDialog(
 
 CloneStrideDialog::~CloneStrideDialog() = default;
 
-void CloneStrideDialog::loadPositionSettings()
-{
+void CloneStrideDialog::loadPositionSettings() {
     QPoint p;
     QSize s;
-    if (AppSettings::LoadDialogGeometry("CloneStrideDialog", p, s))
-    {
+    if (AppSettings::LoadDialogGeometry("CloneStrideDialog", p, s)) {
         move(p);
-        if (s.isValid())
-        {
+        if (s.isValid()) {
             resize(std::max(s.width(), 780), std::max(s.height(), 480));
         }
     }
 }
 
-void CloneStrideDialog::savePositionSettings()
-{
-    AppSettings::SaveDialogGeometry("CloneStrideDialog", pos(), size());
-}
+void CloneStrideDialog::savePositionSettings() { AppSettings::SaveDialogGeometry("CloneStrideDialog", pos(), size()); }
 
-void CloneStrideDialog::done(int r)
-{
+void CloneStrideDialog::done(int r) {
     savePositionSettings();
     QDialog::done(r);
 }
 
-void CloneStrideDialog::parseInitialNote(uint32_t &outStride, QString &outTemplate, QString &outFirstName)
-{
+void CloneStrideDialog::parseInitialNote(uint32_t& outStride, QString& outTemplate, QString& outFirstName) {
     outStride = 64; // Fallback default stride
     outFirstName = "";
     outTemplate = "Structure {INDEX:02}";
@@ -84,13 +75,10 @@ void CloneStrideDialog::parseInitialNote(uint32_t &outStride, QString &outTempla
     QString header = lines.first().trimmed();
 
     // Separate header line from structure body offsets
-    if (lines.size() > 1)
-    {
+    if (lines.size() > 1) {
         QStringList bodyLines = lines.mid(1);
         m_originalBody = "\r\n" + bodyLines.join("\r\n");
-    }
-    else
-    {
+    } else {
         m_originalBody = "";
     }
 
@@ -98,23 +86,16 @@ void CloneStrideDialog::parseInitialNote(uint32_t &outStride, QString &outTempla
     QString prefixTag = "";
     static const QRegularExpression leadingBracketRx(R"(^(\s*\[[^\]]+\]\s*))");
     auto bracketMatch = leadingBracketRx.match(header);
-    if (bracketMatch.hasMatch())
-    {
+    if (bracketMatch.hasMatch()) {
         prefixTag = bracketMatch.captured(1).trimmed();
 
         // Auto-detect stride if bracketed tag specifies byte size
-        static const QRegularExpression bytesRx(
-            R"(\[(?:(\d+)\s*x\s*(\d+)|(\d+))\s*bytes\])",
-            QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression bytesRx(R"(\[(?:(\d+)\s*x\s*(\d+)|(\d+))\s*bytes\])", QRegularExpression::CaseInsensitiveOption);
         auto bytesMatch = bytesRx.match(prefixTag);
-        if (bytesMatch.hasMatch())
-        {
-            if (!bytesMatch.captured(1).isEmpty() && !bytesMatch.captured(2).isEmpty())
-            {
+        if (bytesMatch.hasMatch()) {
+            if (!bytesMatch.captured(1).isEmpty() && !bytesMatch.captured(2).isEmpty()) {
                 outStride = bytesMatch.captured(1).toUInt() * bytesMatch.captured(2).toUInt();
-            }
-            else if (!bytesMatch.captured(3).isEmpty())
-            {
+            } else if (!bytesMatch.captured(3).isEmpty()) {
                 outStride = bytesMatch.captured(3).toUInt();
             }
         }
@@ -122,60 +103,47 @@ void CloneStrideDialog::parseInitialNote(uint32_t &outStride, QString &outTempla
 
     // 2. Auto-detect numbering and parenthesized names strictly outside the prefix tag
     QString titleCandidate = header;
-    if (!prefixTag.isEmpty())
-    {
+    if (!prefixTag.isEmpty()) {
         titleCandidate = titleCandidate.mid(bracketMatch.capturedLength()).trimmed();
     }
 
     // Extract custom name inside parentheses, e.g. "(Isolation)"
     static const QRegularExpression parenRx(R"(\(([^)]+)\))");
     auto parenMatch = parenRx.match(titleCandidate);
-    if (parenMatch.hasMatch())
-    {
+    if (parenMatch.hasMatch()) {
         outFirstName = parenMatch.captured(1).trimmed();
         titleCandidate.replace(parenMatch.capturedStart(), parenMatch.capturedLength(), "({NAME})");
     }
 
     // Detect sequential index e.g. "Level 01", "Level 1", "#01"
-    static const QRegularExpression numRx(
-        R"((\b(?:Level|Stage|Player|Char|Slot|Item|#)?\s*)(\d+))",
-        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression numRx(R"((\b(?:Level|Stage|Player|Char|Slot|Item|#)?\s*)(\d+))",
+                                          QRegularExpression::CaseInsensitiveOption);
     auto numMatch = numRx.match(titleCandidate);
-    if (numMatch.hasMatch())
-    {
+    if (numMatch.hasMatch()) {
         QString digits = numMatch.captured(2);
         QString token = (digits.length() >= 2) ? "{INDEX:02}" : "{INDEX}";
         titleCandidate.replace(numMatch.capturedStart(2), digits.length(), token);
-    }
-    else if (!titleCandidate.contains("{INDEX"))
-    {
+    } else if (!titleCandidate.contains("{INDEX")) {
         // If title has no number, append index token so each clone has a distinct sequential title
-        if (!titleCandidate.isEmpty())
-        {
+        if (!titleCandidate.isEmpty()) {
             titleCandidate += " {INDEX:02}";
-        }
-        else
-        {
+        } else {
             titleCandidate = "{INDEX:02}";
         }
     }
 
     // Re-attach prefix tag to the template
-    if (!prefixTag.isEmpty())
-    {
+    if (!prefixTag.isEmpty()) {
         outTemplate = prefixTag + " " + titleCandidate;
-    }
-    else
-    {
+    } else {
         outTemplate = titleCandidate;
     }
 
     m_detectedFirstName = outFirstName;
 }
 
-void CloneStrideDialog::setupLayout()
-{
-    auto *mainLayout = new QVBoxLayout(this);
+void CloneStrideDialog::setupLayout() {
+    auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(12, 12, 12, 12);
     mainLayout->setSpacing(8);
 
@@ -185,8 +153,8 @@ void CloneStrideDialog::setupLayout()
     parseInitialNote(detectedStride, detectedTemplate, detectedFirstName);
 
     // Parameters Form Group
-    auto *paramGroup = new QGroupBox("Stride Parameters && Title Pattern", this);
-    auto *formGrid = new QGridLayout(paramGroup);
+    auto* paramGroup = new QGroupBox("Stride Parameters && Title Pattern", this);
+    auto* formGrid = new QGridLayout(paramGroup);
     formGrid->setContentsMargins(10, 14, 10, 10);
     formGrid->setHorizontalSpacing(10);
     formGrid->setVerticalSpacing(6);
@@ -199,7 +167,7 @@ void CloneStrideDialog::setupLayout()
     m_baseAddressEdit->setFixedWidth(120);
     formGrid->addWidget(m_baseAddressEdit, 0, 1);
 
-    auto *strideLayout = new QHBoxLayout();
+    auto* strideLayout = new QHBoxLayout();
     strideLayout->setSpacing(4);
     m_strideSpin = new QSpinBox(this);
     m_strideSpin->setRange(1, 0x100000);
@@ -222,7 +190,7 @@ void CloneStrideDialog::setupLayout()
     m_countSpin->setFixedWidth(120);
     formGrid->addWidget(m_countSpin, 1, 1);
 
-    auto *tokensHelpLabel = new QLabel("Tokens: <b>{INDEX}</b>, <b>{INDEX:02}</b>, <b>{OFFSET}</b>, <b>{NAME}</b>", this);
+    auto* tokensHelpLabel = new QLabel("Tokens: <b>{INDEX}</b>, <b>{INDEX:02}</b>, <b>{OFFSET}</b>, <b>{NAME}</b>", this);
     tokensHelpLabel->setObjectName("subTextDescLabel");
     formGrid->addWidget(tokensHelpLabel, 1, 2, 1, 2);
 
@@ -235,11 +203,11 @@ void CloneStrideDialog::setupLayout()
     mainLayout->addWidget(paramGroup);
 
     // Preview Table Section
-    auto *tableHeaderLayout = new QHBoxLayout();
-    auto *tableDescLayout = new QVBoxLayout();
+    auto* tableHeaderLayout = new QHBoxLayout();
+    auto* tableDescLayout = new QVBoxLayout();
     tableDescLayout->setSpacing(2);
     tableDescLayout->addWidget(new QLabel("<b>Generated Code Notes (Excel-Style In-Cell Editing):</b>", this));
-    auto *hintLabel = new QLabel("Double-click any cell to customize names/titles. Staged in memory until saved.", this);
+    auto* hintLabel = new QLabel("Double-click any cell to customize names/titles. Staged in memory until saved.", this);
     hintLabel->setObjectName("subTextDescLabel");
     tableDescLayout->addWidget(hintLabel);
     tableHeaderLayout->addLayout(tableDescLayout);
@@ -256,7 +224,7 @@ void CloneStrideDialog::setupLayout()
     m_previewTable = new QTableWidget(this);
     m_previewTable->setColumnCount(5);
     m_previewTable->setHorizontalHeaderLabels(
-        { "#", "Address", "Stride", "Level / Name (Optional)", "Generated Note Title (Editable Preview)" });
+        {"#", "Address", "Stride", "Level / Name (Optional)", "Generated Note Title (Editable Preview)"});
     m_previewTable->setAlternatingRowColors(true);
     m_previewTable->verticalHeader()->setVisible(false);
     m_previewTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -280,7 +248,7 @@ void CloneStrideDialog::setupLayout()
     mainLayout->addWidget(m_previewTable, 1);
 
     // Bottom Action Row
-    auto *bottomLayout = new QHBoxLayout();
+    auto* bottomLayout = new QHBoxLayout();
     bottomLayout->setContentsMargins(0, 6, 0, 2);
 
     m_generateBtn = new QPushButton("Generate Notes", this);
@@ -312,8 +280,7 @@ void CloneStrideDialog::setupLayout()
     connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
 }
 
-int64_t CloneStrideDialog::getBaseAddress() const
-{
+int64_t CloneStrideDialog::getBaseAddress() const {
     QString clean = m_baseAddressEdit ? m_baseAddressEdit->text().trimmed().toUpper() : "";
     if (clean.startsWith("0X"))
         clean = clean.mid(2);
@@ -326,8 +293,7 @@ int64_t CloneStrideDialog::getBaseAddress() const
     return static_cast<int64_t>(parsed);
 }
 
-QString CloneStrideDialog::formatTitle(int index, uint32_t offsetBytes, const QString &customName) const
-{
+QString CloneStrideDialog::formatTitle(int index, uint32_t offsetBytes, const QString& customName) const {
     QString tmpl = m_templateEdit ? m_templateEdit->text() : "Structure {INDEX:02}";
 
     // Replace index placeholders
@@ -344,19 +310,13 @@ QString CloneStrideDialog::formatTitle(int index, uint32_t offsetBytes, const QS
     tmpl.replace("{OFFSET}", offHex);
 
     // Replace name placeholder
-    if (tmpl.contains("({NAME})"))
-    {
-        if (customName.trimmed().isEmpty())
-        {
+    if (tmpl.contains("({NAME})")) {
+        if (customName.trimmed().isEmpty()) {
             tmpl.replace("({NAME})", "");
-        }
-        else
-        {
+        } else {
             tmpl.replace("({NAME})", "(" + customName.trimmed() + ")");
         }
-    }
-    else
-    {
+    } else {
         tmpl.replace("{NAME}", customName.trimmed());
     }
 
@@ -364,8 +324,7 @@ QString CloneStrideDialog::formatTitle(int index, uint32_t offsetBytes, const QS
     return tmpl.simplified();
 }
 
-void CloneStrideDialog::onParametersChanged()
-{
+void CloneStrideDialog::onParametersChanged() {
     if (m_isUpdatingTable)
         return;
 
@@ -375,8 +334,7 @@ void CloneStrideDialog::onParametersChanged()
     rebuildTableRows();
 }
 
-void CloneStrideDialog::rebuildTableRows()
-{
+void CloneStrideDialog::rebuildTableRows() {
     m_isUpdatingTable = true;
 
     int64_t baseAddr = getBaseAddress();
@@ -385,16 +343,14 @@ void CloneStrideDialog::rebuildTableRows()
 
     // Preserve existing names previously typed into the table
     QList<QString> existingNames;
-    for (int i = 0; i < m_previewTable->rowCount(); ++i)
-    {
-        auto *item = m_previewTable->item(i, 3);
+    for (int i = 0; i < m_previewTable->rowCount(); ++i) {
+        auto* item = m_previewTable->item(i, 3);
         existingNames.append(item ? item->text() : "");
     }
 
     m_previewTable->setRowCount(count);
 
-    for (int i = 0; i < count; ++i)
-    {
+    for (int i = 0; i < count; ++i) {
         int64_t rowAddr = baseAddr + (static_cast<int64_t>(i) * stride);
         uint32_t offBytes = static_cast<uint32_t>(i) * stride;
 
@@ -402,48 +358,44 @@ void CloneStrideDialog::rebuildTableRows()
         QString offStr = (i == 0) ? "+0x00" : QString("+0x%1").arg(QString("%1").arg(offBytes, 2, 16, QChar('0')).toUpper());
 
         // Column 0: Index #
-        auto *idxItem = new QTableWidgetItem(QString::number(i + 1));
+        auto* idxItem = new QTableWidgetItem(QString::number(i + 1));
         idxItem->setFlags(idxItem->flags() & ~Qt::ItemIsEditable);
         idxItem->setTextAlignment(Qt::AlignCenter);
         m_previewTable->setItem(i, 0, idxItem);
 
         // Column 1: Address
-        auto *addrItem = new QTableWidgetItem("0x" + addrStr);
+        auto* addrItem = new QTableWidgetItem("0x" + addrStr);
         addrItem->setFlags(addrItem->flags() & ~Qt::ItemIsEditable);
         addrItem->setData(Qt::UserRole, QVariant::fromValue(static_cast<qlonglong>(rowAddr)));
         m_previewTable->setItem(i, 1, addrItem);
 
         // Column 2: Offset
-        auto *offItem = new QTableWidgetItem(offStr);
+        auto* offItem = new QTableWidgetItem(offStr);
         offItem->setFlags(offItem->flags() & ~Qt::ItemIsEditable);
         offItem->setTextAlignment(Qt::AlignCenter);
         m_previewTable->setItem(i, 2, offItem);
 
         // Column 3: Custom Name
         QString name = "";
-        if (i < existingNames.size() && !existingNames[i].isEmpty())
-        {
+        if (i < existingNames.size() && !existingNames[i].isEmpty()) {
             name = existingNames[i];
-        }
-        else if (i == 0 && !m_detectedFirstName.isEmpty())
-        {
+        } else if (i == 0 && !m_detectedFirstName.isEmpty()) {
             name = m_detectedFirstName;
         }
 
-        auto *nameItem = new QTableWidgetItem(name);
+        auto* nameItem = new QTableWidgetItem(name);
         m_previewTable->setItem(i, 3, nameItem);
 
         // Column 4: Full Title Preview
         QString fullTitle = formatTitle(i, offBytes, name);
-        auto *titleItem = new QTableWidgetItem(fullTitle);
+        auto* titleItem = new QTableWidgetItem(fullTitle);
         m_previewTable->setItem(i, 4, titleItem);
     }
 
     m_isUpdatingTable = false;
 }
 
-void CloneStrideDialog::onTableItemChanged(QTableWidgetItem *item)
-{
+void CloneStrideDialog::onTableItemChanged(QTableWidgetItem* item) {
     if (m_isUpdatingTable || !item)
         return;
 
@@ -451,8 +403,7 @@ void CloneStrideDialog::onTableItemChanged(QTableWidgetItem *item)
     int col = item->column();
 
     // When custom name (Column 3) is edited, automatically reformat the full title preview (Column 4)
-    if (col == 3)
-    {
+    if (col == 3) {
         m_isUpdatingTable = true;
         uint32_t stride = static_cast<uint32_t>(m_strideSpin->value());
         uint32_t offBytes = static_cast<uint32_t>(row) * stride;
@@ -462,8 +413,7 @@ void CloneStrideDialog::onTableItemChanged(QTableWidgetItem *item)
     }
 }
 
-void CloneStrideDialog::onPasteNamesFromClipboard()
-{
+void CloneStrideDialog::onPasteNamesFromClipboard() {
     QString text = QApplication::clipboard()->text();
     if (text.trimmed().isEmpty())
         return;
@@ -478,8 +428,7 @@ void CloneStrideDialog::onPasteNamesFromClipboard()
     uint32_t stride = static_cast<uint32_t>(m_strideSpin->value());
     int applyCount = std::min(static_cast<int>(lines.size()), rowCount);
 
-    for (int i = 0; i < applyCount; ++i)
-    {
+    for (int i = 0; i < applyCount; ++i) {
         QString name = lines[i].trimmed();
         m_previewTable->setItem(i, 3, new QTableWidgetItem(name));
 
@@ -491,16 +440,14 @@ void CloneStrideDialog::onPasteNamesFromClipboard()
     m_isUpdatingTable = false;
 }
 
-void CloneStrideDialog::onGenerateClicked()
-{
+void CloneStrideDialog::onGenerateClicked() {
     m_generatedNotes.clear();
 
     int padLen = (m_addressHexLen > 0) ? m_addressHexLen : 8;
 
-    for (int i = 0; i < m_previewTable->rowCount(); ++i)
-    {
-        auto *addrItem = m_previewTable->item(i, 1);
-        auto *titleItem = m_previewTable->item(i, 4);
+    for (int i = 0; i < m_previewTable->rowCount(); ++i) {
+        auto* addrItem = m_previewTable->item(i, 1);
+        auto* titleItem = m_previewTable->item(i, 4);
 
         if (!addrItem || !titleItem)
             continue;
@@ -517,8 +464,7 @@ void CloneStrideDialog::onGenerateClicked()
         m_generatedNotes.append(note);
     }
 
-    if (m_generatedNotes.isEmpty())
-    {
+    if (m_generatedNotes.isEmpty()) {
         QMessageBox::warning(this, "No Notes", "No code notes were generated.");
         return;
     }

@@ -1,15 +1,15 @@
-#include <QApplication>
-#include <QFileInfo>
-#include <QIcon>
-#include <QStyleFactory>
-#include <QPalette>
-#include <QListView>
 #include "Common/AppSettings.h"
 #include "UI/MainWindow.h"
 #include "UI/Styles/ThemeManager.h"
 
-int main(int argc, char *argv[])
-{
+#include <QApplication>
+#include <QFileInfo>
+#include <QIcon>
+#include <QListView>
+#include <QPalette>
+#include <QStyleFactory>
+
+int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName("RALE");
     app.setOrganizationName("RetroAchievements");
@@ -58,9 +58,8 @@ int main(int argc, char *argv[])
     app.setPalette(darkPalette);
 
     // Apply user selected theme from settings (defaults to Light)
-    auto activeTheme = (RALE::AppSettings::Current.Theme.compare("Dark", Qt::CaseInsensitive) == 0)
-        ? RALE::ThemeManager::Theme::Dark
-        : RALE::ThemeManager::Theme::Light;
+    auto activeTheme = (RALE::AppSettings::Current.Theme.compare("Dark", Qt::CaseInsensitive) == 0) ? RALE::ThemeManager::Theme::Dark
+                                                                                                    : RALE::ThemeManager::Theme::Light;
 
     RALE::ThemeManager::ApplyTheme(activeTheme);
 
@@ -70,10 +69,11 @@ int main(int argc, char *argv[])
     // Use QCoreApplication::arguments to ensure Unicode command-line paths are parsed reliably.
     // Ignore Qt/platform switches and only open an argument that is an existing file.
     const QStringList args = QCoreApplication::arguments();
-    for (int i = 1; i < args.size(); ++i)
-    {
-        if (args.at(i).startsWith('-')) continue;
-        if (!QFileInfo::exists(args.at(i))) continue;
+    for (int i = 1; i < args.size(); ++i) {
+        if (args.at(i).startsWith('-'))
+            continue;
+        if (!QFileInfo::exists(args.at(i)))
+            continue;
         mainWindow.LoadFiles(args.at(i));
         break;
     }

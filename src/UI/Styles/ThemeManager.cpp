@@ -1,17 +1,18 @@
 #include "ThemeManager.h"
-#include <QFile>
+
+#include <QAbstractItemView>
+#include <QCursor>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
-#include <QTextStream>
-#include <QPalette>
-#include <QStyleFactory>
+#include <QListView>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPalette>
+#include <QStyleFactory>
 #include <QStyleOptionButton>
 #include <QStyleOptionViewItem>
-#include <QAbstractItemView>
-#include <QListView>
-#include <QCursor>
+#include <QTextStream>
 #include <QUrl>
 #include <QtSvg/QSvgRenderer>
 
@@ -21,18 +22,14 @@ ThemeManager::Theme ThemeManager::_currentTheme = ThemeManager::Theme::Light;
 QHash<QString, QIcon> ThemeManager::_iconCache;
 
 // Event filter to prevent scrollbar layout thrashing during opening animation
-class ComboBoxScrollbarFilter : public QObject
-{
-public:
-    explicit ComboBoxScrollbarFilter(QComboBox *cb) : QObject(cb), _cb(cb) {}
+class ComboBoxScrollbarFilter : public QObject {
+  public:
+    explicit ComboBoxScrollbarFilter(QComboBox* cb) : QObject(cb), _cb(cb) {}
 
-protected:
-    bool eventFilter(QObject *obj, QEvent *event) override
-    {
-        if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::KeyPress)
-        {
-            if (_cb != nullptr && _cb->view() != nullptr)
-            {
+  protected:
+    bool eventFilter(QObject* obj, QEvent* event) override {
+        if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::KeyPress) {
+            if (_cb != nullptr && _cb->view() != nullptr) {
                 bool needsScroll = _cb->count() > _cb->maxVisibleItems();
                 _cb->view()->setVerticalScrollBarPolicy(needsScroll ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
             }
@@ -40,17 +37,13 @@ protected:
         return QObject::eventFilter(obj, event);
     }
 
-private:
-    QComboBox *_cb = nullptr;
+  private:
+    QComboBox* _cb = nullptr;
 };
 
-RaComboBoxDelegate::RaComboBoxDelegate(QObject *parent)
-    : QStyledItemDelegate(parent)
-{
-}
+RaComboBoxDelegate::RaComboBoxDelegate(QObject* parent) : QStyledItemDelegate(parent) {}
 
-void RaComboBoxDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
-{
+void RaComboBoxDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const {
     QStyleOptionViewItem opt = option;
     initStyleOption(&opt, index);
 
@@ -61,36 +54,27 @@ void RaComboBoxDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
 
     // Determine single active highlight cleanly without multi-item conflict
     bool isHighlighted = false;
-    const auto *view = qobject_cast<const QAbstractItemView *>(opt.widget);
-    if (view != nullptr && view->viewport() != nullptr)
-    {
+    const auto* view = qobject_cast<const QAbstractItemView*>(opt.widget);
+    if (view != nullptr && view->viewport() != nullptr) {
         QPoint pos = view->viewport()->mapFromGlobal(QCursor::pos());
-        if (view->viewport()->rect().contains(pos))
-        {
+        if (view->viewport()->rect().contains(pos)) {
             QModelIndex hoveredIndex = view->indexAt(pos);
             int activeRow = hoveredIndex.isValid() ? hoveredIndex.row() : view->currentIndex().row();
             isHighlighted = (index.row() == activeRow);
-        }
-        else
-        {
+        } else {
             isHighlighted = (index.row() == view->currentIndex().row());
         }
-    }
-    else
-    {
+    } else {
         isHighlighted = ((opt.state & QStyle::State_Selected) != 0);
     }
 
     painter->save();
-    if (isHighlighted)
-    {
+    if (isHighlighted) {
         // Windows Forms highlight blue #0078D7 (#007acc in dark mode)
         QColor selBg = isDark ? QColor(0, 120, 215) : QColor(0, 120, 215);
         painter->fillRect(opt.rect, selBg);
         painter->setPen(Qt::white);
-    }
-    else
-    {
+    } else {
         QColor normBg = isDark ? QColor(32, 32, 34) : QColor(255, 255, 255);
         QColor normFg = isDark ? QColor(240, 240, 240) : QColor(0, 0, 0);
         painter->fillRect(opt.rect, normBg);
@@ -103,16 +87,15 @@ void RaComboBoxDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     painter->restore();
 }
 
-QSize RaComboBoxDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
-{
+QSize RaComboBoxDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const {
     QSize s = QStyledItemDelegate::sizeHint(option, index);
     s.setHeight(17); // 17px per item matches Windows Forms combobox dropdown line height
     return s;
 }
 
-void ThemeManager::SetupComboBox(QComboBox *cb, int maxVisibleItems)
-{
-    if (cb == nullptr) return;
+void ThemeManager::SetupComboBox(QComboBox* cb, int maxVisibleItems) {
+    if (cb == nullptr)
+        return;
     GlobalComboBoxConfigurator::configureComboBox(cb);
     if (maxVisibleItems > 0)
         cb->setMaxVisibleItems(maxVisibleItems);
@@ -120,13 +103,9 @@ void ThemeManager::SetupComboBox(QComboBox *cb, int maxVisibleItems)
         cb->setMaxVisibleItems(14);
 }
 
-void ThemeManager::clearCache()
-{
-    _iconCache.clear();
-}
+void ThemeManager::clearCache() { _iconCache.clear(); }
 
-QIcon ThemeManager::getIcon(const QString &resourcePath, Theme theme)
-{
+QIcon ThemeManager::getIcon(const QString& resourcePath, Theme theme) {
     QString themeName = (theme == Theme::Dark) ? "Dark" : "Light";
     QString cacheKey = QString("%1_%2").arg(resourcePath, themeName);
     if (_iconCache.contains(cacheKey)) {
@@ -184,11 +163,9 @@ QIcon ThemeManager::getIcon(const QString &resourcePath, Theme theme)
     return icon;
 }
 
-QRect RaStyle::subElementRect(SubElement element, const QStyleOption *option, const QWidget *widget) const
-{
+QRect RaStyle::subElementRect(SubElement element, const QStyleOption* option, const QWidget* widget) const {
     // Enforce strict 13x13 indicator geometry across all item views (TreeWidget, ListWidget, TableWidget)
-    if (element == SE_ItemViewItemCheckIndicator || element == SE_CheckBoxIndicator)
-    {
+    if (element == SE_ItemViewItemCheckIndicator || element == SE_CheckBoxIndicator) {
         QRect r = QProxyStyle::subElementRect(element, option, widget);
         int size = 13;
         int x = r.x() + (r.width() - size) / 2;
@@ -198,13 +175,10 @@ QRect RaStyle::subElementRect(SubElement element, const QStyleOption *option, co
     return QProxyStyle::subElementRect(element, option, widget);
 }
 
-void RaStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *option, QPainter *painter, const QWidget *widget) const
-{
-    if (element == PE_IndicatorCheckBox || element == PE_IndicatorItemViewItemCheck)
-    {
+void RaStyle::drawPrimitive(PrimitiveElement element, const QStyleOption* option, QPainter* painter, const QWidget* widget) const {
+    if (element == PE_IndicatorCheckBox || element == PE_IndicatorItemViewItemCheck) {
         // Support all checkbox indicators uniformly matching Screenshot 2 exactly
-        if (option != nullptr)
-        {
+        if (option != nullptr) {
             painter->save();
             painter->setRenderHint(QPainter::Antialiasing, true);
 
@@ -218,12 +192,9 @@ void RaStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *option
 
             // Correctly determine checked status whether delivered via QStyleOptionViewItem or QStyleOptionButton
             bool isChecked = false;
-            if (const auto *viewOpt = qstyleoption_cast<const QStyleOptionViewItem *>(option))
-            {
+            if (const auto* viewOpt = qstyleoption_cast<const QStyleOptionViewItem*>(option)) {
                 isChecked = (viewOpt->checkState == Qt::Checked) || ((viewOpt->state & State_On) != 0);
-            }
-            else
-            {
+            } else {
                 isChecked = ((option->state & State_On) != 0);
             }
 
@@ -232,11 +203,10 @@ void RaStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *option
             // Query ThemeManager directly to ensure light theme always renders clean white regardless of parent palette overrides
             bool isDark = (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark);
 
-            if (isChecked)
-            {
+            if (isChecked) {
                 // Solid blue box with crisp white checkmark matching Screenshot 6
                 QColor bg = !isEnabled ? (isDark ? QColor(60, 60, 65) : QColor(180, 180, 185))
-                            : (isHover ? QColor(16, 110, 190) : QColor(0, 120, 215));
+                                       : (isHover ? QColor(16, 110, 190) : QColor(0, 120, 215));
                 painter->setBrush(bg);
                 painter->setPen(bg);
                 painter->drawRoundedRect(boxRect, 2, 2);
@@ -251,14 +221,12 @@ void RaStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *option
                 path.lineTo(x + 5.0, y + 9.5);
                 path.lineTo(x + 10.5, y + 3.0);
                 painter->drawPath(path);
-            }
-            else
-            {
+            } else {
                 // Unchecked: clean white box with 1px border
                 QColor bg = isDark ? QColor(32, 32, 34) : (isHover ? QColor(248, 248, 248) : QColor(255, 255, 255));
                 QColor border = !isEnabled ? (isDark ? QColor(60, 60, 65) : QColor(190, 190, 190))
-                                : (isHover ? (isDark ? QColor(0, 120, 215) : QColor(0, 120, 215))
-                                           : (isDark ? QColor(63, 63, 70) : QColor(112, 112, 112)));
+                                           : (isHover ? (isDark ? QColor(0, 120, 215) : QColor(0, 120, 215))
+                                                      : (isDark ? QColor(63, 63, 70) : QColor(112, 112, 112)));
                 painter->setBrush(bg);
                 painter->setPen(border);
                 painter->drawRoundedRect(boxRect, 2, 2);
@@ -267,12 +235,9 @@ void RaStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *option
             painter->restore();
             return;
         }
-    }
-    else if (element == PE_IndicatorBranch)
-    {
+    } else if (element == PE_IndicatorBranch) {
         // 1:1 reproduction of Windows Explorer / WinForms TreeView classic dotted lines and [+] / [-] boxes
-        if (option != nullptr)
-        {
+        if (option != nullptr) {
             painter->save();
             painter->setRenderHint(QPainter::Antialiasing, false);
 
@@ -291,24 +256,19 @@ void RaStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *option
             bool connectsToItem = (option->state & State_Item);
 
             // Vertical connecting line
-            if (hasSiblings)
-            {
+            if (hasSiblings) {
                 painter->drawLine(midX, r.top(), midX, r.bottom());
-            }
-            else if (connectsToItem || hasChildren)
-            {
+            } else if (connectsToItem || hasChildren) {
                 painter->drawLine(midX, r.top(), midX, midY);
             }
 
             // Horizontal branch line connecting to item
-            if (connectsToItem || hasChildren)
-            {
+            if (connectsToItem || hasChildren) {
                 painter->drawLine(midX, midY, r.right(), midY);
             }
 
             // Classic [+] / [-] 9x9 box button for expandable nodes
-            if (hasChildren)
-            {
+            if (hasChildren) {
                 QRect boxRect(midX - 4, midY - 4, 8, 8);
                 QColor boxBg = isDark ? QColor(36, 36, 40) : QColor(255, 255, 255);
                 QColor boxBorder = isDark ? QColor(140, 140, 145) : QColor(112, 112, 112);
@@ -322,8 +282,7 @@ void RaStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *option
                 painter->drawLine(midX - 2, midY, midX + 2, midY);
 
                 // Plus line (vertical) if collapsed
-                if (!isOpen)
-                {
+                if (!isOpen) {
                     painter->drawLine(midX, midY - 2, midX, midY + 2);
                 }
             }
@@ -336,16 +295,14 @@ void RaStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *option
     QProxyStyle::drawPrimitive(element, option, painter, widget);
 }
 
-int RaStyle::styleHint(StyleHint hint, const QStyleOption *option, const QWidget *widget, QStyleHintReturn *returnData) const
-{
+int RaStyle::styleHint(StyleHint hint, const QStyleOption* option, const QWidget* widget, QStyleHintReturn* returnData) const {
     // Always Windows drop-down list anchored below combobox, never popup menu centered over combobox
     if (hint == SH_ComboBox_Popup)
         return 0;
     return ClassicDropdownStyle::styleHint(hint, option, widget, returnData);
 }
 
-void ThemeManager::ApplyTheme(Theme theme)
-{
+void ThemeManager::ApplyTheme(Theme theme) {
     _currentTheme = theme;
     clearCache();
 
@@ -355,27 +312,20 @@ void ThemeManager::ApplyTheme(Theme theme)
     // Apply RaStyle over Fusion base engine
     qApp->setStyle(new RaStyle(QStyleFactory::create("Fusion")));
 
-    if (theme == Theme::Dark)
-    {
+    if (theme == Theme::Dark) {
         ApplyDarkPalette(qApp);
         QString qss = LoadStyleSheet(":/styles/dark_theme.qss");
         qApp->setStyleSheet(qss);
-    }
-    else
-    {
+    } else {
         ApplyLightPalette(qApp);
         QString qss = LoadStyleSheet(":/styles/light_theme.qss");
         qApp->setStyleSheet(qss);
     }
 }
 
-ThemeManager::Theme ThemeManager::CurrentTheme()
-{
-    return _currentTheme;
-}
+ThemeManager::Theme ThemeManager::CurrentTheme() { return _currentTheme; }
 
-void ThemeManager::ApplyDarkPalette(QApplication *app)
-{
+void ThemeManager::ApplyDarkPalette(QApplication* app) {
     QPalette darkPalette;
     darkPalette.setColor(QPalette::Window, QColor(32, 32, 32));
     darkPalette.setColor(QPalette::WindowText, Qt::white);
@@ -396,8 +346,7 @@ void ThemeManager::ApplyDarkPalette(QApplication *app)
     app->setPalette(darkPalette);
 }
 
-void ThemeManager::ApplyLightPalette(QApplication *app)
-{
+void ThemeManager::ApplyLightPalette(QApplication* app) {
     QPalette lightPalette;
     lightPalette.setColor(QPalette::Window, QColor(240, 240, 240));
     lightPalette.setColor(QPalette::WindowText, QColor(0, 0, 0));
@@ -418,25 +367,20 @@ void ThemeManager::ApplyLightPalette(QApplication *app)
     app->setPalette(lightPalette);
 }
 
-QString ThemeManager::LoadStyleSheet(const QString &resourcePath)
-{
+QString ThemeManager::LoadStyleSheet(const QString& resourcePath) {
     // Search physical disk candidates first so stylesheet edits take effect immediately
     QString fileName = QFileInfo(resourcePath).fileName();
     QString appDir = QCoreApplication::applicationDirPath();
-    QStringList candidates = {
-        QDir(appDir).filePath("src/UI/Styles/" + fileName),
-        QDir(appDir).filePath("../src/UI/Styles/" + fileName),
-        QDir(appDir).filePath("../../src/UI/Styles/" + fileName),
-        QDir(appDir).filePath("../../../src/UI/Styles/" + fileName),
-        QDir(appDir).filePath("styles/" + fileName),
-        QDir(appDir).filePath(fileName)
-    };
+    QStringList candidates = {QDir(appDir).filePath("src/UI/Styles/" + fileName),
+                              QDir(appDir).filePath("../src/UI/Styles/" + fileName),
+                              QDir(appDir).filePath("../../src/UI/Styles/" + fileName),
+                              QDir(appDir).filePath("../../../src/UI/Styles/" + fileName),
+                              QDir(appDir).filePath("styles/" + fileName),
+                              QDir(appDir).filePath(fileName)};
 
-    for (const auto &candidate : candidates)
-    {
+    for (const auto& candidate : candidates) {
         QFile diskFile(candidate);
-        if (diskFile.open(QIODevice::ReadOnly | QIODevice::Text))
-        {
+        if (diskFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QTextStream in(&diskFile);
             return in.readAll();
         }
@@ -444,8 +388,7 @@ QString ThemeManager::LoadStyleSheet(const QString &resourcePath)
 
     // Fallback: compiled Qt resource
     QFile file(resourcePath);
-    if (file.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream in(&file);
         return in.readAll();
     }

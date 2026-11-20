@@ -1,43 +1,35 @@
 #include "ConditionHeaderView.h"
+
 #include "../Models/ConditionTableModel.h"
-#include <QPainter>
+
 #include <QPaintEvent>
+#include <QPainter>
 #include <QStyleOptionHeader>
 
 namespace RALE {
 
-ConditionHeaderView::ConditionHeaderView(Qt::Orientation orientation, QWidget *parent)
-    : QHeaderView(orientation, parent)
-{
+ConditionHeaderView::ConditionHeaderView(Qt::Orientation orientation, QWidget* parent) : QHeaderView(orientation, parent) {
     setDefaultSectionSize(26);
 }
 
-void ConditionHeaderView::setConditionModel(ConditionTableModel *model)
-{
-    _conditionModel = model;
-}
+void ConditionHeaderView::setConditionModel(ConditionTableModel* model) { _conditionModel = model; }
 
-void ConditionHeaderView::setTableView(QTableView *view)
-{
-    _tableView = view;
-}
+void ConditionHeaderView::setTableView(QTableView* view) { _tableView = view; }
 
-void ConditionHeaderView::paintEvent(QPaintEvent *event)
-{
+void ConditionHeaderView::paintEvent(QPaintEvent* event) {
     QHeaderView::paintEvent(event);
 
-    if (_conditionModel == nullptr || _tableView == nullptr) return;
+    if (_conditionModel == nullptr || _tableView == nullptr)
+        return;
 
     int totalRows = _conditionModel->rowCount();
     int lastY = 0;
-    if (totalRows > 0)
-    {
+    if (totalRows > 0) {
         lastY = sectionViewportPosition(totalRows - 1) + sectionSize(totalRows - 1);
     }
 
     // Blend the empty space below the last row into the table workspace background
-    if (lastY < viewport()->height())
-    {
+    if (lastY < viewport()->height()) {
         QPainter painter(viewport());
         bool isDark = (palette().window().color().red() < 128);
         QColor workspaceColor = isDark ? QColor(32, 32, 34) : QColor(140, 140, 140);
@@ -45,12 +37,10 @@ void ConditionHeaderView::paintEvent(QPaintEvent *event)
     }
 }
 
-void ConditionHeaderView::paintSection(QPainter *painter, const QRect &rect, int logicalIndex) const
-{
+void ConditionHeaderView::paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const {
     // Check if this row is the currently active/focused row from the actual TableView
     bool isCurrentRow = false;
-    if (_tableView != nullptr && _tableView->selectionModel() != nullptr)
-    {
+    if (_tableView != nullptr && _tableView->selectionModel() != nullptr) {
         isCurrentRow = (_tableView->selectionModel()->currentIndex().row() == logicalIndex);
     }
 
@@ -59,12 +49,9 @@ void ConditionHeaderView::paintSection(QPainter *painter, const QRect &rect, int
 
     // Active row header highlights with soft blue (#cce4f7) just like WinForms DataGridView; inactive rows are neutral #f0f0f0
     QColor sectionBg;
-    if (isDark)
-    {
+    if (isDark) {
         sectionBg = isCurrentRow ? QColor(45, 45, 48) : QColor(32, 32, 34);
-    }
-    else
-    {
+    } else {
         sectionBg = isCurrentRow ? QColor(204, 228, 247) : QColor(240, 240, 240);
     }
 
@@ -80,12 +67,12 @@ void ConditionHeaderView::paintSection(QPainter *painter, const QRect &rect, int
     if (_conditionModel == nullptr || logicalIndex < 0 || logicalIndex >= _conditionModel->rowCount())
         return;
 
-    const auto *cond = _conditionModel->GetConditionAtRow(logicalIndex);
-    if (cond == nullptr) return;
+    const auto* cond = _conditionModel->GetConditionAtRow(logicalIndex);
+    if (cond == nullptr)
+        return;
 
     // Draw active row indicator triangle (►) matching Windows Forms DataGridView exactly
-    if (isCurrentRow)
-    {
+    if (isCurrentRow) {
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
         QColor arrowColor = isDark ? QColor(240, 240, 240) : QColor(20, 20, 20);
@@ -95,9 +82,7 @@ void ConditionHeaderView::paintSection(QPainter *painter, const QRect &rect, int
         int midY = rect.top() + (rect.height() / 2);
         int arrowLeft = rect.left() + 4;
         QPolygon arrow;
-        arrow << QPoint(arrowLeft, midY - 4)
-              << QPoint(arrowLeft + 5, midY)
-              << QPoint(arrowLeft, midY + 4);
+        arrow << QPoint(arrowLeft, midY - 4) << QPoint(arrowLeft + 5, midY) << QPoint(arrowLeft, midY + 4);
         painter->drawPolygon(arrow);
         painter->restore();
     }
@@ -106,11 +91,9 @@ void ConditionHeaderView::paintSection(QPainter *painter, const QRect &rect, int
     std::optional<QColor> upColor = std::nullopt;
     std::optional<QColor> downColor = std::nullopt;
 
-    if (logicalIndex > 0)
-    {
-        const auto *prevCond = _conditionModel->GetConditionAtRow(logicalIndex - 1);
-        if (prevCond != nullptr)
-        {
+    if (logicalIndex > 0) {
+        const auto* prevCond = _conditionModel->GetConditionAtRow(logicalIndex - 1);
+        if (prevCond != nullptr) {
             upColor = GetChainColor(prevCond->Flag);
         }
     }
@@ -118,8 +101,7 @@ void ConditionHeaderView::paintSection(QPainter *painter, const QRect &rect, int
     downColor = GetChainColor(cond->Flag);
 
     // Draw continuous 3px vertical grouping lines centered with breathing room from arrow
-    if (upColor.has_value() || downColor.has_value())
-    {
+    if (upColor.has_value() || downColor.has_value()) {
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, false);
 
@@ -133,16 +115,14 @@ void ConditionHeaderView::paintSection(QPainter *painter, const QRect &rect, int
         pen.setCapStyle(Qt::FlatCap);
 
         // Top Half (Connection from previous row)
-        if (upColor.has_value())
-        {
+        if (upColor.has_value()) {
             pen.setColor(upColor.value());
             painter->setPen(pen);
             painter->drawLine(x, yTop, x, yMid);
         }
 
         // Bottom Half (Connection to next row)
-        if (downColor.has_value())
-        {
+        if (downColor.has_value()) {
             pen.setColor(downColor.value());
             painter->setPen(pen);
             painter->drawLine(x, yMid, x, yBottom);
@@ -152,8 +132,7 @@ void ConditionHeaderView::paintSection(QPainter *painter, const QRect &rect, int
     }
 }
 
-std::optional<QColor> ConditionHeaderView::GetChainColor(const QString &flag) const
-{
+std::optional<QColor> ConditionHeaderView::GetChainColor(const QString& flag) const {
     if (flag == "Add Address")
         return QColor(255, 140, 0); // Orange
     else if (flag == "Add Source" || flag == "Sub Source")

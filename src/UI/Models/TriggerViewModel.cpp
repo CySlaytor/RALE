@@ -3,24 +3,17 @@
 namespace RALE {
 
 // Constructor Injection
-TriggerViewModel::TriggerViewModel(ILogicValidator &validator, ILogicGenerator &generator, QObject *parent)
-    : QObject(parent), _validator(validator), _generator(generator)
-{
+TriggerViewModel::TriggerViewModel(ILogicValidator& validator, ILogicGenerator& generator, QObject* parent)
+    : QObject(parent), _validator(validator), _generator(generator) {
     // Default strategy
     AssetStrategy = std::make_shared<AchievementStrategy>();
 
-    _history.HistoryChanged = [this]() {
-        emit HistoryChanged();
-    };
+    _history.HistoryChanged = [this]() { emit HistoryChanged(); };
 }
 
-QList<AchievementConditionGroup>& TriggerViewModel::GetActiveGroups()
-{
-    return _allSegments[ActiveSegmentName];
-}
+QList<AchievementConditionGroup>& TriggerViewModel::GetActiveGroups() { return _allSegments[ActiveSegmentName]; }
 
-const QList<AchievementConditionGroup>& TriggerViewModel::GetActiveGroups() const
-{
+const QList<AchievementConditionGroup>& TriggerViewModel::GetActiveGroups() const {
     auto it = _allSegments.constFind(ActiveSegmentName);
     if (it != _allSegments.constEnd())
         return it.value();
@@ -28,8 +21,7 @@ const QList<AchievementConditionGroup>& TriggerViewModel::GetActiveGroups() cons
     return emptyList;
 }
 
-void TriggerViewModel::LoadAsset(std::shared_ptr<IAssetItem> asset)
-{
+void TriggerViewModel::LoadAsset(std::shared_ptr<IAssetItem> asset) {
     BoundAsset = asset;
     _history.Clear();
     GeneratorRules.clear();
@@ -50,37 +42,31 @@ void TriggerViewModel::LoadAsset(std::shared_ptr<IAssetItem> asset)
     emit SegmentsChanged();
 }
 
-void TriggerViewModel::SelectSegment(const QString &segmentName)
-{
-    if (_allSegments.contains(segmentName))
-    {
+void TriggerViewModel::SelectSegment(const QString& segmentName) {
+    if (_allSegments.contains(segmentName)) {
         ActiveSegmentName = segmentName;
         // No logic change event needed here usually, the UI just repaints
     }
 }
 
 // Commits changes to the Asset and the History stack
-void TriggerViewModel::UpdateLogic(bool pushUndo)
-{
-    if (BoundAsset == nullptr) return;
+void TriggerViewModel::UpdateLogic(bool pushUndo) {
+    if (BoundAsset == nullptr)
+        return;
 
-    auto &activeGroups = GetActiveGroups();
+    auto& activeGroups = GetActiveGroups();
 
     // 0. Cleanup Array Generation State
-    for (auto it = GeneratorRules.cbegin(); it != GeneratorRules.cend(); ++it)
-    {
+    for (auto it = GeneratorRules.cbegin(); it != GeneratorRules.cend(); ++it) {
         int groupIndex = it.key();
-        const auto &def = it.value();
+        const auto& def = it.value();
 
-        if (def.IsArray && groupIndex < activeGroups.size())
-        {
-            auto &group = activeGroups[groupIndex];
-            if (group.Conditions.size() > def.TemplateConditionCount)
-            {
+        if (def.IsArray && groupIndex < activeGroups.size()) {
+            auto& group = activeGroups[groupIndex];
+            if (group.Conditions.size() > def.TemplateConditionCount) {
                 int itemsToRemove = group.Conditions.size() - def.TemplateConditionCount;
                 int startIndex = def.TemplateConditionCount;
-                if (startIndex < group.Conditions.size())
-                {
+                if (startIndex < group.Conditions.size()) {
                     for (int k = 0; k < itemsToRemove; ++k)
                         group.Conditions.removeAt(startIndex);
                 }
@@ -95,8 +81,7 @@ void TriggerViewModel::UpdateLogic(bool pushUndo)
     QString newLogic = AssetStrategy->BuildLogic(_allSegments);
 
     // 3. Push Undo State if requested
-    if (pushUndo && newLogic != BoundAsset->Logic)
-    {
+    if (pushUndo && newLogic != BoundAsset->Logic) {
         TriggerEditorState state;
         state.LogicString = BoundAsset->Logic;
         state.GeneratorRules = GeneratorRules;
@@ -111,12 +96,10 @@ void TriggerViewModel::UpdateLogic(bool pushUndo)
 }
 
 // Helper to update state from text directly (e.g. paste or undo)
-void TriggerViewModel::SetStateFromLogic(const QString &logic)
-{
+void TriggerViewModel::SetStateFromLogic(const QString& logic) {
     _allSegments = AssetStrategy->ParseLogic(logic);
     // Ensure ActiveSegmentName is valid
-    if (!_allSegments.contains(ActiveSegmentName))
-    {
+    if (!_allSegments.contains(ActiveSegmentName)) {
         QStringList names = AssetStrategy->GetSegmentNames();
         ActiveSegmentName = !names.isEmpty() ? names[0] : "Core";
     }
@@ -124,16 +107,14 @@ void TriggerViewModel::SetStateFromLogic(const QString &logic)
 
 #pragma region History
 
-void TriggerViewModel::PushUndoState()
-{
+void TriggerViewModel::PushUndoState() {
     TriggerEditorState state;
     state.LogicString = AssetStrategy->BuildLogic(_allSegments);
     state.GeneratorRules = GeneratorRules;
     _history.PushState(state.Clone());
 }
 
-void TriggerViewModel::Undo()
-{
+void TriggerViewModel::Undo() {
     // Create current state wrapper
     TriggerEditorState current;
     current.LogicString = AssetStrategy->BuildLogic(_allSegments);
@@ -143,8 +124,7 @@ void TriggerViewModel::Undo()
     RestoreState(previous);
 }
 
-void TriggerViewModel::Redo()
-{
+void TriggerViewModel::Redo() {
     TriggerEditorState current;
     current.LogicString = AssetStrategy->BuildLogic(_allSegments);
     current.GeneratorRules = GeneratorRules;
@@ -153,11 +133,11 @@ void TriggerViewModel::Redo()
     RestoreState(next);
 }
 
-void TriggerViewModel::RestoreState(const TriggerEditorState &state)
-{
+void TriggerViewModel::RestoreState(const TriggerEditorState& state) {
     SetStateFromLogic(state.LogicString);
     GeneratorRules = state.Clone().GeneratorRules; // Restore rules
-    if (BoundAsset != nullptr) BoundAsset->Logic = state.LogicString;
+    if (BoundAsset != nullptr)
+        BoundAsset->Logic = state.LogicString;
     emit LogicChanged();
 }
 
@@ -165,12 +145,12 @@ void TriggerViewModel::RestoreState(const TriggerEditorState &state)
 
 #pragma region Group Management
 
-void TriggerViewModel::AddGroup()
-{
+void TriggerViewModel::AddGroup() {
     PushUndoState();
-    auto &groups = GetActiveGroups();
-    QString newName = groups.isEmpty() ? "Core" :
-        (AssetStrategy->isLeaderboard() ? QString("Group %1").arg(groups.size() + 1) : QString("Alt %1").arg(groups.size()));
+    auto& groups = GetActiveGroups();
+    QString newName = groups.isEmpty() ? "Core"
+                                       : (AssetStrategy->isLeaderboard() ? QString("Group %1").arg(groups.size() + 1)
+                                                                         : QString("Alt %1").arg(groups.size()));
 
     AchievementConditionGroup newGroup;
     newGroup.GroupName = newName;
@@ -178,21 +158,20 @@ void TriggerViewModel::AddGroup()
     UpdateLogic(false); // Already pushed undo
 }
 
-void TriggerViewModel::RemoveGroup(int index)
-{
-    auto &groups = GetActiveGroups();
-    if (index < 0 || index >= groups.size()) return;
+void TriggerViewModel::RemoveGroup(int index) {
+    auto& groups = GetActiveGroups();
+    if (index < 0 || index >= groups.size())
+        return;
 
     PushUndoState();
 
-    if (GeneratorRules.contains(index)) GeneratorRules.remove(index);
+    if (GeneratorRules.contains(index))
+        GeneratorRules.remove(index);
     groups.removeAt(index);
 
     // Renumber Alts
-    if (!AssetStrategy->isLeaderboard())
-    {
-        for (int i = 1; i < groups.size(); i++)
-        {
+    if (!AssetStrategy->isLeaderboard()) {
+        for (int i = 1; i < groups.size(); i++) {
             if (groups[i].GroupName.startsWith("Alt "))
                 groups[i].GroupName = QString("Alt %1").arg(i);
         }
@@ -201,10 +180,10 @@ void TriggerViewModel::RemoveGroup(int index)
     UpdateLogic(false);
 }
 
-void TriggerViewModel::RemoveAllAltGroups()
-{
-    auto &groups = GetActiveGroups();
-    if (groups.size() <= 1) return;
+void TriggerViewModel::RemoveAllAltGroups() {
+    auto& groups = GetActiveGroups();
+    if (groups.size() <= 1)
+        return;
 
     PushUndoState();
     GeneratorRules.clear();
@@ -222,8 +201,7 @@ void TriggerViewModel::RemoveAllAltGroups()
 #pragma endregion
 
 // Expose validation via the injected service
-QList<ValidationIssue> TriggerViewModel::ValidateCurrentLogic()
-{
+QList<ValidationIssue> TriggerViewModel::ValidateCurrentLogic() {
     // Pass the notes references to the validator
     return _validator.ValidateAsset(GetActiveGroups(), BoundAsset, NotesLookup, RangeCache);
 }

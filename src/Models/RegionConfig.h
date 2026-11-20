@@ -1,16 +1,16 @@
 #pragma once
 
-#include <QString>
-#include <QMap>
-#include <QList>
 #include "AddressRangeMap.h"
 #include "LogicModels.h"
 
+#include <QList>
+#include <QMap>
+#include <QString>
+
 namespace RALE {
 
-class RegionConfig
-{
-public:
+class RegionConfig {
+  public:
     QString RegionName = "";
     bool IsBase = false;
     QMap<QString, QString> AddressMap;

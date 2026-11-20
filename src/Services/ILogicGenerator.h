@@ -1,20 +1,19 @@
 #pragma once
 
+#include "../Models/GeneratorModels.h"
+#include "../Models/LogicModels.h"
+
 #include <QList>
 #include <QMap>
-#include "../Models/LogicModels.h"
-#include "../Models/GeneratorModels.h"
 
 namespace RALE {
 
-class ILogicGenerator
-{
-public:
+class ILogicGenerator {
+  public:
     virtual ~ILogicGenerator() = default;
 
-    virtual void ApplyGeneratorRules(
-        QList<AchievementConditionGroup> &activeGroups,
-        const QMap<int, GeneratorDefinition> &generatorRules) = 0;
+    virtual void ApplyGeneratorRules(QList<AchievementConditionGroup>& activeGroups,
+                                     const QMap<int, GeneratorDefinition>& generatorRules) = 0;
 };
 
 } // namespace RALE

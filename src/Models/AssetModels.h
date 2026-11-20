@@ -1,21 +1,16 @@
 #pragma once
 
-#include <QString>
 #include <QList>
+#include <QString>
+
 #include <memory>
 
 namespace RALE {
 
-enum class AssetState
-{
-    Synced,
-    Modified,
-    Local
-};
+enum class AssetState { Synced, Modified, Local };
 
-class IAssetItem
-{
-public:
+class IAssetItem {
+  public:
     virtual ~IAssetItem() = default;
 
     int ID = 0;
@@ -34,9 +29,8 @@ public:
 class RaAchievement;
 class RaLeaderboard;
 
-class RaSet
-{
-public:
+class RaSet {
+  public:
     QString Title = "";
     QString Type = ""; // "core", "unofficial"
     int AchievementSetId = 0;
@@ -46,9 +40,8 @@ public:
     QList<std::shared_ptr<RaLeaderboard>> Leaderboards;
 };
 
-class RaRoot
-{
-public:
+class RaRoot {
+  public:
     bool Success = false;
     int GameId = 0;
     QString Title = "";
@@ -59,9 +52,8 @@ public:
     QList<RaSet> Sets;
 };
 
-class RaAchievement : public IAssetItem
-{
-public:
+class RaAchievement : public IAssetItem {
+  public:
     int Points = 0;
     QString Author = "Unknown";
     QString BadgeName = "00000";
@@ -76,26 +68,16 @@ public:
     std::shared_ptr<IAssetItem> clone(bool newId = true) const override;
     std::shared_ptr<RaAchievement> cloneAchievement(bool newId = true) const;
 
-    bool operator==(const RaAchievement &other) const
-    {
-        return ID == other.ID &&
-               Title == other.Title &&
-               Description == other.Description &&
-               Points == other.Points &&
-               Author == other.Author &&
-               BadgeName == other.BadgeName &&
-               Type == other.Type &&
-               Flags == other.Flags &&
-               Logic == other.Logic &&
-               Category == other.Category &&
-               State == other.State;
+    bool operator==(const RaAchievement& other) const {
+        return ID == other.ID && Title == other.Title && Description == other.Description && Points == other.Points &&
+               Author == other.Author && BadgeName == other.BadgeName && Type == other.Type && Flags == other.Flags &&
+               Logic == other.Logic && Category == other.Category && State == other.State;
     }
-    bool operator!=(const RaAchievement &other) const { return !(*this == other); }
+    bool operator!=(const RaAchievement& other) const { return !(*this == other); }
 };
 
-class RaLeaderboard : public IAssetItem
-{
-public:
+class RaLeaderboard : public IAssetItem {
+  public:
     RaLeaderboard();
 
     QString Format = "VALUE";
@@ -109,19 +91,12 @@ public:
     std::shared_ptr<IAssetItem> clone(bool newId = true) const override;
     std::shared_ptr<RaLeaderboard> cloneLeaderboard(bool newId = true) const;
 
-    bool operator==(const RaLeaderboard &other) const
-    {
-        return ID == other.ID &&
-               Title == other.Title &&
-               Description == other.Description &&
-               Format == other.Format &&
-               LowerIsBetter == other.LowerIsBetter &&
-               Hidden == other.Hidden &&
-               Logic == other.Logic &&
-               Category == other.Category &&
+    bool operator==(const RaLeaderboard& other) const {
+        return ID == other.ID && Title == other.Title && Description == other.Description && Format == other.Format &&
+               LowerIsBetter == other.LowerIsBetter && Hidden == other.Hidden && Logic == other.Logic && Category == other.Category &&
                State == other.State;
     }
-    bool operator!=(const RaLeaderboard &other) const { return !(*this == other); }
+    bool operator!=(const RaLeaderboard& other) const { return !(*this == other); }
 };
 
 } // namespace RALE

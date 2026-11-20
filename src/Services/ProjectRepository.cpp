@@ -1,18 +1,20 @@
 #include "ProjectRepository.h"
+
 #include "../Parsers/RichPresenceParser.h"
-#include <QFileInfo>
+
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
 #include <QSet>
+
 #include <algorithm>
 
 namespace RALE {
 
-void ProjectRepository::LoadFiles(const QString &primaryPath, QString &userFilePath)
-{
+void ProjectRepository::LoadFiles(const QString& primaryPath, QString& userFilePath) {
     ServerData = nullptr;
     LocalData = nullptr;
     RichPresence = nullptr;
@@ -28,18 +30,19 @@ void ProjectRepository::LoadFiles(const QString &primaryPath, QString &userFileP
 
     // 1. Extract Game ID: leading digit run, otherwise all digits, otherwise the name.
     QString gameIdStr;
-    for (QChar c : fileName)
-    {
-        if (c.isDigit()) gameIdStr.append(c);
-        else break;
+    for (QChar c : fileName) {
+        if (c.isDigit())
+            gameIdStr.append(c);
+        else
+            break;
     }
-    if (gameIdStr.isEmpty())
-    {
-        for (QChar c : fileName)
-        {
-            if (c.isDigit()) gameIdStr.append(c);
+    if (gameIdStr.isEmpty()) {
+        for (QChar c : fileName) {
+            if (c.isDigit())
+                gameIdStr.append(c);
         }
-        if (gameIdStr.isEmpty()) gameIdStr = fileName;
+        if (gameIdStr.isEmpty())
+            gameIdStr = fileName;
     }
     CurrentGameId = gameIdStr;
 
@@ -54,16 +57,13 @@ void ProjectRepository::LoadFiles(const QString &primaryPath, QString &userFileP
 
     QString selectedExt = fi.suffix().toLower();
 
-    if (selectedExt == "json")
-    {
+    if (selectedExt == "json") {
         // If opening Notes file directly, treat it as such, otherwise logic file
         if (primaryPath.endsWith("-Notes.json", Qt::CaseInsensitive))
             notesPath = primaryPath;
         else
             jsonPath = primaryPath;
-    }
-    else if (selectedExt == "txt")
-    {
+    } else if (selectedExt == "txt") {
         if (primaryPath.endsWith("-Rich.txt", Qt::CaseInsensitive))
             rpPath = primaryPath;
         else
@@ -71,16 +71,14 @@ void ProjectRepository::LoadFiles(const QString &primaryPath, QString &userFileP
     }
 
     // 3. Load Logic Data
-    if (QFile::exists(jsonPath)) LoadServerLogic(jsonPath);
+    if (QFile::exists(jsonPath))
+        LoadServerLogic(jsonPath);
 
     // 4. Load User Data
-    if (QFile::exists(userPath))
-    {
+    if (QFile::exists(userPath)) {
         LocalData = std::make_shared<UserTextParser::UserData>(UserTextParser::ParseUserFile(userPath));
         userFilePath = userPath;
-    }
-    else
-    {
+    } else {
         // Initialize empty local data if no user file exists yet
         LocalData = std::make_shared<UserTextParser::UserData>();
     }
@@ -90,36 +88,34 @@ void ProjectRepository::LoadFiles(const QString &primaryPath, QString &userFileP
 
     // 6. Load Rich Presence
     RichPresenceFilePath = rpPath;
-    if (QFile::exists(rpPath))
-    {
-        try
-        {
+    if (QFile::exists(rpPath)) {
+        try {
             QFile rpFile(rpPath);
-            if (rpFile.open(QIODevice::ReadOnly | QIODevice::Text))
-            {
+            if (rpFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
                 QString rpContent = QString::fromUtf8(rpFile.readAll());
                 rpFile.close();
                 RichPresence = std::make_shared<RichPresenceScript>(RichPresenceParser::Parse(rpContent));
             }
+        } catch (...) { /* Ignore RP load errors */
         }
-        catch (...) { /* Ignore RP load errors */ }
     }
 }
 
-void ProjectRepository::LoadServerLogic(const QString &filepath)
-{
-    try
-    {
+void ProjectRepository::LoadServerLogic(const QString& filepath) {
+    try {
         QFile file(filepath);
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return;
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+            return;
         QByteArray jsonContent = file.readAll();
         file.close();
 
         // C# StreamReader transparently skips a UTF-8 BOM; QJsonDocument does not.
-        if (jsonContent.startsWith("\xEF\xBB\xBF")) jsonContent.remove(0, 3);
+        if (jsonContent.startsWith("\xEF\xBB\xBF"))
+            jsonContent.remove(0, 3);
 
         auto doc = QJsonDocument::fromJson(jsonContent);
-        if (!doc.isObject()) return;
+        if (!doc.isObject())
+            return;
         auto rootObj = doc.object();
 
         ServerData = std::make_shared<RaRoot>();
@@ -132,8 +128,7 @@ void ProjectRepository::LoadServerLogic(const QString &filepath)
         ServerData->ConsoleId = rootObj.value("ConsoleId").toInt();
 
         auto setsArr = rootObj.value("Sets").toArray();
-        for (const auto &setVal : setsArr)
-        {
+        for (const auto& setVal : setsArr) {
             auto setObj = setVal.toObject();
             RaSet set;
             set.Title = setObj.value("Title").toString();
@@ -143,8 +138,7 @@ void ProjectRepository::LoadServerLogic(const QString &filepath)
             set.ImageIconUrl = setObj.value("ImageIconUrl").toString();
 
             auto achArr = setObj.value("Achievements").toArray();
-            for (const auto &aVal : achArr)
-            {
+            for (const auto& aVal : achArr) {
                 auto aObj = aVal.toObject();
                 auto ach = std::make_shared<RaAchievement>();
                 ach->ID = aObj.value("ID").toInt();
@@ -158,16 +152,18 @@ void ProjectRepository::LoadServerLogic(const QString &filepath)
                 ach->Logic = aObj.value("MemAddr").toString();
 
                 // Rule: Flags 3 = Core, Flags 5 = Unofficial. Everything else is treated as invalid/fallback.
-                if (ach->Flags == 3) ach->Category = "Core";
-                else if (ach->Flags == 5) ach->Category = "Unofficial";
-                else ach->Category = "Unofficial"; // Fallback for invalid/unknown flags within a server set
+                if (ach->Flags == 3)
+                    ach->Category = "Core";
+                else if (ach->Flags == 5)
+                    ach->Category = "Unofficial";
+                else
+                    ach->Category = "Unofficial"; // Fallback for invalid/unknown flags within a server set
 
                 set.Achievements.append(ach);
             }
 
             auto lbArr = setObj.value("Leaderboards").toArray();
-            for (const auto &lVal : lbArr)
-            {
+            for (const auto& lVal : lbArr) {
                 auto lObj = lVal.toObject();
                 auto lb = std::make_shared<RaLeaderboard>();
                 lb->ID = lObj.value("ID").toInt();
@@ -190,28 +186,23 @@ void ProjectRepository::LoadServerLogic(const QString &filepath)
         }
 
         CurrentTitle = QString("%1 (%2)").arg(ServerData->Title).arg(ServerData->GameId);
+    } catch (...) { /* Log handling could go here */
     }
-    catch (...) { /* Log handling could go here */ }
 }
 
-void ProjectRepository::LoadAndMergeNotes(const QString &notesPath)
-{
-    if (QFile::exists(notesPath))
-    {
-        try
-        {
+void ProjectRepository::LoadAndMergeNotes(const QString& notesPath) {
+    if (QFile::exists(notesPath)) {
+        try {
             QFile file(notesPath);
-            if (file.open(QIODevice::ReadOnly | QIODevice::Text))
-            {
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
                 QByteArray jsonContent = file.readAll();
                 file.close();
-                if (jsonContent.startsWith("\xEF\xBB\xBF")) jsonContent.remove(0, 3);
+                if (jsonContent.startsWith("\xEF\xBB\xBF"))
+                    jsonContent.remove(0, 3);
                 auto doc = QJsonDocument::fromJson(jsonContent);
-                if (doc.isArray())
-                {
+                if (doc.isArray()) {
                     _serverNotes.clear();
-                    for (const auto &val : doc.array())
-                    {
+                    for (const auto& val : doc.array()) {
                         auto obj = val.toObject();
                         CodeNote note;
                         note.Address = obj.value("Address").toString();
@@ -221,8 +212,8 @@ void ProjectRepository::LoadAndMergeNotes(const QString &notesPath)
                     }
                 }
             }
+        } catch (...) { /* Ignore load errors */
         }
-        catch (...) { /* Ignore load errors */ }
     }
 
     // Merge Logic:
@@ -231,37 +222,29 @@ void ProjectRepository::LoadAndMergeNotes(const QString &notesPath)
 
     QMap<QString, CodeNote> mergedNotesMap;
 
-    for (const auto &n : _serverNotes)
-    {
+    for (const auto& n : _serverNotes) {
         // Store a copy to ensure we don't modify the reference in _serverNotes list
         if (!mergedNotesMap.contains(n.Address))
-            mergedNotesMap.insert(n.Address, CodeNote{ n.User, n.Address, n.Note });
+            mergedNotesMap.insert(n.Address, CodeNote{n.User, n.Address, n.Note});
     }
 
-    if (LocalData != nullptr)
-    {
-        for (const auto &n : LocalData->Notes)
-        {
+    if (LocalData != nullptr) {
+        for (const auto& n : LocalData->Notes) {
             // Local notes take precedence (edits)
             mergedNotesMap.insert(n.Address, n);
         }
 
         // Update the LocalData list to contain the full merged set for the UI
         QList<CodeNote> mergedList = mergedNotesMap.values();
-        std::sort(mergedList.begin(), mergedList.end(), [](const CodeNote &a, const CodeNote &b) {
-            return a.Address < b.Address;
-        });
+        std::sort(mergedList.begin(), mergedList.end(), [](const CodeNote& a, const CodeNote& b) { return a.Address < b.Address; });
         LocalData->Notes = mergedList;
     }
 }
 
 // Checks if a note matches exactly what is on the server (Address and Content)
-bool ProjectRepository::IsNoteSynced(const CodeNote &note) const
-{
-    for (const auto &n : _serverNotes)
-    {
-        if (n.Address == note.Address)
-        {
+bool ProjectRepository::IsNoteSynced(const CodeNote& note) const {
+    for (const auto& n : _serverNotes) {
+        if (n.Address == note.Address) {
             // Compare content, ignoring User field
             return n.Note == note.Note;
         }
@@ -270,43 +253,37 @@ bool ProjectRepository::IsNoteSynced(const CodeNote &note) const
 }
 
 // Safely deletes the local note modification and restores the pristine server copy
-void ProjectRepository::RevertNote(const QString &address)
-{
-    if (LocalData == nullptr) return;
+void ProjectRepository::RevertNote(const QString& address) {
+    if (LocalData == nullptr)
+        return;
 
-    for (int i = 0; i < LocalData->Notes.size(); i++)
-    {
-        if (LocalData->Notes[i].Address == address)
-        {
+    for (int i = 0; i < LocalData->Notes.size(); i++) {
+        if (LocalData->Notes[i].Address == address) {
             LocalData->Notes.removeAt(i);
             break;
         }
     }
 
-    for (const auto &serverNote : _serverNotes)
-    {
-        if (serverNote.Address == address)
-        {
+    for (const auto& serverNote : _serverNotes) {
+        if (serverNote.Address == address) {
             // Put it back in the active merged list so the UI receives the original
-            LocalData->Notes.append(CodeNote{ serverNote.User, serverNote.Address, serverNote.Note });
-            std::sort(LocalData->Notes.begin(), LocalData->Notes.end(), [](const CodeNote &a, const CodeNote &b) {
-                return a.Address < b.Address;
-            });
+            LocalData->Notes.append(CodeNote{serverNote.User, serverNote.Address, serverNote.Note});
+            std::sort(LocalData->Notes.begin(), LocalData->Notes.end(),
+                      [](const CodeNote& a, const CodeNote& b) { return a.Address < b.Address; });
             break;
         }
     }
 }
 
-QList<std::shared_ptr<RaAchievement>> ProjectRepository::GetMergedAchievements()
-{
+QList<std::shared_ptr<RaAchievement>> ProjectRepository::GetMergedAchievements() {
     QList<std::shared_ptr<RaAchievement>> list;
-    if (ServerData == nullptr && LocalData == nullptr) return list;
+    if (ServerData == nullptr && LocalData == nullptr)
+        return list;
 
     // Preserve JSON order natively
     QList<std::shared_ptr<RaAchievement>> serverItemsList;
-    if (ServerData != nullptr)
-    {
-        for (const auto &set : ServerData->Sets)
+    if (ServerData != nullptr) {
+        for (const auto& set : ServerData->Sets)
             serverItemsList.append(set.Achievements);
     }
 
@@ -316,8 +293,7 @@ QList<std::shared_ptr<RaAchievement>> ProjectRepository::GetMergedAchievements()
 
     // Safely convert to dictionary ignoring duplicate user manual errors
     QMap<int, std::shared_ptr<RaAchievement>> localItemsDict;
-    for (const auto &item : localItemsList)
-    {
+    for (const auto& item : localItemsList) {
         if (!localItemsDict.contains(item->ID))
             localItemsDict.insert(item->ID, item);
     }
@@ -325,10 +301,8 @@ QList<std::shared_ptr<RaAchievement>> ProjectRepository::GetMergedAchievements()
     QSet<int> processedIds;
 
     // 1. Map Server Items in their natural JSON order, tagging local modifications if they exist
-    for (const auto &srv : serverItemsList)
-    {
-        if (localItemsDict.contains(srv->ID))
-        {
+    for (const auto& srv : serverItemsList) {
+        if (localItemsDict.contains(srv->ID)) {
             auto loc = localItemsDict.value(srv->ID);
             if (AreAssetsEqual(*loc, *srv))
                 loc->State = AssetState::Synced;
@@ -337,9 +311,7 @@ QList<std::shared_ptr<RaAchievement>> ProjectRepository::GetMergedAchievements()
 
             loc->Category = srv->Category;
             list.append(loc);
-        }
-        else
-        {
+        } else {
             srv->State = AssetState::Synced;
             list.append(srv);
         }
@@ -347,10 +319,8 @@ QList<std::shared_ptr<RaAchievement>> ProjectRepository::GetMergedAchievements()
     }
 
     // 2. Append Local-Only (New) items at the bottom in their natural User.txt order
-    for (const auto &loc : localItemsList)
-    {
-        if (!processedIds.contains(loc->ID))
-        {
+    for (const auto& loc : localItemsList) {
+        if (!processedIds.contains(loc->ID)) {
             loc->State = AssetState::Local;
             list.append(loc);
         }
@@ -359,16 +329,15 @@ QList<std::shared_ptr<RaAchievement>> ProjectRepository::GetMergedAchievements()
     return list;
 }
 
-QList<std::shared_ptr<RaLeaderboard>> ProjectRepository::GetMergedLeaderboards()
-{
+QList<std::shared_ptr<RaLeaderboard>> ProjectRepository::GetMergedLeaderboards() {
     QList<std::shared_ptr<RaLeaderboard>> list;
-    if (ServerData == nullptr && LocalData == nullptr) return list;
+    if (ServerData == nullptr && LocalData == nullptr)
+        return list;
 
     // Preserve JSON order natively
     QList<std::shared_ptr<RaLeaderboard>> serverItemsList;
-    if (ServerData != nullptr)
-    {
-        for (const auto &set : ServerData->Sets)
+    if (ServerData != nullptr) {
+        for (const auto& set : ServerData->Sets)
             serverItemsList.append(set.Leaderboards);
     }
 
@@ -378,8 +347,7 @@ QList<std::shared_ptr<RaLeaderboard>> ProjectRepository::GetMergedLeaderboards()
 
     // Safely convert to dictionary ignoring duplicate user manual errors
     QMap<int, std::shared_ptr<RaLeaderboard>> localItemsDict;
-    for (const auto &item : localItemsList)
-    {
+    for (const auto& item : localItemsList) {
         if (!localItemsDict.contains(item->ID))
             localItemsDict.insert(item->ID, item);
     }
@@ -387,10 +355,8 @@ QList<std::shared_ptr<RaLeaderboard>> ProjectRepository::GetMergedLeaderboards()
     QSet<int> processedIds;
 
     // 1. Map Server Items in their natural JSON order, tagging local modifications if they exist
-    for (const auto &srv : serverItemsList)
-    {
-        if (localItemsDict.contains(srv->ID))
-        {
+    for (const auto& srv : serverItemsList) {
+        if (localItemsDict.contains(srv->ID)) {
             auto loc = localItemsDict.value(srv->ID);
             if (AreAssetsEqual(*loc, *srv))
                 loc->State = AssetState::Synced;
@@ -399,9 +365,7 @@ QList<std::shared_ptr<RaLeaderboard>> ProjectRepository::GetMergedLeaderboards()
 
             loc->Category = srv->Category;
             list.append(loc);
-        }
-        else
-        {
+        } else {
             srv->State = AssetState::Synced;
             list.append(srv);
         }
@@ -409,10 +373,8 @@ QList<std::shared_ptr<RaLeaderboard>> ProjectRepository::GetMergedLeaderboards()
     }
 
     // 2. Append Local-Only (New) items at the bottom in their natural User.txt order
-    for (const auto &loc : localItemsList)
-    {
-        if (!processedIds.contains(loc->ID))
-        {
+    for (const auto& loc : localItemsList) {
+        if (!processedIds.contains(loc->ID)) {
             loc->State = AssetState::Local;
             list.append(loc);
         }
@@ -421,66 +383,61 @@ QList<std::shared_ptr<RaLeaderboard>> ProjectRepository::GetMergedLeaderboards()
     return list;
 }
 
-QList<std::shared_ptr<IAssetItem>> ProjectRepository::GetMergedAssets(bool isLeaderboard)
-{
+QList<std::shared_ptr<IAssetItem>> ProjectRepository::GetMergedAssets(bool isLeaderboard) {
     QList<std::shared_ptr<IAssetItem>> result;
-    if (isLeaderboard)
-    {
-        for (const auto &lb : GetMergedLeaderboards())
+    if (isLeaderboard) {
+        for (const auto& lb : GetMergedLeaderboards())
             result.append(lb);
-    }
-    else
-    {
-        for (const auto &ach : GetMergedAchievements())
+    } else {
+        for (const auto& ach : GetMergedAchievements())
             result.append(ach);
     }
     return result;
 }
 
-bool ProjectRepository::AreAssetsEqual(const IAssetItem &a, const IAssetItem &b) const
-{
-    if (a.Title != b.Title) return false;
-    if (a.Description != b.Description) return false;
-    if (a.Logic != b.Logic) return false;
+bool ProjectRepository::AreAssetsEqual(const IAssetItem& a, const IAssetItem& b) const {
+    if (a.Title != b.Title)
+        return false;
+    if (a.Description != b.Description)
+        return false;
+    if (a.Logic != b.Logic)
+        return false;
 
-    if (!a.isLeaderboard() && !b.isLeaderboard())
-    {
-        const auto &aa = static_cast<const RaAchievement &>(a);
-        const auto &bb = static_cast<const RaAchievement &>(b);
-        if (aa.Points != bb.Points) return false;
-        if (aa.Type != bb.Type) return false;
+    if (!a.isLeaderboard() && !b.isLeaderboard()) {
+        const auto& aa = static_cast<const RaAchievement&>(a);
+        const auto& bb = static_cast<const RaAchievement&>(b);
+        if (aa.Points != bb.Points)
+            return false;
+        if (aa.Type != bb.Type)
+            return false;
         // Note: We don't compare Flags/Category for sync state, as User.txt doesn't store them.
         // Sync state is strictly about data persisted in User.txt vs Server.
-    }
-    else if (a.isLeaderboard() && b.isLeaderboard())
-    {
-        const auto &la = static_cast<const RaLeaderboard &>(a);
-        const auto &lb = static_cast<const RaLeaderboard &>(b);
-        if (la.Format != lb.Format) return false;
-        if (la.LowerIsBetter != lb.LowerIsBetter) return false;
+    } else if (a.isLeaderboard() && b.isLeaderboard()) {
+        const auto& la = static_cast<const RaLeaderboard&>(a);
+        const auto& lb = static_cast<const RaLeaderboard&>(b);
+        if (la.Format != lb.Format)
+            return false;
+        if (la.LowerIsBetter != lb.LowerIsBetter)
+            return false;
     }
     return true;
 }
 
-void ProjectRepository::EnsureLocalDataExists()
-{
-    if (LocalData == nullptr) LocalData = std::make_shared<UserTextParser::UserData>();
+void ProjectRepository::EnsureLocalDataExists() {
+    if (LocalData == nullptr)
+        LocalData = std::make_shared<UserTextParser::UserData>();
 }
 
-void ProjectRepository::SaveRichPresence()
-{
-    if (RichPresence != nullptr && !RichPresenceFilePath.isEmpty())
-    {
-        try
-        {
+void ProjectRepository::SaveRichPresence() {
+    if (RichPresence != nullptr && !RichPresenceFilePath.isEmpty()) {
+        try {
             QFile file(RichPresenceFilePath);
-            if (file.open(QIODevice::WriteOnly | QIODevice::Text))
-            {
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
                 file.write(RichPresence->ToString().toUtf8());
                 file.close();
             }
+        } catch (...) { /* Ignore save errors */
         }
-        catch (...) { /* Ignore save errors */ }
     }
 }
 

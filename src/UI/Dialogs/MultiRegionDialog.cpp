@@ -1,32 +1,33 @@
 #include "MultiRegionDialog.h"
+
 #include "../../Common/AppSettings.h"
 #include "../../Definitions/RegionDefinitions.h"
 #include "../../Parsers/AchievementParser.h"
 #include "../Styles/ThemeManager.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
+
+#include <QClipboard>
 #include <QGroupBox>
+#include <QGuiApplication>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QMessageBox>
-#include <QClipboard>
-#include <QGuiApplication>
+#include <QPainter>
 #include <QRegularExpression>
 #include <QSet>
 #include <QStyledItemDelegate>
-#include <QPainter>
+#include <QVBoxLayout>
+
 #include <algorithm>
 
 namespace RALE {
 
 // Delegate ensuring crisp 1px thin borders, pure white background, and standard Windows selection highlight
-class MultiRegionTableDelegate : public QStyledItemDelegate
-{
-public:
+class MultiRegionTableDelegate : public QStyledItemDelegate {
+  public:
     using QStyledItemDelegate::QStyledItemDelegate;
 
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
-    {
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
         QStyleOptionViewItem opt = option;
         initStyleOption(&opt, index);
 
@@ -56,35 +57,26 @@ public:
     }
 };
 
-MultiRegionDialog::MultiRegionDialog(const QList<CodeNote> &notes, QWidget *parent)
-    : QDialog(parent), _allNotes(notes)
-{
+MultiRegionDialog::MultiRegionDialog(const QList<CodeNote>& notes, QWidget* parent) : QDialog(parent), _allNotes(notes) {
     InitializeUI();
     InitializeDynamicRegions();
     loadPositionSettings();
 }
 
-void MultiRegionDialog::loadPositionSettings()
-{
+void MultiRegionDialog::loadPositionSettings() {
     QPoint p;
     QSize s;
-    if (AppSettings::LoadDialogGeometry("MultiRegionDialog", p, s))
-    {
+    if (AppSettings::LoadDialogGeometry("MultiRegionDialog", p, s)) {
         move(p);
-        if (s.isValid())
-        {
+        if (s.isValid()) {
             resize(std::max(s.width(), 550), std::max(s.height(), 400));
         }
     }
 }
 
-void MultiRegionDialog::savePositionSettings()
-{
-    AppSettings::SaveDialogGeometry("MultiRegionDialog", pos(), size());
-}
+void MultiRegionDialog::savePositionSettings() { AppSettings::SaveDialogGeometry("MultiRegionDialog", pos(), size()); }
 
-void MultiRegionDialog::done(int r)
-{
+void MultiRegionDialog::done(int r) {
     savePositionSettings();
     QDialog::done(r);
 }
@@ -92,20 +84,19 @@ void MultiRegionDialog::done(int r)
 bool MultiRegionDialog::ShouldUpdateRichPresence() const { return chkUpdateRP->isChecked(); }
 bool MultiRegionDialog::UsePauseLocks() const { return chkUsePauseLocks->isChecked(); }
 
-void MultiRegionDialog::InitializeUI()
-{
+void MultiRegionDialog::InitializeUI() {
     setWindowTitle("Multi-Region Logic Generator");
     resize(800, 600);
 
-    auto *mainLayout = new QVBoxLayout(this);
+    auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(12, 9, 12, 10);
     mainLayout->setSpacing(6);
 
-    auto *lblInstruction = new QLabel("Detects regions from notes. Define specific locks for each region in the tabs below.", this);
+    auto* lblInstruction = new QLabel("Detects regions from notes. Define specific locks for each region in the tabs below.", this);
     lblInstruction->setObjectName("lblInstruction");
     mainLayout->addWidget(lblInstruction);
 
-    auto *lblMapping = new QLabel("Detected Address Mappings (from Code Notes)", this);
+    auto* lblMapping = new QLabel("Detected Address Mappings (from Code Notes)", this);
     QFont hf = lblMapping->font();
     hf.setBold(true);
     lblMapping->setFont(hf);
@@ -115,7 +106,7 @@ void MultiRegionDialog::InitializeUI()
     dgvMapping->setObjectName("dgvMapping");
     dgvMapping->setItemDelegate(new MultiRegionTableDelegate(dgvMapping));
     dgvMapping->setColumnCount(4);
-    dgvMapping->setHorizontalHeaderLabels({ "Base Addr (Active)", "Mapped Addr", "Region", "Note Description" });
+    dgvMapping->setHorizontalHeaderLabels({"Base Addr (Active)", "Mapped Addr", "Region", "Note Description"});
     dgvMapping->verticalHeader()->setVisible(false);
     dgvMapping->verticalHeader()->setDefaultSectionSize(22);
     dgvMapping->horizontalHeader()->setFixedHeight(24);
@@ -132,7 +123,7 @@ void MultiRegionDialog::InitializeUI()
     mainLayout->addWidget(tabControlRegions, 1);
 
     // Bottom Bar
-    auto *bottomRow = new QHBoxLayout();
+    auto* bottomRow = new QHBoxLayout();
     btnHelp = new QPushButton("Help", this);
     btnHelp->setFixedSize(75, 23);
     connect(btnHelp, &QPushButton::clicked, this, &MultiRegionDialog::onBtnHelp);
@@ -170,28 +161,33 @@ void MultiRegionDialog::InitializeUI()
 
     // Context Menu for Condition Grids
     ctxGridActions = new QMenu(this);
-    auto *actPaste = ctxGridActions->addAction(ThemeManager::getIcon(":/icons/load.svg", ThemeManager::CurrentTheme()), "Paste Logic", this, &MultiRegionDialog::onPasteToGrid);
+    auto* actPaste = ctxGridActions->addAction(ThemeManager::getIcon(":/icons/load.svg", ThemeManager::CurrentTheme()), "Paste Logic", this,
+                                               &MultiRegionDialog::onPasteToGrid);
     actPaste->setShortcut(QKeySequence::Paste);
-    auto *actCopy = ctxGridActions->addAction(ThemeManager::getIcon(":/icons/copy.svg", ThemeManager::CurrentTheme()), "Copy", this, &MultiRegionDialog::onCopyFromGrid);
+    auto* actCopy = ctxGridActions->addAction(ThemeManager::getIcon(":/icons/copy.svg", ThemeManager::CurrentTheme()), "Copy", this,
+                                              &MultiRegionDialog::onCopyFromGrid);
     actCopy->setShortcut(QKeySequence::Copy);
-    auto *actDelete = ctxGridActions->addAction(ThemeManager::getIcon(":/icons/delete.svg", ThemeManager::CurrentTheme()), "Delete Row", this, &MultiRegionDialog::onDeleteFromGrid);
+    auto* actDelete = ctxGridActions->addAction(ThemeManager::getIcon(":/icons/delete.svg", ThemeManager::CurrentTheme()), "Delete Row",
+                                                this, &MultiRegionDialog::onDeleteFromGrid);
     actDelete->setShortcut(QKeySequence::Delete);
 }
 
-void MultiRegionDialog::InitializeDynamicRegions()
-{
+void MultiRegionDialog::InitializeDynamicRegions() {
     QSet<QString> detectedRegions;
     bool hasUnknownNotes = false;
 
-    for (const auto &note : _allNotes)
-    {
+    for (const auto& note : _allNotes) {
         QString region = RegionDefinitions::DetectRegion(note.Note);
-        if (region != "Unknown") detectedRegions.insert(region);
-        else hasUnknownNotes = true;
+        if (region != "Unknown")
+            detectedRegions.insert(region);
+        else
+            hasUnknownNotes = true;
     }
 
-    if (hasUnknownNotes && !detectedRegions.contains("USA")) detectedRegions.insert("USA");
-    if (detectedRegions.isEmpty()) detectedRegions.insert("USA");
+    if (hasUnknownNotes && !detectedRegions.contains("USA"))
+        detectedRegions.insert("USA");
+    if (detectedRegions.isEmpty())
+        detectedRegions.insert("USA");
 
     QString baseRegion = detectedRegions.contains("USA") ? "USA" : *detectedRegions.begin();
 
@@ -200,14 +196,15 @@ void MultiRegionDialog::InitializeDynamicRegions()
     _regionOrder.clear();
 
     QStringList sortedRegions = detectedRegions.values();
-    std::sort(sortedRegions.begin(), sortedRegions.end(), [baseRegion](const QString &a, const QString &b) {
-        if (a == baseRegion) return true;
-        if (b == baseRegion) return false;
+    std::sort(sortedRegions.begin(), sortedRegions.end(), [baseRegion](const QString& a, const QString& b) {
+        if (a == baseRegion)
+            return true;
+        if (b == baseRegion)
+            return false;
         return a < b;
     });
 
-    for (const auto &region : sortedRegions)
-    {
+    for (const auto& region : sortedRegions) {
         bool isBase = (region == baseRegion);
         CreateRegionTab(region, isBase);
     }
@@ -215,22 +212,21 @@ void MultiRegionDialog::InitializeDynamicRegions()
     ScanForMappings(baseRegion);
 }
 
-void MultiRegionDialog::CreateRegionTab(const QString &regionName, bool isBase)
-{
+void MultiRegionDialog::CreateRegionTab(const QString& regionName, bool isBase) {
     QString title = isBase ? QString("%1 (Base)").arg(regionName) : regionName;
-    auto *page = new QWidget();
-    auto *pageLayout = new QVBoxLayout(page);
+    auto* page = new QWidget();
+    auto* pageLayout = new QVBoxLayout(page);
     pageLayout->setContentsMargins(4, 4, 4, 4);
 
-    auto *grp = new QGroupBox(QString("%1 Lock Logic (Paste logic here)").arg(regionName), page);
-    auto *grpLayout = new QVBoxLayout(grp);
+    auto* grp = new QGroupBox(QString("%1 Lock Logic (Paste logic here)").arg(regionName), page);
+    auto* grpLayout = new QVBoxLayout(grp);
     grpLayout->setContentsMargins(4, 8, 4, 4);
 
-    auto *grid = new QTableWidget(grp);
+    auto* grid = new QTableWidget(grp);
     grid->setObjectName("gridLockLogic");
     grid->setItemDelegate(new MultiRegionTableDelegate(grid));
     grid->setColumnCount(7);
-    grid->setHorizontalHeaderLabels({ "Type", "Size", "Memory", "Cmp", "Type", "Size", "Val/Mem" });
+    grid->setHorizontalHeaderLabels({"Type", "Size", "Memory", "Cmp", "Type", "Size", "Val/Mem"});
     grid->verticalHeader()->setVisible(false);
     grid->verticalHeader()->setDefaultSectionSize(22);
     grid->horizontalHeader()->setFixedHeight(24);
@@ -246,15 +242,13 @@ void MultiRegionDialog::CreateRegionTab(const QString &regionName, bool isBase)
     grid->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch);
 
     grid->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(grid, &QWidget::customContextMenuRequested, this, [this, grid](const QPoint &pos) {
-        ctxGridActions->exec(grid->mapToGlobal(pos));
-    });
+    connect(grid, &QWidget::customContextMenuRequested, this,
+            [this, grid](const QPoint& pos) { ctxGridActions->exec(grid->mapToGlobal(pos)); });
 
     // Register the menu actions on the table so their shortcuts work without
     // opening the context menu (C# handled these in Grid_KeyDown).
-    if (ctxGridActions != nullptr)
-    {
-        for (QAction *action : ctxGridActions->actions())
+    if (ctxGridActions != nullptr) {
+        for (QAction* action : ctxGridActions->actions())
             grid->addAction(action);
     }
 
@@ -266,27 +260,22 @@ void MultiRegionDialog::CreateRegionTab(const QString &regionName, bool isBase)
     _regionOrder.append(regionName);
 }
 
-void MultiRegionDialog::ScanForMappings(const QString &baseRegion)
-{
+void MultiRegionDialog::ScanForMappings(const QString& baseRegion) {
     dgvMapping->setRowCount(0);
     static const QRegularExpression regex(R"(refer to \$0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
 
-    for (const auto &note : _allNotes)
-    {
+    for (const auto& note : _allNotes) {
         auto match = regex.match(note.Note);
-        if (match.hasMatch())
-        {
+        if (match.hasMatch()) {
             QString targetAddrHex = match.captured(1);
             QString sourceAddrHex = note.Address;
             sourceAddrHex.remove("0x", Qt::CaseInsensitive);
 
             QString sourceRegion = RegionDefinitions::DetectRegion(note.Note);
 
-            const CodeNote *targetNote = nullptr;
-            for (const auto &n : _allNotes)
-            {
-                if (n.Address.endsWith(targetAddrHex, Qt::CaseInsensitive))
-                {
+            const CodeNote* targetNote = nullptr;
+            for (const auto& n : _allNotes) {
+                if (n.Address.endsWith(targetAddrHex, Qt::CaseInsensitive)) {
                     targetNote = &n;
                     break;
                 }
@@ -302,22 +291,19 @@ void MultiRegionDialog::ScanForMappings(const QString &baseRegion)
             QString mappedRegion = "";
             QString description = note.Note.split('\n', Qt::SkipEmptyParts).value(0, "");
 
-            if (!sourceIsBaseCandidate && targetIsBaseCandidate)
-            {
+            if (!sourceIsBaseCandidate && targetIsBaseCandidate) {
                 baseAddr = targetAddrHex;
                 mappedAddr = sourceAddrHex;
                 mappedRegion = sourceRegion;
-                if (targetNote != nullptr) description = targetNote->Note.split('\n', Qt::SkipEmptyParts).value(0, "");
-            }
-            else if (sourceIsBaseCandidate && !targetIsBaseCandidate)
-            {
+                if (targetNote != nullptr)
+                    description = targetNote->Note.split('\n', Qt::SkipEmptyParts).value(0, "");
+            } else if (sourceIsBaseCandidate && !targetIsBaseCandidate) {
                 baseAddr = sourceAddrHex;
                 mappedAddr = targetAddrHex;
                 mappedRegion = targetRegion;
             }
 
-            if (!baseAddr.isEmpty())
-            {
+            if (!baseAddr.isEmpty()) {
                 int r = dgvMapping->rowCount();
                 dgvMapping->insertRow(r);
                 dgvMapping->setItem(r, 0, new QTableWidgetItem(baseAddr));
@@ -329,38 +315,36 @@ void MultiRegionDialog::ScanForMappings(const QString &baseRegion)
     }
 }
 
-QList<RegionConfig> MultiRegionDialog::GetConfiguredRegions()
-{
+QList<RegionConfig> MultiRegionDialog::GetConfiguredRegions() {
     QList<RegionConfig> results;
     QMap<QString, QMap<QString, QString>> simpleMappings;
     QMap<QString, QList<AddressRangeMap>> rangeMappings;
 
-    for (int r = 0; r < dgvMapping->rowCount(); r++)
-    {
+    for (int r = 0; r < dgvMapping->rowCount(); r++) {
         QString baseAddrStr = dgvMapping->item(r, 0) != nullptr ? dgvMapping->item(r, 0)->text().trimmed() : "";
         QString targetAddrStr = dgvMapping->item(r, 1) != nullptr ? dgvMapping->item(r, 1)->text().trimmed() : "";
         QString region = dgvMapping->item(r, 2) != nullptr ? dgvMapping->item(r, 2)->text().trimmed() : "";
         QString description = dgvMapping->item(r, 3) != nullptr ? dgvMapping->item(r, 3)->text().trimmed() : "";
 
-        if (!region.isEmpty() && !baseAddrStr.isEmpty() && !targetAddrStr.isEmpty())
-        {
-            if (baseAddrStr.startsWith("0x", Qt::CaseInsensitive)) baseAddrStr = baseAddrStr.mid(2);
-            if (targetAddrStr.startsWith("0x", Qt::CaseInsensitive)) targetAddrStr = targetAddrStr.mid(2);
+        if (!region.isEmpty() && !baseAddrStr.isEmpty() && !targetAddrStr.isEmpty()) {
+            if (baseAddrStr.startsWith("0x", Qt::CaseInsensitive))
+                baseAddrStr = baseAddrStr.mid(2);
+            if (targetAddrStr.startsWith("0x", Qt::CaseInsensitive))
+                targetAddrStr = targetAddrStr.mid(2);
 
             bool okB = false, okT = false;
             int64_t bVal = baseAddrStr.toLongLong(&okB, 16);
             int64_t tVal = targetAddrStr.toLongLong(&okT, 16);
 
-            if (okB && okT)
-            {
+            if (okB && okT) {
                 simpleMappings[region][QString::number(bVal, 16)] = QString::number(tVal, 16);
 
                 int64_t size = 1;
-                static const QRegularExpression sizeMatchRegex(R"(\[.*?((?:0x)?[0-9a-fA-F]+)\s*[-]?\s*bytes?.*?\])", QRegularExpression::CaseInsensitiveOption);
+                static const QRegularExpression sizeMatchRegex(R"(\[.*?((?:0x)?[0-9a-fA-F]+)\s*[-]?\s*bytes?.*?\])",
+                                                               QRegularExpression::CaseInsensitiveOption);
                 auto sizeMatch = sizeMatchRegex.match(description);
 
-                if (sizeMatch.hasMatch())
-                {
+                if (sizeMatch.hasMatch()) {
                     QString sizeStr = sizeMatch.captured(1);
                     if (sizeStr.startsWith("0x", Qt::CaseInsensitive))
                         size = sizeStr.mid(2).toLongLong(nullptr, 16);
@@ -378,16 +362,14 @@ QList<RegionConfig> MultiRegionDialog::GetConfiguredRegions()
         }
     }
 
-    for (const QString &regionName : _regionOrder)
-    {
-        QTableWidget *grid = _regionGrids.value(regionName, nullptr);
-        if (grid == nullptr) continue;
+    for (const QString& regionName : _regionOrder) {
+        QTableWidget* grid = _regionGrids.value(regionName, nullptr);
+        if (grid == nullptr)
+            continue;
         bool isBase = !simpleMappings.contains(regionName);
 
-        for (int i = 0; i < tabControlRegions->count(); i++)
-        {
-            if (tabControlRegions->tabText(i).startsWith(regionName) && tabControlRegions->tabText(i).contains("(Base)"))
-            {
+        for (int i = 0; i < tabControlRegions->count(); i++) {
+            if (tabControlRegions->tabText(i).startsWith(regionName) && tabControlRegions->tabText(i).contains("(Base)")) {
                 isBase = true;
                 break;
             }
@@ -398,10 +380,11 @@ QList<RegionConfig> MultiRegionDialog::GetConfiguredRegions()
         config.IsBase = isBase;
         config.LockConditions = ExtractLogicFromGrid(grid);
 
-        if (!isBase)
-        {
-            if (simpleMappings.contains(regionName)) config.AddressMap = simpleMappings.value(regionName);
-            if (rangeMappings.contains(regionName)) config.AddressRanges = rangeMappings.value(regionName);
+        if (!isBase) {
+            if (simpleMappings.contains(regionName))
+                config.AddressMap = simpleMappings.value(regionName);
+            if (rangeMappings.contains(regionName))
+                config.AddressRanges = rangeMappings.value(regionName);
         }
 
         results.append(config);
@@ -410,13 +393,12 @@ QList<RegionConfig> MultiRegionDialog::GetConfiguredRegions()
     return results;
 }
 
-QList<AchievementCondition> MultiRegionDialog::ExtractLogicFromGrid(QTableWidget *grid)
-{
+QList<AchievementCondition> MultiRegionDialog::ExtractLogicFromGrid(QTableWidget* grid) {
     QList<AchievementCondition> list;
-    if (grid == nullptr) return list;
+    if (grid == nullptr)
+        return list;
 
-    for (int r = 0; r < grid->rowCount(); r++)
-    {
+    for (int r = 0; r < grid->rowCount(); r++) {
         AchievementCondition cond;
         cond.LeftOperand.Type = grid->item(r, 0) != nullptr ? grid->item(r, 0)->text() : "Mem";
         cond.LeftOperand.Size = grid->item(r, 1) != nullptr ? grid->item(r, 1)->text() : "32-bit";
@@ -430,54 +412,48 @@ QList<AchievementCondition> MultiRegionDialog::ExtractLogicFromGrid(QTableWidget
     return list;
 }
 
-QTableWidget *MultiRegionDialog::GetActiveGrid()
-{
+QTableWidget* MultiRegionDialog::GetActiveGrid() {
     int idx = tabControlRegions->currentIndex();
-    if (idx >= 0)
-    {
-        auto *page = tabControlRegions->widget(idx);
+    if (idx >= 0) {
+        auto* page = tabControlRegions->widget(idx);
         return page->findChild<QTableWidget*>();
     }
     return nullptr;
 }
 
-void MultiRegionDialog::onPasteToGrid()
-{
-    auto *grid = GetActiveGrid();
-    if (grid == nullptr) return;
+void MultiRegionDialog::onPasteToGrid() {
+    auto* grid = GetActiveGrid();
+    if (grid == nullptr)
+        return;
 
     QString text = QGuiApplication::clipboard()->text().trimmed().remove('"');
-    if (text.isEmpty()) return;
+    if (text.isEmpty())
+        return;
 
     QList<AchievementCondition> conds;
-    try
-    {
+    try {
         auto groups = AchievementParser::ParseAchievementTrigger(text, 'S', false);
         if (!groups.isEmpty() && !groups[0].Conditions.isEmpty())
             conds.append(groups[0].Conditions);
+    } catch (...) {
     }
-    catch (...) {}
 
-    if (conds.isEmpty() && (text.contains('=') || text.contains('>') || text.contains('<')))
-    {
+    if (conds.isEmpty() && (text.contains('=') || text.contains('>') || text.contains('<'))) {
         QStringList parts = text.split(QRegularExpression(R"([_\r\n]+)"), Qt::SkipEmptyParts);
-        for (const QString &part : parts)
-        {
+        for (const QString& part : parts) {
             QString cleanPart = part.trimmed();
-            if (cleanPart.isEmpty()) continue;
-            auto *c = ManualParseCondition(cleanPart);
-            if (c != nullptr)
-            {
+            if (cleanPart.isEmpty())
+                continue;
+            auto* c = ManualParseCondition(cleanPart);
+            if (c != nullptr) {
                 conds.append(*c);
                 delete c;
             }
         }
     }
 
-    if (!conds.isEmpty())
-    {
-        for (const auto &c : conds)
-        {
+    if (!conds.isEmpty()) {
+        for (const auto& c : conds) {
             int r = grid->rowCount();
             grid->insertRow(r);
             grid->setItem(r, 0, new QTableWidgetItem(c.LeftOperand.Type));
@@ -488,16 +464,12 @@ void MultiRegionDialog::onPasteToGrid()
             grid->setItem(r, 5, new QTableWidgetItem(c.RightOperand.Size));
             grid->setItem(r, 6, new QTableWidgetItem(c.RightOperand.Value));
         }
-    }
-    else
-    {
+    } else {
         QStringList lines = text.split('\n', Qt::SkipEmptyParts);
         bool added = false;
-        for (const QString &line : lines)
-        {
+        for (const QString& line : lines) {
             QStringList cells = line.split('\t');
-            if (cells.size() >= 3)
-            {
+            if (cells.size() >= 3) {
                 int r = grid->rowCount();
                 grid->insertRow(r);
                 for (int c = 0; c < cells.size() && c < grid->columnCount(); c++)
@@ -510,16 +482,14 @@ void MultiRegionDialog::onPasteToGrid()
     }
 }
 
-void MultiRegionDialog::onCopyFromGrid()
-{
-    auto *grid = GetActiveGrid();
-    if (grid == nullptr) return;
+void MultiRegionDialog::onCopyFromGrid() {
+    auto* grid = GetActiveGrid();
+    if (grid == nullptr)
+        return;
 
     QString sb;
-    for (int r = 0; r < grid->rowCount(); r++)
-    {
-        if (grid->item(r, 0) != nullptr && grid->item(r, 0)->isSelected())
-        {
+    for (int r = 0; r < grid->rowCount(); r++) {
+        if (grid->item(r, 0) != nullptr && grid->item(r, 0)->isSelected()) {
             QStringList rowParts;
             for (int c = 0; c < grid->columnCount(); c++)
                 rowParts.append(grid->item(r, c) != nullptr ? grid->item(r, c)->text() : "");
@@ -529,50 +499,57 @@ void MultiRegionDialog::onCopyFromGrid()
     QGuiApplication::clipboard()->setText(sb);
 }
 
-void MultiRegionDialog::onDeleteFromGrid()
-{
-    auto *grid = GetActiveGrid();
-    if (grid == nullptr) return;
+void MultiRegionDialog::onDeleteFromGrid() {
+    auto* grid = GetActiveGrid();
+    if (grid == nullptr)
+        return;
 
     auto selectedRows = grid->selectionModel()->selectedRows();
     QList<int> rows;
-    for (const auto &idx : selectedRows) rows.append(idx.row());
+    for (const auto& idx : selectedRows)
+        rows.append(idx.row());
     std::sort(rows.begin(), rows.end(), std::greater<int>());
 
     for (int r : rows)
         grid->removeRow(r);
 }
 
-AchievementCondition *MultiRegionDialog::ManualParseCondition(const QString &raw)
-{
+AchievementCondition* MultiRegionDialog::ManualParseCondition(const QString& raw) {
     static const QRegularExpression regex(R"(^([^=<>!]+)([=<>!]+)([^=<>!]+)$)");
     auto match = regex.match(raw);
-    if (!match.hasMatch()) return nullptr;
+    if (!match.hasMatch())
+        return nullptr;
 
-    auto *cond = new AchievementCondition();
+    auto* cond = new AchievementCondition();
     cond->Operator = match.captured(2);
     ParseOperand(match.captured(1), cond->LeftOperand);
     ParseOperand(match.captured(3), cond->RightOperand);
     return cond;
 }
 
-void MultiRegionDialog::ParseOperand(const QString &raw, Operand &op)
-{
+void MultiRegionDialog::ParseOperand(const QString& raw, Operand& op) {
     QString trimmed = raw.trimmed();
-    if (trimmed.startsWith("0x", Qt::CaseInsensitive))
-    {
+    if (trimmed.startsWith("0x", Qt::CaseInsensitive)) {
         QString body = trimmed.mid(2);
-        if (!body.isEmpty())
-        {
+        if (!body.isEmpty()) {
             QChar typeChar = body[0].toUpper();
-            if (QString("HXW ").contains(typeChar) || typeChar.isDigit())
-            {
+            if (QString("HXW ").contains(typeChar) || typeChar.isDigit()) {
                 op.Type = "Mem";
-                if (typeChar == 'H') { op.Size = "8-bit"; body = body.mid(1); }
-                else if (typeChar == ' ') { op.Size = "16-bit"; body = body.mid(1); }
-                else if (typeChar == 'W') { op.Size = "24-bit"; body = body.mid(1); }
-                else if (typeChar == 'X') { op.Size = "32-bit"; body = body.mid(1); }
-                else { op.Size = "16-bit"; }
+                if (typeChar == 'H') {
+                    op.Size = "8-bit";
+                    body = body.mid(1);
+                } else if (typeChar == ' ') {
+                    op.Size = "16-bit";
+                    body = body.mid(1);
+                } else if (typeChar == 'W') {
+                    op.Size = "24-bit";
+                    body = body.mid(1);
+                } else if (typeChar == 'X') {
+                    op.Size = "32-bit";
+                    body = body.mid(1);
+                } else {
+                    op.Size = "16-bit";
+                }
                 op.Value = "0x" + body;
                 return;
             }
@@ -585,10 +562,11 @@ void MultiRegionDialog::ParseOperand(const QString &raw, Operand &op)
 
 void MultiRegionDialog::onBtnOK() { accept(); }
 void MultiRegionDialog::onBtnCancel() { reject(); }
-void MultiRegionDialog::onBtnHelp()
-{
-    QMessageBox::information(this, "Help",
-        "Maps regions based on notes. Ensure base notes have size (e.g. [0x20 bytes]) for range mapping.\n\nOptionally check 'Generate as PauseLocks' to automatically apply PauseIf and invert the operators for memory checks.");
+void MultiRegionDialog::onBtnHelp() {
+    QMessageBox::information(
+        this, "Help",
+        "Maps regions based on notes. Ensure base notes have size (e.g. [0x20 bytes]) for range mapping.\n\nOptionally check 'Generate as "
+        "PauseLocks' to automatically apply PauseIf and invert the operators for memory checks.");
 }
 
 } // namespace RALE

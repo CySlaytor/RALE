@@ -1,17 +1,16 @@
 #pragma once
 
+#include <QChar>
+#include <QMap>
+#include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QSet>
-#include <QMap>
-#include <QChar>
 
 namespace RALE {
 
 // Centralizes all static definitions for RA Logic syntax
-class RaLogicSyntax
-{
-public:
+class RaLogicSyntax {
+  public:
     static const QString NO_FLAG_TEXT;
     static const QString NO_OPERATOR_TEXT;
 
@@ -33,7 +32,7 @@ public:
     static const QMap<QChar, QString> FloatSizeMap;
 
     // Platform pointer descriptions and masking mapped to pointer-oriented RetroAchievements consoles
-    static QString GetPlatformPointerTemplate(int consoleId, const QString &noteHeader = "");
+    static QString GetPlatformPointerTemplate(int consoleId, const QString& noteHeader = "");
     static QString GetPlatformPointerPrefix(int consoleId);
     static QString GetPlatformPointerMask(int consoleId);
     static bool IsPointerOrientedConsole(int consoleId);

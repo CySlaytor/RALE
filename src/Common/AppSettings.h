@@ -1,14 +1,13 @@
 #pragma once
 
-#include <QString>
 #include <QPoint>
 #include <QSize>
+#include <QString>
 
 namespace RALE {
 
-class UserSettings
-{
-public:
+class UserSettings {
+  public:
     // View State
     bool ShowLogicReviewer = false;
     QString Theme = "Light"; // "Light" or "Dark"
@@ -73,22 +72,21 @@ public:
     bool Generator_IsArray = false;
 };
 
-class AppSettings
-{
-public:
+class AppSettings {
+  public:
     static UserSettings Current;
 
     static void Load();
     static void Save();
 
     // Dialog Positions and Sizes Persistence (matching PF2 conventions)
-    static void SaveDialogGeometry(const QString &dialogName, const QPoint &pos, const QSize &size = QSize());
-    static bool LoadDialogGeometry(const QString &dialogName, QPoint &pos, QSize &size);
+    static void SaveDialogGeometry(const QString& dialogName, const QPoint& pos, const QSize& size = QSize());
+    static bool LoadDialogGeometry(const QString& dialogName, QPoint& pos, QSize& size);
 
     static QString GetSettingsPath();
 
-private:
-    static void MigrateFromJsonIfPresent(const QString &jsonPath);
+  private:
+    static void MigrateFromJsonIfPresent(const QString& jsonPath);
 };
 
 } // namespace RALE

@@ -1,26 +1,29 @@
 #include "TriggerEditorWidget.h"
-#include "../../Services/LogicValidator.h"
-#include "../../Services/LogicGeneratorService.h"
-#include "../../Parsers/AchievementParser.h"
-#include "../../Parsers/PointerTreeParser.h"
+
 #include "../../Common/ImageCache.h"
 #include "../../Definitions/RaLogicSyntax.h"
+#include "../../Parsers/AchievementParser.h"
+#include "../../Parsers/PointerTreeParser.h"
+#include "../../Services/LogicGeneratorService.h"
+#include "../../Services/LogicValidator.h"
 #include "../../Utilities/LogicFormatter.h"
+#include "../Dialogs/BatchNoteMultiplierDialog.h"
 #include "../Dialogs/GeneratorConfigDialog.h"
 #include "../Dialogs/MultiRegionDialog.h"
-#include "../Dialogs/BatchNoteMultiplierDialog.h"
 #include "../Styles/ThemeManager.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QSplitter>
-#include <QHeaderView>
-#include <QScrollBar>
-#include <QKeyEvent>
+
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QKeyEvent>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QScrollBar>
 #include <QSignalBlocker>
+#include <QSplitter>
+#include <QVBoxLayout>
+
 #include <algorithm>
 
 namespace RALE {
@@ -28,33 +31,28 @@ namespace RALE {
 static LogicValidator staticValidator;
 static LogicGeneratorService staticGenerator;
 
-TriggerEditorWidget::TriggerEditorWidget(QWidget *parent)
-    : QWidget(parent),
-      _viewModel(staticValidator, staticGenerator, this)
-{
-    _lbFormats = {
-        { "Score", "SCORE" },
-        { "Time (Frames)", "TIME" },
-        { "Time (Centiseconds)", "MILLISECS" },
-        { "Time (Seconds)", "SECONDS" },
-        { "Time (Seconds) [Legacy]", "TIMESECS" },
-        { "Time (Minutes)", "MINUTES" },
-        { "Time (Seconds as Minutes)", "SECS_AS_MINS" },
-        { "Value", "VALUE" },
-        { "Value (Unsigned)", "UNSIGNED" },
-        { "Value (Tens)", "TENS" },
-        { "Value (Hundreds)", "HUNDREDS" },
-        { "Value (Thousands)", "THOUSANDS" },
-        { "Value (Fixed1)", "FIXED1" },
-        { "Value (Fixed2)", "FIXED2" },
-        { "Value (Fixed3)", "FIXED3" },
-        { "Value (Float1)", "FLOAT1" },
-        { "Value (Float2)", "FLOAT2" },
-        { "Value (Float3)", "FLOAT3" },
-        { "Value (Float4)", "FLOAT4" },
-        { "Value (Float5)", "FLOAT5" },
-        { "Value (Float6)", "FLOAT6" }
-    };
+TriggerEditorWidget::TriggerEditorWidget(QWidget* parent) : QWidget(parent), _viewModel(staticValidator, staticGenerator, this) {
+    _lbFormats = {{"Score", "SCORE"},
+                  {"Time (Frames)", "TIME"},
+                  {"Time (Centiseconds)", "MILLISECS"},
+                  {"Time (Seconds)", "SECONDS"},
+                  {"Time (Seconds) [Legacy]", "TIMESECS"},
+                  {"Time (Minutes)", "MINUTES"},
+                  {"Time (Seconds as Minutes)", "SECS_AS_MINS"},
+                  {"Value", "VALUE"},
+                  {"Value (Unsigned)", "UNSIGNED"},
+                  {"Value (Tens)", "TENS"},
+                  {"Value (Hundreds)", "HUNDREDS"},
+                  {"Value (Thousands)", "THOUSANDS"},
+                  {"Value (Fixed1)", "FIXED1"},
+                  {"Value (Fixed2)", "FIXED2"},
+                  {"Value (Fixed3)", "FIXED3"},
+                  {"Value (Float1)", "FLOAT1"},
+                  {"Value (Float2)", "FLOAT2"},
+                  {"Value (Float3)", "FLOAT3"},
+                  {"Value (Float4)", "FLOAT4"},
+                  {"Value (Float5)", "FLOAT5"},
+                  {"Value (Float6)", "FLOAT6"}};
 
     InitializeUI();
     InitializeLeaderboardControls();
@@ -74,22 +72,18 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget *parent)
         lvLeaderboardComponents->clear();
         QStringList segments = _viewModel.AssetStrategy->GetSegmentNames();
 
-        if (segments.size() > 1)
-        {
-            for (const auto &seg : segments)
+        if (segments.size() > 1) {
+            for (const auto& seg : segments)
                 lvLeaderboardComponents->addItem(seg);
 
             lvLeaderboardComponents->setVisible(true);
-            if (lvLeaderboardComponents->count() > 0)
-            {
+            if (lvLeaderboardComponents->count() > 0) {
                 bool wasLocked = _isProgrammaticallyChanging;
                 _isProgrammaticallyChanging = true;
 
                 int selectIndex = 0;
-                if (!_preserveSegmentSelection.isEmpty())
-                {
-                    for (int i = 0; i < lvLeaderboardComponents->count(); i++)
-                    {
+                if (!_preserveSegmentSelection.isEmpty()) {
+                    for (int i = 0; i < lvLeaderboardComponents->count(); i++) {
                         if (lvLeaderboardComponents->item(i)->text().compare(_preserveSegmentSelection, Qt::CaseInsensitive) == 0)
                             selectIndex = i;
                     }
@@ -99,9 +93,7 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget *parent)
                 _viewModel.SelectSegment(lvLeaderboardComponents->item(selectIndex)->text());
                 _isProgrammaticallyChanging = wasLocked;
             }
-        }
-        else
-        {
+        } else {
             lvLeaderboardComponents->setVisible(false);
         }
 
@@ -111,34 +103,26 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget *parent)
     connect(&_viewModel, &TriggerViewModel::HistoryChanged, this, &TriggerEditorWidget::HistoryChanged);
 
     // Asynchronously dispatch logic update and validation to prevent beginResetModel from executing inside active setData
-    connect(&_conditionModel, &ConditionTableModel::ConditionDataChanged, this, [this]() {
-        QMetaObject::invokeMethod(this, [this]() {
-            _viewModel.UpdateLogic(true);
-        }, Qt::QueuedConnection);
-    });
+    connect(&_conditionModel, &ConditionTableModel::ConditionDataChanged, this,
+            [this]() { QMetaObject::invokeMethod(this, [this]() { _viewModel.UpdateLogic(true); }, Qt::QueuedConnection); });
 }
 
-QIcon TriggerEditorWidget::getThemeIcon(const QString &resourcePath) const
-{
+QIcon TriggerEditorWidget::getThemeIcon(const QString& resourcePath) const {
     return ThemeManager::getIcon(resourcePath, ThemeManager::CurrentTheme());
 }
 
-void TriggerEditorWidget::updateThemeIcons()
-{
+void TriggerEditorWidget::updateThemeIcons() {
     const auto actionsList = findChildren<QAction*>();
-    for (QAction *action : actionsList)
-    {
+    for (QAction* action : actionsList) {
         QVariant iconPathVar = action->property("iconPath");
-        if (iconPathVar.isValid())
-        {
+        if (iconPathVar.isValid()) {
             action->setIcon(getThemeIcon(iconPathVar.toString()));
         }
     }
 }
 
-void TriggerEditorWidget::InitializeUI()
-{
-    auto *mainLayout = new QVBoxLayout(this);
+void TriggerEditorWidget::InitializeUI() {
+    auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(2);
 
@@ -146,12 +130,12 @@ void TriggerEditorWidget::InitializeUI()
     panelHeader = new QWidget(this);
     panelHeader->setObjectName("panelHeader");
     panelHeader->setFixedHeight(90);
-    auto *headerLayout = new QVBoxLayout(panelHeader);
+    auto* headerLayout = new QVBoxLayout(panelHeader);
     headerLayout->setContentsMargins(5, 4, 5, 4);
     headerLayout->setSpacing(3);
 
     // Row 1: Badge + Title + Description + LB Components
-    auto *row1 = new QHBoxLayout();
+    auto* row1 = new QHBoxLayout();
     row1->setContentsMargins(0, 0, 0, 0);
     row1->setSpacing(6);
 
@@ -167,7 +151,7 @@ void TriggerEditorWidget::InitializeUI()
     connect(lvLeaderboardComponents, &QListWidget::currentRowChanged, this, &TriggerEditorWidget::onLbComponentsSelectionChanged);
     row1->addWidget(lvLeaderboardComponents);
 
-    auto *titleDescCol = new QVBoxLayout();
+    auto* titleDescCol = new QVBoxLayout();
     titleDescCol->setContentsMargins(0, 0, 0, 0);
     titleDescCol->setSpacing(3);
 
@@ -186,7 +170,7 @@ void TriggerEditorWidget::InitializeUI()
     titleDescCol->addWidget(txtDescription);
 
     // Row 2: Controls & Details
-    auto *row2 = new QHBoxLayout();
+    auto* row2 = new QHBoxLayout();
     row2->setContentsMargins(0, 0, 0, 0);
     row2->setSpacing(4);
 
@@ -196,14 +180,14 @@ void TriggerEditorWidget::InitializeUI()
     QFont pointsFont = cmbPoints->font();
     pointsFont.setBold(true);
     cmbPoints->setFont(pointsFont);
-    cmbPoints->addItems({ "0", "1", "2", "3", "4", "5", "10", "25", "50", "100" });
+    cmbPoints->addItems({"0", "1", "2", "3", "4", "5", "10", "25", "50", "100"});
     connect(cmbPoints, &QComboBox::currentTextChanged, this, &TriggerEditorWidget::onPointsChanged);
     row2->addWidget(cmbPoints);
 
     cmbType = new QComboBox(panelHeader);
     cmbType->setFixedWidth(94);
     ThemeManager::SetupComboBox(cmbType, 14);
-    cmbType->addItems({ "", "Progression", "Win", "Missable" });
+    cmbType->addItems({"", "Progression", "Win", "Missable"});
     connect(cmbType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &TriggerEditorWidget::onTypeChanged);
     row2->addWidget(cmbType);
 
@@ -259,11 +243,11 @@ void TriggerEditorWidget::InitializeUI()
     mainLayout->addWidget(panelHeader);
 
     // Splitter: Groups List + Condition Grid
-    auto *splitGroups = new QSplitter(Qt::Horizontal, this);
+    auto* splitGroups = new QSplitter(Qt::Horizontal, this);
 
     groupsContainer = new QWidget(splitGroups);
     groupsContainer->setFixedWidth(65);
-    auto *groupsLayout = new QVBoxLayout(groupsContainer);
+    auto* groupsLayout = new QVBoxLayout(groupsContainer);
     groupsLayout->setContentsMargins(0, 0, 0, 0);
     groupsLayout->setSpacing(0);
 
@@ -281,7 +265,7 @@ void TriggerEditorWidget::InitializeUI()
     // Dedicated compact button container matching Screenshot 3
     btnPanel = new QWidget(groupsContainer);
     btnPanel->setFixedHeight(24);
-    auto *btnLayout = new QHBoxLayout(btnPanel);
+    auto* btnLayout = new QHBoxLayout(btnPanel);
     btnLayout->setContentsMargins(3, 2, 3, 2);
     btnLayout->setSpacing(3);
 
@@ -338,18 +322,19 @@ void TriggerEditorWidget::InitializeUI()
     conditionGrid->installEventFilter(this);
 
     connect(conditionGrid->selectionModel(), &QItemSelectionModel::currentChanged, this, [this]() {
-        if (_headerView != nullptr) _headerView->viewport()->update();
+        if (_headerView != nullptr)
+            _headerView->viewport()->update();
     });
 
     splitGroups->addWidget(conditionGrid);
-    splitGroups->setSizes({ 65, 635 });
+    splitGroups->setSizes({65, 635});
     splitGroups->setCollapsible(0, false);
     mainLayout->addWidget(splitGroups, 1);
 
     // Bottom Bar: Status on Left, Checkboxes on Right (Screenshot 2 1:1)
     bottomBar = new QWidget(this);
     bottomBar->setFixedHeight(24);
-    auto *bottomLayout = new QHBoxLayout(bottomBar);
+    auto* bottomLayout = new QHBoxLayout(bottomBar);
     bottomLayout->setContentsMargins(6, 0, 6, 0);
     bottomLayout->setSpacing(12);
 
@@ -376,19 +361,24 @@ void TriggerEditorWidget::InitializeUI()
 
     // Context Menus
     toolsContextMenu = new QMenu(this);
-    actCreateGenerator = toolsContextMenu->addAction(getThemeIcon(":/icons/range_finder.svg"), "Create Generator...", this, &TriggerEditorWidget::onCreateGeneratorClicked);
+    actCreateGenerator = toolsContextMenu->addAction(getThemeIcon(":/icons/range_finder.svg"), "Create Generator...", this,
+                                                     &TriggerEditorWidget::onCreateGeneratorClicked);
     actCreateGenerator->setProperty("iconPath", ":/icons/range_finder.svg");
 
-    actCommitGenerator = toolsContextMenu->addAction(getThemeIcon(":/icons/save.svg"), "Commit Generator (Bake)", this, &TriggerEditorWidget::onCommitGeneratorClicked);
+    actCommitGenerator = toolsContextMenu->addAction(getThemeIcon(":/icons/save.svg"), "Commit Generator (Bake)", this,
+                                                     &TriggerEditorWidget::onCommitGeneratorClicked);
     actCommitGenerator->setProperty("iconPath", ":/icons/save.svg");
 
-    actMultiRegion = toolsContextMenu->addAction(getThemeIcon(":/icons/converter.svg"), "Multi-Region Support...", this, &TriggerEditorWidget::onMultiRegionClicked);
+    actMultiRegion = toolsContextMenu->addAction(getThemeIcon(":/icons/converter.svg"), "Multi-Region Support...", this,
+                                                 &TriggerEditorWidget::onMultiRegionClicked);
     actMultiRegion->setProperty("iconPath", ":/icons/converter.svg");
 
-    actLogicOptimizer = toolsContextMenu->addAction(getThemeIcon(":/icons/hierarchy_fixer.svg"), "Logic Optimizer (Length)...", this, &TriggerEditorWidget::onLogicOptimizerClicked);
+    actLogicOptimizer = toolsContextMenu->addAction(getThemeIcon(":/icons/hierarchy_fixer.svg"), "Logic Optimizer (Length)...", this,
+                                                    &TriggerEditorWidget::onLogicOptimizerClicked);
     actLogicOptimizer->setProperty("iconPath", ":/icons/hierarchy_fixer.svg");
 
-    actBatchMultiply = toolsContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Batch Multiply Notes...", this, &TriggerEditorWidget::onBatchMultiplyNotesClicked);
+    actBatchMultiply = toolsContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Batch Multiply Notes...", this,
+                                                   &TriggerEditorWidget::onBatchMultiplyNotesClicked);
     actBatchMultiply->setProperty("iconPath", ":/icons/copy.svg");
 
     // Wire up dynamic enablement for Tools menu items matching WinForms ToolsContextMenu_Opening
@@ -397,28 +387,34 @@ void TriggerEditorWidget::InitializeUI()
         bool hasActiveGroups = !_viewModel.GetActiveGroups().isEmpty();
         bool canBake = (row >= 0 && _viewModel.GeneratorRules.contains(row));
 
-        if (actCreateGenerator) actCreateGenerator->setEnabled(hasActiveGroups);
-        if (actCommitGenerator) actCommitGenerator->setEnabled(canBake);
-        if (actMultiRegion) actMultiRegion->setEnabled(hasActiveGroups && !_rawNotes.isEmpty());
-        if (actBatchMultiply) actBatchMultiply->setEnabled(!_rawNotes.isEmpty());
+        if (actCreateGenerator)
+            actCreateGenerator->setEnabled(hasActiveGroups);
+        if (actCommitGenerator)
+            actCommitGenerator->setEnabled(canBake);
+        if (actMultiRegion)
+            actMultiRegion->setEnabled(hasActiveGroups && !_rawNotes.isEmpty());
+        if (actBatchMultiply)
+            actBatchMultiply->setEnabled(!_rawNotes.isEmpty());
     });
 
     groupsContextMenu = new QMenu(this);
-    actAddGroup = groupsContextMenu->addAction(getThemeIcon(":/icons/bookmark_add.svg"), "Add Group", this, &TriggerEditorWidget::onAddGroupClicked);
+    actAddGroup =
+        groupsContextMenu->addAction(getThemeIcon(":/icons/bookmark_add.svg"), "Add Group", this, &TriggerEditorWidget::onAddGroupClicked);
     actAddGroup->setProperty("iconPath", ":/icons/bookmark_add.svg");
 
-    actRemoveGroup = groupsContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Remove Group", this, &TriggerEditorWidget::onRemoveGroupClicked);
+    actRemoveGroup =
+        groupsContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Remove Group", this, &TriggerEditorWidget::onRemoveGroupClicked);
     actRemoveGroup->setProperty("iconPath", ":/icons/delete.svg");
 
     groupsContextMenu->addSeparator();
 
-    actRemoveAllAltGroups = groupsContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Remove All Alt Groups", this, &TriggerEditorWidget::onRemoveAllAltGroupsClicked);
+    actRemoveAllAltGroups = groupsContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Remove All Alt Groups", this,
+                                                         &TriggerEditorWidget::onRemoveAllAltGroupsClicked);
     actRemoveAllAltGroups->setProperty("iconPath", ":/icons/delete.svg");
 
     groupsList->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(groupsList, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
-        groupsContextMenu->exec(groupsList->mapToGlobal(pos));
-    });
+    connect(groupsList, &QWidget::customContextMenuRequested, this,
+            [this](const QPoint& pos) { groupsContextMenu->exec(groupsList->mapToGlobal(pos)); });
 
     // Wire up dynamic enablement for Groups menu items matching WinForms GroupsContextMenu_Opening
     connect(groupsContextMenu, &QMenu::aboutToShow, this, [this]() {
@@ -426,89 +422,84 @@ void TriggerEditorWidget::InitializeUI()
         bool hasSelection = (row >= 0);
         bool isCore = (row == 0);
 
-        if (actRemoveGroup) actRemoveGroup->setEnabled(hasSelection && !isCore);
+        if (actRemoveGroup)
+            actRemoveGroup->setEnabled(hasSelection && !isCore);
     });
 
     gridContextMenu = new QMenu(this);
-    auto *actMoveUp = gridContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Up", this, [this]() { MoveSelected(-1); });
+    auto* actMoveUp = gridContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Up", this, [this]() { MoveSelected(-1); });
     actMoveUp->setShortcut(QKeySequence("Alt+Up"));
     actMoveUp->setProperty("iconPath", ":/icons/sort.svg");
 
-    auto *actMoveDown = gridContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Down", this, [this]() { MoveSelected(1); });
+    auto* actMoveDown = gridContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Down", this, [this]() { MoveSelected(1); });
     actMoveDown->setShortcut(QKeySequence("Alt+Down"));
     actMoveDown->setProperty("iconPath", ":/icons/sort.svg");
 
     gridContextMenu->addSeparator();
 
-    auto *actAddCond = gridContextMenu->addAction(getThemeIcon(":/icons/bookmark_add.svg"), "Add Condition", this, &TriggerEditorWidget::AddCondition);
+    auto* actAddCond =
+        gridContextMenu->addAction(getThemeIcon(":/icons/bookmark_add.svg"), "Add Condition", this, &TriggerEditorWidget::AddCondition);
     actAddCond->setProperty("iconPath", ":/icons/bookmark_add.svg");
 
-    auto *actDup = gridContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Duplicate", this, &TriggerEditorWidget::DuplicateSelected);
+    auto* actDup = gridContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Duplicate", this, &TriggerEditorWidget::DuplicateSelected);
     actDup->setShortcut(QKeySequence("Ctrl+D"));
     actDup->setProperty("iconPath", ":/icons/copy.svg");
 
-    auto *actDel = gridContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Delete", this, &TriggerEditorWidget::DeleteSelected);
+    auto* actDel = gridContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Delete", this, &TriggerEditorWidget::DeleteSelected);
     actDel->setShortcut(QKeySequence::Delete);
     actDel->setProperty("iconPath", ":/icons/delete.svg");
 
     gridContextMenu->addSeparator();
 
-    auto *actExtend = gridContextMenu->addAction(getThemeIcon(":/icons/range_finder.svg"), "Extend Selection by Pattern", this, &TriggerEditorWidget::ExtendSelectionByPattern);
+    auto* actExtend = gridContextMenu->addAction(getThemeIcon(":/icons/range_finder.svg"), "Extend Selection by Pattern", this,
+                                                 &TriggerEditorWidget::ExtendSelectionByPattern);
     actExtend->setProperty("iconPath", ":/icons/range_finder.svg");
 
-    auto *actCut = gridContextMenu->addAction(getThemeIcon(":/icons/cut.svg"), "Cut Logic", this, &TriggerEditorWidget::CutSelected);
+    auto* actCut = gridContextMenu->addAction(getThemeIcon(":/icons/cut.svg"), "Cut Logic", this, &TriggerEditorWidget::CutSelected);
     actCut->setShortcut(QKeySequence::Cut);
     actCut->setProperty("iconPath", ":/icons/cut.svg");
 
-    auto *actCopyLogic = gridContextMenu->addAction(getThemeIcon(":/icons/copy_ra.svg"), "Copy Logic", this, &TriggerEditorWidget::CopySelectedLogic);
+    auto* actCopyLogic =
+        gridContextMenu->addAction(getThemeIcon(":/icons/copy_ra.svg"), "Copy Logic", this, &TriggerEditorWidget::CopySelectedLogic);
     actCopyLogic->setShortcut(QKeySequence::Copy);
     actCopyLogic->setProperty("iconPath", ":/icons/copy_ra.svg");
 
-    auto *actCopyRow = gridContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Copy Row", this, &TriggerEditorWidget::CopySelectedRows);
+    auto* actCopyRow =
+        gridContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Copy Row", this, &TriggerEditorWidget::CopySelectedRows);
     actCopyRow->setShortcut(QKeySequence("Ctrl+Shift+C"));
     actCopyRow->setProperty("iconPath", ":/icons/copy.svg");
 
-    auto *actPaste = gridContextMenu->addAction(getThemeIcon(":/icons/load.svg"), "Paste Logic", this, [this]() { PasteLogic(); });
+    auto* actPaste = gridContextMenu->addAction(getThemeIcon(":/icons/load.svg"), "Paste Logic", this, [this]() { PasteLogic(); });
     actPaste->setShortcut(QKeySequence::Paste);
     actPaste->setProperty("iconPath", ":/icons/load.svg");
 
     conditionGrid->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(conditionGrid, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+    connect(conditionGrid, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
         QModelIndex idx = conditionGrid->indexAt(pos);
-        if (idx.isValid())
-        {
+        if (idx.isValid()) {
             // Ensure the right-clicked row is selected if it is not already part of the active selection
-            if (!conditionGrid->selectionModel()->isRowSelected(idx.row(), QModelIndex()))
-            {
-                conditionGrid->selectionModel()->select(
-                    QItemSelection(_conditionModel.index(idx.row(), 0), _conditionModel.index(idx.row(), _conditionModel.columnCount() - 1)),
-                    QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows
-                );
+            if (!conditionGrid->selectionModel()->isRowSelected(idx.row(), QModelIndex())) {
+                conditionGrid->selectionModel()->select(QItemSelection(_conditionModel.index(idx.row(), 0),
+                                                                       _conditionModel.index(idx.row(), _conditionModel.columnCount() - 1)),
+                                                        QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
                 conditionGrid->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::NoUpdate);
             }
 
             // Route right-click to column-specific context menu for bulk/in-place editing matching WinForms
             int col = idx.column();
-            if (col == ConditionTableModel::ColFlag)
-            {
+            if (col == ConditionTableModel::ColFlag) {
                 _flagContextMenu->exec(conditionGrid->viewport()->mapToGlobal(pos));
                 return;
-            }
-            else if (col == ConditionTableModel::ColLType || col == ConditionTableModel::ColRType)
-            {
+            } else if (col == ConditionTableModel::ColLType || col == ConditionTableModel::ColRType) {
                 _typeContextMenu->setProperty("targetColumn", col);
                 _typeContextMenu->exec(conditionGrid->viewport()->mapToGlobal(pos));
                 return;
-            }
-            else if (col == ConditionTableModel::ColLSize || col == ConditionTableModel::ColRSize)
-            {
+            } else if (col == ConditionTableModel::ColLSize || col == ConditionTableModel::ColRSize) {
                 _sizeContextMenu->setProperty("targetColumn", col);
                 _sizeContextMenu->exec(conditionGrid->viewport()->mapToGlobal(pos));
                 return;
-            }
-            else if (col == ConditionTableModel::ColCmp)
-            {
-                auto *cond = _conditionModel.GetConditionAtRow(idx.row());
+            } else if (col == ConditionTableModel::ColCmp) {
+                auto* cond = _conditionModel.GetConditionAtRow(idx.row());
                 QString flag = (cond != nullptr) ? cond->Flag : "";
                 if (RaLogicSyntax::ArithmeticFlags.contains(flag))
                     _cmpArithmeticContextMenu->exec(conditionGrid->viewport()->mapToGlobal(pos));
@@ -523,19 +514,16 @@ void TriggerEditorWidget::InitializeUI()
     });
 }
 
-void TriggerEditorWidget::InitializeLeaderboardControls()
-{
+void TriggerEditorWidget::InitializeLeaderboardControls() {
     cmbFormat->clear();
-    for (const auto &fmt : _lbFormats)
+    for (const auto& fmt : _lbFormats)
         cmbFormat->addItem(fmt.Label, fmt.Value);
 }
 
-void TriggerEditorWidget::InitializeColumnContextMenus()
-{
-    auto CreateMenu = [this](QMenu *menu, const QStringList &items, int column = -1) {
-        for (const auto &item : items)
-        {
-            auto *act = menu->addAction(item, this, [this, menu, column, item]() {
+void TriggerEditorWidget::InitializeColumnContextMenus() {
+    auto CreateMenu = [this](QMenu* menu, const QStringList& items, int column = -1) {
+        for (const auto& item : items) {
+            auto* act = menu->addAction(item, this, [this, menu, column, item]() {
                 int col = (column != -1) ? column : menu->property("targetColumn").toInt();
                 OnColumnContextMenuTriggered(col, item);
             });
@@ -560,22 +548,22 @@ void TriggerEditorWidget::InitializeColumnContextMenus()
 
     _cmpStrictContextMenu = new QMenu(this);
     QStringList strictOps;
-    for (const auto &op : RaLogicSyntax::ComparisonOperators)
-    {
+    for (const auto& op : RaLogicSyntax::ComparisonOperators) {
         if (op != RaLogicSyntax::NO_OPERATOR_TEXT)
             strictOps.append(op);
     }
     CreateMenu(_cmpStrictContextMenu, strictOps, ConditionTableModel::ColCmp);
 }
 
-void TriggerEditorWidget::OnColumnContextMenuTriggered(int column, const QString &val)
-{
-    if (IsGridReadOnly()) return;
+void TriggerEditorWidget::OnColumnContextMenuTriggered(int column, const QString& val) {
+    if (IsGridReadOnly())
+        return;
 
     QString cleanVal = (val == RaLogicSyntax::NO_FLAG_TEXT || val == RaLogicSyntax::NO_OPERATOR_TEXT) ? "" : val;
 
     QList<int> selectedVisualRows = GetSelectedVisualRows();
-    if (selectedVisualRows.isEmpty()) return;
+    if (selectedVisualRows.isEmpty())
+        return;
 
     _conditionModel.BulkUpdateConditions(selectedVisualRows, column, cleanVal);
     SetStatus("Updated condition property.");
@@ -590,30 +578,25 @@ void TriggerEditorWidget::SetShowAliases(bool value) { chkAliasMode->setChecked(
 bool TriggerEditorWidget::CollapseChains() const { return _collapseChains; }
 void TriggerEditorWidget::SetCollapseChains(bool value) { chkCollapseChains->setChecked(value); }
 
-QString TriggerEditorWidget::GetTriggerText() const
-{
+QString TriggerEditorWidget::GetTriggerText() const {
     const_cast<TriggerEditorWidget*>(this)->CommitActiveEditor();
     return _viewModel.BoundAsset != nullptr ? _viewModel.BoundAsset->Logic : "";
 }
 
-void TriggerEditorWidget::SetTriggerText(const QString &value)
-{
-    if (_viewModel.BoundAsset != nullptr && _viewModel.BoundAsset->Logic != value)
-    {
+void TriggerEditorWidget::SetTriggerText(const QString& value) {
+    if (_viewModel.BoundAsset != nullptr && _viewModel.BoundAsset->Logic != value) {
         _viewModel.BoundAsset->Logic = value;
         _viewModel.LoadAsset(_viewModel.BoundAsset);
     }
 }
 
-void TriggerEditorWidget::SetStatus(const QString &msg)
-{
+void TriggerEditorWidget::SetStatus(const QString& msg) {
     if (lblEditorStatus != nullptr)
         lblEditorStatus->setText(msg);
     emit StatusUpdateRequested(msg);
 }
 
-void TriggerEditorWidget::SetNotes(const QList<CodeNote> &notes)
-{
+void TriggerEditorWidget::SetNotes(const QList<CodeNote>& notes) {
     _rawNotes = notes;
     _notesLookup.clear();
     _rangeCache.clear();
@@ -622,25 +605,21 @@ void TriggerEditorWidget::SetNotes(const QList<CodeNote> &notes)
     QSet<int64_t> rangedStarts;
 
     // Pass 1: Parse all real notes
-    for (const auto &note : notes)
-    {
+    for (const auto& note : notes) {
         QString key = LogicFormatter::NormalizeAddress(note.Address);
         auto nodes = parser.ParseNoteText(note.Note);
         _notesLookup.insert(key, nodes);
 
-        if (!nodes.isEmpty())
-        {
+        if (!nodes.isEmpty()) {
             auto root = nodes[0];
-            if (root->Size > 1)
-            {
+            if (root->Size > 1) {
                 bool ok = false;
                 QString clean = key;
                 clean.remove("0x", Qt::CaseInsensitive);
                 int64_t startAddr = clean.toLongLong(&ok, 16);
-                if (ok && !rangedStarts.contains(startAddr))
-                {
+                if (ok && !rangedStarts.contains(startAddr)) {
                     rangedStarts.insert(startAddr);
-                    _rangeCache.append(ConditionFormatter::RangeEntry{ startAddr, startAddr + root->Size, root });
+                    _rangeCache.append(ConditionFormatter::RangeEntry{startAddr, startAddr + root->Size, root});
                 }
             }
         }
@@ -649,35 +628,27 @@ void TriggerEditorWidget::SetNotes(const QList<CodeNote> &notes)
     // Pass 2: Handle Redirects for Aliasing (Refer to $0x...)
     // If a note is empty but refers to another note, clone the tree so the Grid can display aliases
     static const QRegularExpression redirectRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression structRegex(
-        QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"),
-        QRegularExpression::MultilineOption);
+    static const QRegularExpression structRegex(QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"), QRegularExpression::MultilineOption);
 
-    for (const auto &note : notes)
-    {
+    for (const auto& note : notes) {
         bool hasStructure = structRegex.match(note.Note).hasMatch();
-        if (!hasStructure)
-        {
+        if (!hasStructure) {
             auto match = redirectRegex.match(note.Note);
-            if (match.hasMatch())
-            {
+            if (match.hasMatch()) {
                 QString targetAddr = LogicFormatter::NormalizeAddress(match.captured(1));
                 QString sourceKey = LogicFormatter::NormalizeAddress(note.Address);
 
-                if (_notesLookup.contains(targetAddr))
-                {
+                if (_notesLookup.contains(targetAddr)) {
                     const auto targetNodes = _notesLookup.value(targetAddr);
                     _notesLookup.insert(sourceKey, targetNodes);
-                    if (!targetNodes.isEmpty() && targetNodes[0]->Size > 1)
-                    {
+                    if (!targetNodes.isEmpty() && targetNodes[0]->Size > 1) {
                         bool ok = false;
                         QString clean = sourceKey;
                         clean.remove("0x", Qt::CaseInsensitive);
                         int64_t startAddr = clean.toLongLong(&ok, 16);
-                        if (ok && !rangedStarts.contains(startAddr))
-                        {
+                        if (ok && !rangedStarts.contains(startAddr)) {
                             rangedStarts.insert(startAddr);
-                            _rangeCache.append(ConditionFormatter::RangeEntry{ startAddr, startAddr + targetNodes[0]->Size, targetNodes[0] });
+                            _rangeCache.append(ConditionFormatter::RangeEntry{startAddr, startAddr + targetNodes[0]->Size, targetNodes[0]});
                         }
                     }
                 }
@@ -691,16 +662,14 @@ void TriggerEditorWidget::SetNotes(const QList<CodeNote> &notes)
     RefreshCurrentGridDisplay();
 }
 
-void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, const QString &setType)
-{
+void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, const QString& setType) {
     const QList<int> savedVisualRows = GetSelectedVisualRows();
     const int savedCurrentVisualRow = conditionGrid->currentIndex().row();
     const int savedCurrentCol = conditionGrid->currentIndex().column();
     const int savedScroll = conditionGrid->verticalScrollBar()->value();
 
     _preserveSegmentSelection = "";
-    if (lvLeaderboardComponents->isVisible() && lvLeaderboardComponents->currentItem() != nullptr)
-    {
+    if (lvLeaderboardComponents->isVisible() && lvLeaderboardComponents->currentItem() != nullptr) {
         _preserveSegmentSelection = lvLeaderboardComponents->currentItem()->text();
     }
 
@@ -710,34 +679,29 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
     txtTitle->setText(asset != nullptr ? asset->Title : "");
     txtDescription->setText(asset != nullptr ? asset->Description : "");
 
-    if (asset != nullptr)
-    {
-        if (!asset->isLeaderboard())
-        {
-            const auto &cheevo = static_cast<const RaAchievement &>(*asset);
+    if (asset != nullptr) {
+        if (!asset->isLeaderboard()) {
+            const auto& cheevo = static_cast<const RaAchievement&>(*asset);
             SetupAchievementUI(cheevo);
-            pbBadge->setPixmap(ImageCache::GetBadge(cheevo.BadgeName, [this, currentBadgeName = cheevo.BadgeName](const QPixmap &pix) {
-                if (_viewModel.BoundAsset != nullptr && !_viewModel.BoundAsset->isLeaderboard())
-                {
-                    const auto &curAch = static_cast<const RaAchievement &>(*_viewModel.BoundAsset);
-                    if (curAch.BadgeName == currentBadgeName)
-                        pbBadge->setPixmap(pix);
-                }
-            }, this));
-        }
-        else
-        {
-            const auto &lb = static_cast<const RaLeaderboard &>(*asset);
+            pbBadge->setPixmap(ImageCache::GetBadge(
+                cheevo.BadgeName,
+                [this, currentBadgeName = cheevo.BadgeName](const QPixmap& pix) {
+                    if (_viewModel.BoundAsset != nullptr && !_viewModel.BoundAsset->isLeaderboard()) {
+                        const auto& curAch = static_cast<const RaAchievement&>(*_viewModel.BoundAsset);
+                        if (curAch.BadgeName == currentBadgeName)
+                            pbBadge->setPixmap(pix);
+                    }
+                },
+                this));
+        } else {
+            const auto& lb = static_cast<const RaLeaderboard&>(*asset);
             SetupLeaderboardUI(lb);
         }
 
-        if (asset->State == AssetState::Local)
-        {
+        if (asset->State == AssetState::Local) {
             lblAssetState->setText("Local");
             lblAssetState->setStyleSheet("color: #2e8b57; font-style: italic;");
-        }
-        else
-        {
+        } else {
             lblAssetState->setText(setType);
             lblAssetState->setStyleSheet("color: #707070; font-style: italic;");
         }
@@ -751,10 +715,8 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
     int newRowCount = _conditionModel.rowCount();
     QItemSelection restoredSelection;
     QList<int> validRestoredRows;
-    for (int vRow : savedVisualRows)
-    {
-        if (vRow >= 0 && vRow < newRowCount)
-        {
+    for (int vRow : savedVisualRows) {
+        if (vRow >= 0 && vRow < newRowCount) {
             auto left = _conditionModel.index(vRow, 0);
             auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
             restoredSelection.select(left, right);
@@ -762,24 +724,14 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
         }
     }
 
-    if (!restoredSelection.isEmpty())
-    {
-        conditionGrid->selectionModel()->select(
-            restoredSelection,
-            QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    if (!restoredSelection.isEmpty()) {
+        conditionGrid->selectionModel()->select(restoredSelection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 
-        int focusRow = (savedCurrentVisualRow >= 0 && savedCurrentVisualRow < newRowCount)
-            ? savedCurrentVisualRow
-            : validRestoredRows.first();
-        int focusCol = (savedCurrentCol >= 0 && savedCurrentCol < _conditionModel.columnCount())
-            ? savedCurrentCol
-            : 0;
-        conditionGrid->selectionModel()->setCurrentIndex(
-            _conditionModel.index(focusRow, focusCol),
-            QItemSelectionModel::NoUpdate);
-    }
-    else
-    {
+        int focusRow =
+            (savedCurrentVisualRow >= 0 && savedCurrentVisualRow < newRowCount) ? savedCurrentVisualRow : validRestoredRows.first();
+        int focusCol = (savedCurrentCol >= 0 && savedCurrentCol < _conditionModel.columnCount()) ? savedCurrentCol : 0;
+        conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(focusRow, focusCol), QItemSelectionModel::NoUpdate);
+    } else {
         // Clear grid selection on load so row 0 is not highlighted in blue by default
         conditionGrid->clearSelection();
         conditionGrid->selectionModel()->setCurrentIndex(QModelIndex(), QItemSelectionModel::NoUpdate);
@@ -793,8 +745,7 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
     _isProgrammaticallyChanging = false;
 }
 
-void TriggerEditorWidget::SetupAchievementUI(const RaAchievement &cheevo)
-{
+void TriggerEditorWidget::SetupAchievementUI(const RaAchievement& cheevo) {
     cmbPoints->setVisible(true);
     cmbType->setVisible(true);
     lblAuthor->setVisible(true);
@@ -809,17 +760,21 @@ void TriggerEditorWidget::SetupAchievementUI(const RaAchievement &cheevo)
     lblAuthor->setText(QString("Author: %1").arg(cheevo.Author));
 
     QString displayType = "";
-    if (cheevo.Type == "progression") displayType = "Progression";
-    else if (cheevo.Type == "win_condition") displayType = "Win";
-    else if (cheevo.Type == "missable") displayType = "Missable";
+    if (cheevo.Type == "progression")
+        displayType = "Progression";
+    else if (cheevo.Type == "win_condition")
+        displayType = "Win";
+    else if (cheevo.Type == "missable")
+        displayType = "Missable";
 
     int idx = cmbType->findText(displayType);
-    if (idx != -1) cmbType->setCurrentIndex(idx);
-    else cmbType->setCurrentText(displayType);
+    if (idx != -1)
+        cmbType->setCurrentIndex(idx);
+    else
+        cmbType->setCurrentText(displayType);
 }
 
-void TriggerEditorWidget::SetupLeaderboardUI(const RaLeaderboard &lb)
-{
+void TriggerEditorWidget::SetupLeaderboardUI(const RaLeaderboard& lb) {
     cmbPoints->setVisible(false);
     cmbType->setVisible(false);
     pbBadge->setVisible(false);
@@ -833,14 +788,15 @@ void TriggerEditorWidget::SetupLeaderboardUI(const RaLeaderboard &lb)
     lblAuthor->setText("Author: Unknown");
 
     int fIdx = cmbFormat->findData(lb.Format);
-    if (fIdx != -1) cmbFormat->setCurrentIndex(fIdx);
-    else cmbFormat->setCurrentText(lb.Format);
+    if (fIdx != -1)
+        cmbFormat->setCurrentIndex(fIdx);
+    else
+        cmbFormat->setCurrentText(lb.Format);
 
     chkLowerIsBetter->setChecked(lb.LowerIsBetter);
 }
 
-void TriggerEditorWidget::Clear()
-{
+void TriggerEditorWidget::Clear() {
     _isProgrammaticallyChanging = true;
     _viewModel.LoadAsset(std::make_shared<RaAchievement>());
     txtTitle->clear();
@@ -873,14 +829,19 @@ void TriggerEditorWidget::Clear()
     _isProgrammaticallyChanging = false;
 }
 
-void TriggerEditorWidget::Undo() { _viewModel.Undo(); SetStatus("Undone."); }
-void TriggerEditorWidget::Redo() { _viewModel.Redo(); SetStatus("Redone."); }
+void TriggerEditorWidget::Undo() {
+    _viewModel.Undo();
+    SetStatus("Undone.");
+}
+void TriggerEditorWidget::Redo() {
+    _viewModel.Redo();
+    SetStatus("Redone.");
+}
 
-void TriggerEditorWidget::RefreshGroupsListUI()
-{
+void TriggerEditorWidget::RefreshGroupsListUI() {
     int savedIndex = groupsList->currentRow();
-    const auto &activeGroups = _viewModel.GetActiveGroups();
-    const auto &generatorRules = _viewModel.GeneratorRules;
+    const auto& activeGroups = _viewModel.GetActiveGroups();
+    const auto& generatorRules = _viewModel.GeneratorRules;
 
     // Suppress the transient currentRowChanged(-1) emitted by clear(): it would
     // repaint the grid with a null group and wipe the selection/current cell.
@@ -890,30 +851,24 @@ void TriggerEditorWidget::RefreshGroupsListUI()
     groupsList->clear();
 
     QSet<int> generatedIndices;
-    for (auto it = generatorRules.cbegin(); it != generatorRules.cend(); ++it)
-    {
-        if (!it.value().IsArray)
-        {
+    for (auto it = generatorRules.cbegin(); it != generatorRules.cend(); ++it) {
+        if (!it.value().IsArray) {
             for (int i = 1; i <= it.value().Copies; i++)
                 generatedIndices.insert(it.key() + i);
         }
     }
 
-    for (int i = 0; i < activeGroups.size(); i++)
-    {
+    for (int i = 0; i < activeGroups.size(); i++) {
         QString text = activeGroups[i].GroupName;
-        auto *item = new QListWidgetItem(text);
+        auto* item = new QListWidgetItem(text);
 
-        if (generatedIndices.contains(i))
-        {
+        if (generatedIndices.contains(i)) {
             item->setForeground(Qt::gray);
             QFont f = item->font();
             f.setItalic(true);
             item->setFont(f);
             item->setText(text + " (Auto)");
-        }
-        else if (generatorRules.contains(i))
-        {
+        } else if (generatorRules.contains(i)) {
             item->setForeground(QColor(0, 120, 215));
             QFont f = item->font();
             f.setBold(true);
@@ -926,8 +881,7 @@ void TriggerEditorWidget::RefreshGroupsListUI()
         groupsList->addItem(item);
     }
 
-    if (groupsList->count() > 0)
-    {
+    if (groupsList->count() > 0) {
         int targetIndex = (savedIndex >= 0 && savedIndex < groupsList->count()) ? savedIndex : 0;
         groupsList->setCurrentRow(targetIndex);
     }
@@ -937,12 +891,10 @@ void TriggerEditorWidget::RefreshGroupsListUI()
     _isProgrammaticallyChanging = wasChanging;
 }
 
-void TriggerEditorWidget::RefreshCurrentGridDisplay()
-{
+void TriggerEditorWidget::RefreshCurrentGridDisplay() {
     int savedScroll = conditionGrid->verticalScrollBar()->value();
     QList<int> selectedModelRows;
-    for (int vRow : GetSelectedVisualRows())
-    {
+    for (int vRow : GetSelectedVisualRows()) {
         int mIdx = _conditionModel.GetModelIndexForVisualRow(vRow);
         if (mIdx != -1 && !selectedModelRows.contains(mIdx))
             selectedModelRows.append(mIdx);
@@ -952,39 +904,25 @@ void TriggerEditorWidget::RefreshCurrentGridDisplay()
     int currentColumn = conditionGrid->currentIndex().column();
 
     int row = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    AchievementConditionGroup *group = (row >= 0 && row < groups.size()) ? &groups[row] : nullptr;
+    auto& groups = _viewModel.GetActiveGroups();
+    AchievementConditionGroup* group = (row >= 0 && row < groups.size()) ? &groups[row] : nullptr;
 
     bool isGenerated = false;
-    for (auto it = _viewModel.GeneratorRules.cbegin(); it != _viewModel.GeneratorRules.cend(); ++it)
-    {
-        if (!it.value().IsArray && row > it.key() && row <= it.key() + it.value().Copies)
-        {
+    for (auto it = _viewModel.GeneratorRules.cbegin(); it != _viewModel.GeneratorRules.cend(); ++it) {
+        if (!it.value().IsArray && row > it.key() && row <= it.key() + it.value().Copies) {
             isGenerated = true;
             break;
         }
     }
 
-    _conditionModel.SetGroup(
-        group,
-        isGenerated,
-        _showDecimal,
-        _showAliases,
-        _collapseChains,
-        &_notesLookup,
-        &_rangeCache,
-        &_currentIssues);
+    _conditionModel.SetGroup(group, isGenerated, _showDecimal, _showAliases, _collapseChains, &_notesLookup, &_rangeCache, &_currentIssues);
 
-    if (group != nullptr && !selectedModelRows.isEmpty())
-    {
+    if (group != nullptr && !selectedModelRows.isEmpty()) {
         QItemSelection selection;
-        for (int mIdx : selectedModelRows)
-        {
-            if (mIdx >= 0 && mIdx < group->Conditions.size())
-            {
+        for (int mIdx : selectedModelRows) {
+            if (mIdx >= 0 && mIdx < group->Conditions.size()) {
                 int vRow = _conditionModel.GetVisualRowForCondition(&group->Conditions[mIdx]);
-                if (vRow != -1)
-                {
+                if (vRow != -1) {
                     auto left = _conditionModel.index(vRow, 0);
                     auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
                     selection.select(left, right);
@@ -992,18 +930,14 @@ void TriggerEditorWidget::RefreshCurrentGridDisplay()
             }
         }
         conditionGrid->selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-    }
-    else
-    {
+    } else {
         conditionGrid->clearSelection();
     }
 
     // Use QItemSelectionModel::NoUpdate to set focus cell without wiping multi-row selection
-    if (group != nullptr && currentModelRow != -1 && currentModelRow < group->Conditions.size())
-    {
+    if (group != nullptr && currentModelRow != -1 && currentModelRow < group->Conditions.size()) {
         int vRow = _conditionModel.GetVisualRowForCondition(&group->Conditions[currentModelRow]);
-        if (vRow != -1)
-        {
+        if (vRow != -1) {
             int col = (currentColumn >= 0 && currentColumn < _conditionModel.columnCount()) ? currentColumn : 0;
             conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, col), QItemSelectionModel::NoUpdate);
         }
@@ -1015,23 +949,24 @@ void TriggerEditorWidget::RefreshCurrentGridDisplay()
     conditionGrid->verticalScrollBar()->setValue(savedScroll);
 }
 
-void TriggerEditorWidget::RunValidation()
-{
+void TriggerEditorWidget::RunValidation() {
     _currentIssues = _viewModel.ValidateCurrentLogic();
     emit ValidationCompleted(_currentIssues);
 
     bool hasErrors = false;
     bool hasWarnings = false;
-    for (const auto &i : _currentIssues)
-    {
-        if (i.Severity >= FeedbackSeverity::Error) hasErrors = true;
-        else if (i.Severity >= FeedbackSeverity::Warning) hasWarnings = true;
+    for (const auto& i : _currentIssues) {
+        if (i.Severity >= FeedbackSeverity::Error)
+            hasErrors = true;
+        else if (i.Severity >= FeedbackSeverity::Warning)
+            hasWarnings = true;
     }
 
-    if (hasErrors) SetStatus(QString::fromUtf8("❌ Error(s) found in logic."));
-    else if (hasWarnings) SetStatus(QString::fromUtf8("⚠️ Warning(s) found in logic."));
-    else
-    {
+    if (hasErrors)
+        SetStatus(QString::fromUtf8("❌ Error(s) found in logic."));
+    else if (hasWarnings)
+        SetStatus(QString::fromUtf8("⚠️ Warning(s) found in logic."));
+    else {
         if (lblEditorStatus->text().startsWith(QString::fromUtf8("❌")) || lblEditorStatus->text().startsWith(QString::fromUtf8("⚠️")))
             SetStatus("Ready");
     }
@@ -1039,113 +974,106 @@ void TriggerEditorWidget::RunValidation()
     _conditionModel.SetIssues(&_currentIssues);
 }
 
-void TriggerEditorWidget::CommitActiveEditor()
-{
-    if (conditionGrid != nullptr && !conditionGrid->viewport()->findChildren<QWidget*>().isEmpty())
-    {
+void TriggerEditorWidget::CommitActiveEditor() {
+    if (conditionGrid != nullptr && !conditionGrid->viewport()->findChildren<QWidget*>().isEmpty()) {
         auto curIdx = conditionGrid->currentIndex();
         conditionGrid->setCurrentIndex(QModelIndex());
-        if (curIdx.isValid())
-        {
+        if (curIdx.isValid()) {
             conditionGrid->setCurrentIndex(curIdx);
         }
     }
 }
 
-void TriggerEditorWidget::onTitleChanged(const QString &text)
-{
-    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr) return;
+void TriggerEditorWidget::onTitleChanged(const QString& text) {
+    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
+        return;
     _viewModel.BoundAsset->Title = text;
     emit AchievementDataChanged();
 }
 
-void TriggerEditorWidget::onDescriptionChanged(const QString &text)
-{
-    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr) return;
+void TriggerEditorWidget::onDescriptionChanged(const QString& text) {
+    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
+        return;
     _viewModel.BoundAsset->Description = text;
     emit AchievementDataChanged();
 }
 
-void TriggerEditorWidget::onPointsChanged()
-{
-    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr) return;
-    if (!_viewModel.BoundAsset->isLeaderboard())
-    {
-        auto &ach = static_cast<RaAchievement &>(*_viewModel.BoundAsset);
+void TriggerEditorWidget::onPointsChanged() {
+    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
+        return;
+    if (!_viewModel.BoundAsset->isLeaderboard()) {
+        auto& ach = static_cast<RaAchievement&>(*_viewModel.BoundAsset);
         bool ok = false;
         int p = cmbPoints->currentText().toInt(&ok);
-        if (ok)
-        {
+        if (ok) {
             ach.Points = p;
             emit AchievementDataChanged();
         }
     }
 }
 
-void TriggerEditorWidget::onTypeChanged(int /*index*/)
-{
-    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr) return;
-    if (!_viewModel.BoundAsset->isLeaderboard())
-    {
-        auto &ach = static_cast<RaAchievement &>(*_viewModel.BoundAsset);
+void TriggerEditorWidget::onTypeChanged(int /*index*/) {
+    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
+        return;
+    if (!_viewModel.BoundAsset->isLeaderboard()) {
+        auto& ach = static_cast<RaAchievement&>(*_viewModel.BoundAsset);
         QString t = cmbType->currentText();
-        if (t == "Progression") ach.Type = "progression";
-        else if (t == "Win") ach.Type = "win_condition";
-        else if (t == "Missable") ach.Type = "missable";
-        else ach.Type = "";
+        if (t == "Progression")
+            ach.Type = "progression";
+        else if (t == "Win")
+            ach.Type = "win_condition";
+        else if (t == "Missable")
+            ach.Type = "missable";
+        else
+            ach.Type = "";
         emit AchievementDataChanged();
     }
 }
 
-void TriggerEditorWidget::onFormatChanged(int /*index*/)
-{
-    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr) return;
-    if (_viewModel.BoundAsset->isLeaderboard())
-    {
-        auto &lb = static_cast<RaLeaderboard &>(*_viewModel.BoundAsset);
+void TriggerEditorWidget::onFormatChanged(int /*index*/) {
+    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
+        return;
+    if (_viewModel.BoundAsset->isLeaderboard()) {
+        auto& lb = static_cast<RaLeaderboard&>(*_viewModel.BoundAsset);
         lb.Format = cmbFormat->currentData().toString();
         emit AchievementDataChanged();
     }
 }
 
-void TriggerEditorWidget::onLowerIsBetterChanged(bool checked)
-{
-    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr) return;
-    if (_viewModel.BoundAsset->isLeaderboard())
-    {
-        auto &lb = static_cast<RaLeaderboard &>(*_viewModel.BoundAsset);
+void TriggerEditorWidget::onLowerIsBetterChanged(bool checked) {
+    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
+        return;
+    if (_viewModel.BoundAsset->isLeaderboard()) {
+        auto& lb = static_cast<RaLeaderboard&>(*_viewModel.BoundAsset);
         lb.LowerIsBetter = checked;
         emit AchievementDataChanged();
     }
 }
 
-void TriggerEditorWidget::onShowDecimalChanged(bool checked)
-{
+void TriggerEditorWidget::onShowDecimalChanged(bool checked) {
     _showDecimal = checked;
     RefreshCurrentGridDisplay();
 }
 
-void TriggerEditorWidget::onAliasModeChanged(bool checked)
-{
+void TriggerEditorWidget::onAliasModeChanged(bool checked) {
     _showAliases = checked;
     RefreshCurrentGridDisplay();
 }
 
-void TriggerEditorWidget::onCollapseChainsChanged(bool checked)
-{
+void TriggerEditorWidget::onCollapseChainsChanged(bool checked) {
     _collapseChains = checked;
     RefreshCurrentGridDisplay();
 }
 
-void TriggerEditorWidget::onGroupsListSelectionChanged()
-{
-    if (_isProgrammaticallyChanging) return;
+void TriggerEditorWidget::onGroupsListSelectionChanged() {
+    if (_isProgrammaticallyChanging)
+        return;
     RefreshCurrentGridDisplay();
 }
 
-void TriggerEditorWidget::onLbComponentsSelectionChanged()
-{
-    if (_isProgrammaticallyChanging || lvLeaderboardComponents->currentItem() == nullptr) return;
+void TriggerEditorWidget::onLbComponentsSelectionChanged() {
+    if (_isProgrammaticallyChanging || lvLeaderboardComponents->currentItem() == nullptr)
+        return;
     QString seg = lvLeaderboardComponents->currentItem()->text();
     _viewModel.SelectSegment(seg);
     RefreshGroupsListUI();
@@ -1153,34 +1081,26 @@ void TriggerEditorWidget::onLbComponentsSelectionChanged()
 
 void TriggerEditorWidget::onBtnResetClicked() { emit AssetResetRequested(); }
 void TriggerEditorWidget::onBtnAddNoteClicked() { emit AddFromCodeNoteRequested(); }
-void TriggerEditorWidget::onBtnCopyDefClicked()
-{
+void TriggerEditorWidget::onBtnCopyDefClicked() {
     CommitActiveEditor();
-    if (_viewModel.BoundAsset != nullptr)
-    {
+    if (_viewModel.BoundAsset != nullptr) {
         QGuiApplication::clipboard()->setText(_viewModel.BoundAsset->Logic);
         SetStatus("Full definition copied.");
     }
 }
 
-void TriggerEditorWidget::onBtnToolsClicked()
-{
-    toolsContextMenu->exec(btnTools->mapToGlobal(QPoint(0, btnTools->height())));
-}
+void TriggerEditorWidget::onBtnToolsClicked() { toolsContextMenu->exec(btnTools->mapToGlobal(QPoint(0, btnTools->height()))); }
 
-void TriggerEditorWidget::onAddGroupClicked()
-{
+void TriggerEditorWidget::onAddGroupClicked() {
     _viewModel.AddGroup();
     RefreshGroupsListUI();
     if (groupsList->count() > 0)
         groupsList->setCurrentRow(groupsList->count() - 1);
 }
 
-void TriggerEditorWidget::onRemoveGroupClicked()
-{
+void TriggerEditorWidget::onRemoveGroupClicked() {
     int row = groupsList->currentRow();
-    if (row == 0)
-    {
+    if (row == 0) {
         QMessageBox::warning(this, "Operation Not Allowed", "The Core group cannot be deleted.");
         return;
     }
@@ -1188,88 +1108,60 @@ void TriggerEditorWidget::onRemoveGroupClicked()
     RefreshGroupsListUI();
 }
 
-void TriggerEditorWidget::onRemoveAllAltGroupsClicked()
-{
-    if (QMessageBox::question(this, "Confirm", "Remove all Alt groups?") == QMessageBox::Yes)
-    {
+void TriggerEditorWidget::onRemoveAllAltGroupsClicked() {
+    if (QMessageBox::question(this, "Confirm", "Remove all Alt groups?") == QMessageBox::Yes) {
         _viewModel.RemoveAllAltGroups();
         RefreshGroupsListUI();
     }
 }
 
-bool TriggerEditorWidget::eventFilter(QObject *watched, QEvent *event)
-{
-    if (watched == conditionGrid && event->type() == QEvent::KeyPress)
-    {
-        auto *keyEvent = static_cast<QKeyEvent *>(event);
+bool TriggerEditorWidget::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == conditionGrid && event->type() == QEvent::KeyPress) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
         bool isEditing = !conditionGrid->viewport()->findChildren<QWidget*>().isEmpty();
 
         // Generated ("Auto") groups are read-only: swallow mutating shortcuts.
-        if (!isEditing && IsGridReadOnly())
-        {
-            if (keyEvent->key() == Qt::Key_Delete ||
-                keyEvent->matches(QKeySequence::Cut) ||
-                keyEvent->matches(QKeySequence::Paste) ||
-                (keyEvent->modifiers() == Qt::ControlModifier && keyEvent->key() == Qt::Key_D))
-            {
+        if (!isEditing && IsGridReadOnly()) {
+            if (keyEvent->key() == Qt::Key_Delete || keyEvent->matches(QKeySequence::Cut) || keyEvent->matches(QKeySequence::Paste) ||
+                (keyEvent->modifiers() == Qt::ControlModifier && keyEvent->key() == Qt::Key_D)) {
                 return true;
             }
         }
 
         // Only handle navigation and grid operations when not typing in an in-place cell editor
-        if (!isEditing)
-        {
-            if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter)
-            {
+        if (!isEditing) {
+            if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
                 auto current = conditionGrid->currentIndex();
-                if (current.isValid() && (current.column() == ConditionTableModel::ColLValue || current.column() == ConditionTableModel::ColRValue))
-                {
+                if (current.isValid() &&
+                    (current.column() == ConditionTableModel::ColLValue || current.column() == ConditionTableModel::ColRValue)) {
                     HandleAddressSelection(current.row(), current.column());
                     return true;
                 }
-            }
-            else if (keyEvent->modifiers() == Qt::AltModifier && keyEvent->key() == Qt::Key_Up)
-            {
+            } else if (keyEvent->modifiers() == Qt::AltModifier && keyEvent->key() == Qt::Key_Up) {
                 MoveSelected(-1);
                 return true;
-            }
-            else if (keyEvent->modifiers() == Qt::AltModifier && keyEvent->key() == Qt::Key_Down)
-            {
+            } else if (keyEvent->modifiers() == Qt::AltModifier && keyEvent->key() == Qt::Key_Down) {
                 MoveSelected(1);
                 return true;
-            }
-            else if (keyEvent->matches(QKeySequence::SelectAll))
-            {
+            } else if (keyEvent->matches(QKeySequence::SelectAll)) {
                 conditionGrid->selectAll();
                 return true;
-            }
-            else if (keyEvent->modifiers() == Qt::ControlModifier && keyEvent->key() == Qt::Key_C)
-            {
+            } else if (keyEvent->modifiers() == Qt::ControlModifier && keyEvent->key() == Qt::Key_C) {
                 CopySelectedLogic();
                 return true;
-            }
-            else if (keyEvent->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier) && keyEvent->key() == Qt::Key_C)
-            {
+            } else if (keyEvent->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier) && keyEvent->key() == Qt::Key_C) {
                 CopySelectedRows();
                 return true;
-            }
-            else if (keyEvent->matches(QKeySequence::Cut))
-            {
+            } else if (keyEvent->matches(QKeySequence::Cut)) {
                 CutSelected();
                 return true;
-            }
-            else if (keyEvent->matches(QKeySequence::Paste))
-            {
+            } else if (keyEvent->matches(QKeySequence::Paste)) {
                 PasteLogic();
                 return true;
-            }
-            else if (keyEvent->key() == Qt::Key_Delete)
-            {
+            } else if (keyEvent->key() == Qt::Key_Delete) {
                 DeleteSelected();
                 return true;
-            }
-            else if (keyEvent->modifiers() == Qt::ControlModifier && keyEvent->key() == Qt::Key_D)
-            {
+            } else if (keyEvent->modifiers() == Qt::ControlModifier && keyEvent->key() == Qt::Key_D) {
                 DuplicateSelected();
                 return true;
             }
@@ -1279,16 +1171,14 @@ bool TriggerEditorWidget::eventFilter(QObject *watched, QEvent *event)
     return QWidget::eventFilter(watched, event);
 }
 
-QList<int> TriggerEditorWidget::GetSelectedVisualRows() const
-{
+QList<int> TriggerEditorWidget::GetSelectedVisualRows() const {
     QSet<int> visualRowsSet;
     auto selectedRows = conditionGrid->selectionModel()->selectedRows();
-    for (const auto &idx : selectedRows)
+    for (const auto& idx : selectedRows)
         visualRowsSet.insert(idx.row());
 
-    if (visualRowsSet.isEmpty() && conditionGrid->selectionModel()->hasSelection())
-    {
-        for (const auto &idx : conditionGrid->selectionModel()->selectedIndexes())
+    if (visualRowsSet.isEmpty() && conditionGrid->selectionModel()->hasSelection()) {
+        for (const auto& idx : conditionGrid->selectionModel()->selectedIndexes())
             visualRowsSet.insert(idx.row());
     }
 
@@ -1300,53 +1190,47 @@ QList<int> TriggerEditorWidget::GetSelectedVisualRows() const
     return result;
 }
 
-QList<int> TriggerEditorWidget::GetEffectiveSelectionIndices()
-{
+QList<int> TriggerEditorWidget::GetEffectiveSelectionIndices() {
     int groupRow = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (groupRow < 0 || groupRow >= groups.size()) return {};
+    auto& groups = _viewModel.GetActiveGroups();
+    if (groupRow < 0 || groupRow >= groups.size())
+        return {};
 
-    auto &group = groups[groupRow];
+    auto& group = groups[groupRow];
 
     QList<int> selectedIndices;
-    for (int vRow : GetSelectedVisualRows())
-    {
+    for (int vRow : GetSelectedVisualRows()) {
         int modelIdx = _conditionModel.GetModelIndexForVisualRow(vRow);
         if (modelIdx >= 0 && modelIdx < group.Conditions.size() && !selectedIndices.contains(modelIdx))
             selectedIndices.append(modelIdx);
     }
     std::sort(selectedIndices.begin(), selectedIndices.end());
 
-    if (!_collapseChains) return selectedIndices;
+    if (!_collapseChains)
+        return selectedIndices;
 
     // Expand each visible leaf back to its hidden Add Address chain. Identity is
     // tracked by model index (value copies made pointer-based de-duplication fail).
     QList<int> expanded;
     QSet<int> processed;
-    for (int modelIdx : selectedIndices)
-    {
+    for (int modelIdx : selectedIndices) {
         QList<int> chain;
         int scan = modelIdx - 1;
-        while (scan >= 0)
-        {
-            if (group.Conditions[scan].Flag == "Add Address")
-            {
+        while (scan >= 0) {
+            if (group.Conditions[scan].Flag == "Add Address") {
                 chain.prepend(scan);
                 scan--;
-            }
-            else break;
+            } else
+                break;
         }
 
-        for (int chainIdx : chain)
-        {
-            if (!processed.contains(chainIdx))
-            {
+        for (int chainIdx : chain) {
+            if (!processed.contains(chainIdx)) {
                 processed.insert(chainIdx);
                 expanded.append(chainIdx);
             }
         }
-        if (!processed.contains(modelIdx))
-        {
+        if (!processed.contains(modelIdx)) {
             processed.insert(modelIdx);
             expanded.append(modelIdx);
         }
@@ -1355,115 +1239,108 @@ QList<int> TriggerEditorWidget::GetEffectiveSelectionIndices()
     return expanded;
 }
 
-QList<AchievementCondition> TriggerEditorWidget::GetEffectiveSelection()
-{
+QList<AchievementCondition> TriggerEditorWidget::GetEffectiveSelection() {
     QList<AchievementCondition> result;
     int groupRow = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (groupRow < 0 || groupRow >= groups.size()) return result;
+    auto& groups = _viewModel.GetActiveGroups();
+    if (groupRow < 0 || groupRow >= groups.size())
+        return result;
 
-    const auto &group = groups[groupRow];
-    for (int modelIdx : GetEffectiveSelectionIndices())
-    {
+    const auto& group = groups[groupRow];
+    for (int modelIdx : GetEffectiveSelectionIndices()) {
         if (modelIdx >= 0 && modelIdx < group.Conditions.size())
             result.append(group.Conditions[modelIdx]);
     }
     return result;
 }
 
-bool TriggerEditorWidget::IsGridReadOnly() const
-{
+bool TriggerEditorWidget::IsGridReadOnly() const {
     int row = groupsList->currentRow();
-    for (auto it = _viewModel.GeneratorRules.cbegin(); it != _viewModel.GeneratorRules.cend(); ++it)
-    {
+    for (auto it = _viewModel.GeneratorRules.cbegin(); it != _viewModel.GeneratorRules.cend(); ++it) {
         if (!it.value().IsArray && row > it.key() && row <= it.key() + it.value().Copies)
             return true;
     }
     return false;
 }
 
-void TriggerEditorWidget::CopySelectedRows()
-{
+void TriggerEditorWidget::CopySelectedRows() {
     int row = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (row < 0 || row >= groups.size()) return;
-    const auto &group = groups[row];
+    auto& groups = _viewModel.GetActiveGroups();
+    if (row < 0 || row >= groups.size())
+        return;
+    const auto& group = groups[row];
 
     // Copy Row mirrors what is visible on screen: never expand hidden Add Address
     // chains (C# uses the selected grid rows directly here).
     QList<AchievementCondition> conditionsToCopy;
-    for (int vRow : GetSelectedVisualRows())
-    {
-        auto *c = _conditionModel.GetConditionAtRow(vRow);
-        if (c != nullptr) conditionsToCopy.append(*c);
+    for (int vRow : GetSelectedVisualRows()) {
+        auto* c = _conditionModel.GetConditionAtRow(vRow);
+        if (c != nullptr)
+            conditionsToCopy.append(*c);
     }
-    if (conditionsToCopy.isEmpty()) return;
+    if (conditionsToCopy.isEmpty())
+        return;
 
     int colCount = _conditionModel.columnCount();
     QList<QStringList> formattedRows;
     QVector<int> colWidths(colCount, 0);
 
-    for (const auto &cond : conditionsToCopy)
-    {
+    for (const auto& cond : conditionsToCopy) {
         int modelIdx = group.Conditions.indexOf(cond);
         QStringList rowCells;
         rowCells.reserve(colCount);
 
-        for (int c = 0; c < colCount; c++)
-        {
+        for (int c = 0; c < colCount; c++) {
             QString txt = "";
-            switch (c)
-            {
-                case ConditionTableModel::ColID:
-                    txt = QString::number(modelIdx != -1 ? modelIdx + 1 : cond.ID);
-                    break;
-                case ConditionTableModel::ColFlag:
-                    txt = cond.Flag;
-                    break;
-                case ConditionTableModel::ColLType:
-                    txt = cond.LeftOperand.Type;
-                    break;
-                case ConditionTableModel::ColLSize:
-                    txt = cond.LeftOperand.Size;
-                    break;
-                case ConditionTableModel::ColLValue:
-                    txt = ConditionFormatter::FormatOperandDisplay(
-                        cond.LeftOperand, _showDecimal, _showAliases, &_notesLookup, &_rangeCache, &group, modelIdx);
-                    break;
-                case ConditionTableModel::ColCmp:
-                    txt = cond.Operator;
-                    break;
-                case ConditionTableModel::ColRType:
-                    txt = cond.RightOperand.Type;
-                    break;
-                case ConditionTableModel::ColRSize:
-                    txt = cond.RightOperand.Size;
-                    break;
-                case ConditionTableModel::ColRValue:
-                {
-                    QString rightSizeRef = LogicFormatter::GetRightOperandSizeReference(cond);
-                    txt = ConditionFormatter::FormatOperandDisplay(
-                        cond.RightOperand, _showDecimal, _showAliases, &_notesLookup, &_rangeCache, &group, modelIdx, rightSizeRef);
-                    break;
-                }
-                case ConditionTableModel::ColHits:
-                    txt = (!RaLogicSyntax::FlagsWithoutHits.contains(cond.Flag) && cond.RequiredHits > 0)
-                        ? QString::number(cond.RequiredHits) : "";
-                    break;
+            switch (c) {
+            case ConditionTableModel::ColID:
+                txt = QString::number(modelIdx != -1 ? modelIdx + 1 : cond.ID);
+                break;
+            case ConditionTableModel::ColFlag:
+                txt = cond.Flag;
+                break;
+            case ConditionTableModel::ColLType:
+                txt = cond.LeftOperand.Type;
+                break;
+            case ConditionTableModel::ColLSize:
+                txt = cond.LeftOperand.Size;
+                break;
+            case ConditionTableModel::ColLValue:
+                txt = ConditionFormatter::FormatOperandDisplay(cond.LeftOperand, _showDecimal, _showAliases, &_notesLookup, &_rangeCache,
+                                                               &group, modelIdx);
+                break;
+            case ConditionTableModel::ColCmp:
+                txt = cond.Operator;
+                break;
+            case ConditionTableModel::ColRType:
+                txt = cond.RightOperand.Type;
+                break;
+            case ConditionTableModel::ColRSize:
+                txt = cond.RightOperand.Size;
+                break;
+            case ConditionTableModel::ColRValue: {
+                QString rightSizeRef = LogicFormatter::GetRightOperandSizeReference(cond);
+                txt = ConditionFormatter::FormatOperandDisplay(cond.RightOperand, _showDecimal, _showAliases, &_notesLookup, &_rangeCache,
+                                                               &group, modelIdx, rightSizeRef);
+                break;
+            }
+            case ConditionTableModel::ColHits:
+                txt = (!RaLogicSyntax::FlagsWithoutHits.contains(cond.Flag) && cond.RequiredHits > 0) ? QString::number(cond.RequiredHits)
+                                                                                                      : "";
+                break;
             }
 
-            if (txt.length() > colWidths[c]) colWidths[c] = txt.length();
+            if (txt.length() > colWidths[c])
+                colWidths[c] = txt.length();
             rowCells.append(txt);
         }
         formattedRows.append(rowCells);
     }
 
     QString sb;
-    for (const auto &rowCells : formattedRows)
-    {
-        for (int c = 0; c < colCount; c++)
-        {
-            const QString &txt = rowCells[c];
+    for (const auto& rowCells : formattedRows) {
+        for (int c = 0; c < colCount; c++) {
+            const QString& txt = rowCells[c];
             if (c < colCount - 1)
                 sb += txt.leftJustified(colWidths[c] + 2, ' ');
             else
@@ -1476,47 +1353,45 @@ void TriggerEditorWidget::CopySelectedRows()
     SetStatus("Rows copied to clipboard (aligned).");
 }
 
-QString TriggerEditorWidget::GetSelectedLogicString()
-{
+QString TriggerEditorWidget::GetSelectedLogicString() {
     auto conditionsToCopy = GetEffectiveSelection();
-    if (conditionsToCopy.isEmpty()) return "";
+    if (conditionsToCopy.isEmpty())
+        return "";
 
     QString sb;
-    for (int i = 0; i < conditionsToCopy.size(); i++)
-    {
-        if (i > 0) sb += '_';
+    for (int i = 0; i < conditionsToCopy.size(); i++) {
+        if (i > 0)
+            sb += '_';
         sb += LogicFormatter::ConditionToString(conditionsToCopy[i]);
     }
     return sb;
 }
 
-void TriggerEditorWidget::CopySelectedLogic()
-{
+void TriggerEditorWidget::CopySelectedLogic() {
     QString logic = GetSelectedLogicString();
-    if (!logic.isEmpty())
-    {
+    if (!logic.isEmpty()) {
         QGuiApplication::clipboard()->setText(logic);
         SetStatus("Logic string copied to clipboard.");
     }
 }
 
-void TriggerEditorWidget::CutSelected()
-{
+void TriggerEditorWidget::CutSelected() {
     CopySelectedLogic();
     DeleteSelected();
     SetStatus("Logic cut to clipboard.");
 }
 
-void TriggerEditorWidget::AddCondition()
-{
-    if (IsGridReadOnly()) return;
+void TriggerEditorWidget::AddCondition() {
+    if (IsGridReadOnly())
+        return;
 
     int row = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (row < 0 || row >= groups.size()) return;
+    auto& groups = _viewModel.GetActiveGroups();
+    if (row < 0 || row >= groups.size())
+        return;
 
     _viewModel.PushUndoState();
-    auto &group = groups[row];
+    auto& group = groups[row];
 
     AchievementCondition newCond;
     newCond.ID = group.Conditions.size() + 1;
@@ -1528,14 +1403,15 @@ void TriggerEditorWidget::AddCondition()
 
     int insertIdx = group.Conditions.size();
     auto selectedRows = conditionGrid->selectionModel()->selectedRows();
-    if (!selectedRows.isEmpty())
-    {
+    if (!selectedRows.isEmpty()) {
         int maxVisualRow = -1;
-        for (const auto &idx : selectedRows)
-            if (idx.row() > maxVisualRow) maxVisualRow = idx.row();
+        for (const auto& idx : selectedRows)
+            if (idx.row() > maxVisualRow)
+                maxVisualRow = idx.row();
 
         int mIdx = _conditionModel.GetModelIndexForVisualRow(maxVisualRow);
-        if (mIdx != -1) insertIdx = mIdx + 1;
+        if (mIdx != -1)
+            insertIdx = mIdx + 1;
     }
 
     group.Conditions.insert(insertIdx, newCond);
@@ -1544,45 +1420,50 @@ void TriggerEditorWidget::AddCondition()
 
     // UpdateLogic may apply generator rules that insert/reallocate groups, so
     // re-fetch the group instead of using a possibly dangling reference.
-    auto &groupsAfter = _viewModel.GetActiveGroups();
-    if (row >= groupsAfter.size()) return;
-    auto &groupAfter = groupsAfter[row];
-    if (insertIdx < 0 || insertIdx >= groupAfter.Conditions.size()) return;
+    auto& groupsAfter = _viewModel.GetActiveGroups();
+    if (row >= groupsAfter.size())
+        return;
+    auto& groupAfter = groupsAfter[row];
+    if (insertIdx < 0 || insertIdx >= groupAfter.Conditions.size())
+        return;
 
     int vRow = _conditionModel.GetVisualRowForCondition(&groupAfter.Conditions[insertIdx]);
-    if (vRow != -1)
-    {
+    if (vRow != -1) {
         auto left = _conditionModel.index(vRow, 0);
         auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
-        conditionGrid->selectionModel()->select(QItemSelection(left, right), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        conditionGrid->selectionModel()->select(QItemSelection(left, right),
+                                                QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
         conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, 0), QItemSelectionModel::NoUpdate);
-        if (_headerView != nullptr) _headerView->viewport()->update();
+        if (_headerView != nullptr)
+            _headerView->viewport()->update();
     }
 
     SetStatus("Condition added.");
 }
 
-void TriggerEditorWidget::DuplicateSelected()
-{
-    if (IsGridReadOnly()) return;
+void TriggerEditorWidget::DuplicateSelected() {
+    if (IsGridReadOnly())
+        return;
 
     int row = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (row < 0 || row >= groups.size()) return;
+    auto& groups = _viewModel.GetActiveGroups();
+    if (row < 0 || row >= groups.size())
+        return;
 
     QList<int> selectedIndices = GetEffectiveSelectionIndices();
-    if (selectedIndices.isEmpty()) return;
+    if (selectedIndices.isEmpty())
+        return;
 
     _viewModel.PushUndoState();
-    auto &group = groups[row];
+    auto& group = groups[row];
 
     int insertIdx = group.Conditions.size();
     int lastModelIdx = selectedIndices.last();
-    if (lastModelIdx != -1) insertIdx = lastModelIdx + 1;
+    if (lastModelIdx != -1)
+        insertIdx = lastModelIdx + 1;
 
     QList<AchievementCondition> clones;
-    for (int modelIdx : selectedIndices)
-    {
+    for (int modelIdx : selectedIndices) {
         auto clone = group.Conditions[modelIdx].Clone();
         clone.ID = group.Conditions.size() + clones.size() + 1;
         clones.append(clone);
@@ -1594,18 +1475,18 @@ void TriggerEditorWidget::DuplicateSelected()
     _viewModel.UpdateLogic(false);
     RefreshCurrentGridDisplay();
 
-    auto &groupsAfter = _viewModel.GetActiveGroups();
-    if (row >= groupsAfter.size()) return;
-    auto &groupAfter = groupsAfter[row];
+    auto& groupsAfter = _viewModel.GetActiveGroups();
+    if (row >= groupsAfter.size())
+        return;
+    auto& groupAfter = groupsAfter[row];
 
     QItemSelection selection;
-    for (int i = 0; i < clones.size(); ++i)
-    {
+    for (int i = 0; i < clones.size(); ++i) {
         int idx = insertIdx + i;
-        if (idx < 0 || idx >= groupAfter.Conditions.size()) continue;
+        if (idx < 0 || idx >= groupAfter.Conditions.size())
+            continue;
         int vRow = _conditionModel.GetVisualRowForCondition(&groupAfter.Conditions[idx]);
-        if (vRow != -1)
-        {
+        if (vRow != -1) {
             auto left = _conditionModel.index(vRow, 0);
             auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
             selection.select(left, right);
@@ -1613,11 +1494,9 @@ void TriggerEditorWidget::DuplicateSelected()
     }
     conditionGrid->selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 
-    if (!clones.isEmpty() && insertIdx >= 0 && insertIdx < groupAfter.Conditions.size())
-    {
+    if (!clones.isEmpty() && insertIdx >= 0 && insertIdx < groupAfter.Conditions.size()) {
         int vRow = _conditionModel.GetVisualRowForCondition(&groupAfter.Conditions[insertIdx]);
-        if (vRow != -1)
-        {
+        if (vRow != -1) {
             conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, 0), QItemSelectionModel::NoUpdate);
             conditionGrid->scrollTo(_conditionModel.index(vRow, 0));
         }
@@ -1629,26 +1508,27 @@ void TriggerEditorWidget::DuplicateSelected()
     SetStatus(QString("Conditions duplicated (%1 lines).").arg(clones.size()));
 }
 
-void TriggerEditorWidget::DeleteSelected()
-{
-    if (IsGridReadOnly()) return;
+void TriggerEditorWidget::DeleteSelected() {
+    if (IsGridReadOnly())
+        return;
 
     int row = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (row < 0 || row >= groups.size()) return;
+    auto& groups = _viewModel.GetActiveGroups();
+    if (row < 0 || row >= groups.size())
+        return;
 
     QList<int> toDelete = GetEffectiveSelectionIndices();
-    if (toDelete.isEmpty()) return;
+    if (toDelete.isEmpty())
+        return;
 
     _viewModel.PushUndoState();
-    auto &group = groups[row];
+    auto& group = groups[row];
 
     int firstDeleteModelIdx = toDelete.first();
 
     // Remove from the highest index down so earlier indices stay valid.
     std::sort(toDelete.begin(), toDelete.end(), [](int a, int b) { return a > b; });
-    for (int modelIdx : toDelete)
-    {
+    for (int modelIdx : toDelete) {
         if (modelIdx >= 0 && modelIdx < group.Conditions.size())
             group.Conditions.removeAt(modelIdx);
     }
@@ -1656,21 +1536,21 @@ void TriggerEditorWidget::DeleteSelected()
     _viewModel.UpdateLogic(false);
     RefreshCurrentGridDisplay();
 
-    auto &groupsAfter = _viewModel.GetActiveGroups();
-    if (row >= groupsAfter.size()) return;
-    auto &groupAfter = groupsAfter[row];
+    auto& groupsAfter = _viewModel.GetActiveGroups();
+    if (row >= groupsAfter.size())
+        return;
+    auto& groupAfter = groupsAfter[row];
 
-    if (firstDeleteModelIdx != -1 && !groupAfter.Conditions.isEmpty())
-    {
+    if (firstDeleteModelIdx != -1 && !groupAfter.Conditions.isEmpty()) {
         if (firstDeleteModelIdx >= groupAfter.Conditions.size())
             firstDeleteModelIdx = groupAfter.Conditions.size() - 1;
 
         int vRow = _conditionModel.GetVisualRowForCondition(&groupAfter.Conditions[firstDeleteModelIdx]);
-        if (vRow != -1)
-        {
+        if (vRow != -1) {
             auto left = _conditionModel.index(vRow, 0);
             auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
-            conditionGrid->selectionModel()->select(QItemSelection(left, right), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+            conditionGrid->selectionModel()->select(QItemSelection(left, right),
+                                                    QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
             conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, 0), QItemSelectionModel::NoUpdate);
         }
     }
@@ -1681,84 +1561,81 @@ void TriggerEditorWidget::DeleteSelected()
     SetStatus("Conditions deleted.");
 }
 
-void TriggerEditorWidget::MoveSelected(int direction)
-{
-    if (IsGridReadOnly()) return;
+void TriggerEditorWidget::MoveSelected(int direction) {
+    if (IsGridReadOnly())
+        return;
 
     int row = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (row < 0 || row >= groups.size() || direction == 0) return;
+    auto& groups = _viewModel.GetActiveGroups();
+    if (row < 0 || row >= groups.size() || direction == 0)
+        return;
 
-    auto &group = groups[row];
+    auto& group = groups[row];
     auto selectedRows = conditionGrid->selectionModel()->selectedRows();
-    if (selectedRows.isEmpty()) return;
+    if (selectedRows.isEmpty())
+        return;
 
     int savedCurrentCol = conditionGrid->currentIndex().column();
     if (savedCurrentCol < 0 || savedCurrentCol >= _conditionModel.columnCount())
         savedCurrentCol = 0;
 
     QList<int> selectedModelIndices = GetEffectiveSelectionIndices();
-    if (selectedModelIndices.isEmpty()) return;
+    if (selectedModelIndices.isEmpty())
+        return;
 
     QSet<int> selectedSet;
-    for (int idx : selectedModelIndices) selectedSet.insert(idx);
+    for (int idx : selectedModelIndices)
+        selectedSet.insert(idx);
 
     // Units are model-index lists; comparing indices avoids value-equality bugs
     // when two conditions in the same group are identical.
     QList<QList<int>> units;
 
-    if (_collapseChains)
-    {
+    if (_collapseChains) {
         QList<int> currentUnit;
-        for (int i = 0; i < group.Conditions.size(); ++i)
-        {
+        for (int i = 0; i < group.Conditions.size(); ++i) {
             currentUnit.append(i);
-            if (group.Conditions[i].Flag != "Add Address")
-            {
+            if (group.Conditions[i].Flag != "Add Address") {
                 units.append(currentUnit);
                 currentUnit.clear();
             }
         }
-        if (!currentUnit.isEmpty()) units.append(currentUnit);
-    }
-    else
-    {
+        if (!currentUnit.isEmpty())
+            units.append(currentUnit);
+    } else {
         for (int i = 0; i < group.Conditions.size(); ++i)
-            units.append({ i });
+            units.append({i});
     }
 
     QList<int> selectedUnitIndices;
-    for (int i = 0; i < units.size(); i++)
-    {
+    for (int i = 0; i < units.size(); i++) {
         bool unitSelected = false;
-        for (int modelIdx : units[i])
-        {
-            if (selectedSet.contains(modelIdx))
-            {
+        for (int modelIdx : units[i]) {
+            if (selectedSet.contains(modelIdx)) {
                 unitSelected = true;
                 break;
             }
         }
-        if (unitSelected) selectedUnitIndices.append(i);
+        if (unitSelected)
+            selectedUnitIndices.append(i);
     }
 
-    if (selectedUnitIndices.isEmpty()) return;
+    if (selectedUnitIndices.isEmpty())
+        return;
     std::sort(selectedUnitIndices.begin(), selectedUnitIndices.end());
 
-    if (direction < 0 && selectedUnitIndices.first() == 0) return;
-    if (direction > 0 && selectedUnitIndices.last() >= units.size() - 1) return;
+    if (direction < 0 && selectedUnitIndices.first() == 0)
+        return;
+    if (direction > 0 && selectedUnitIndices.last() >= units.size() - 1)
+        return;
 
     _viewModel.PushUndoState();
 
-    if (direction < 0)
-    {
+    if (direction < 0) {
         for (int idx : selectedUnitIndices)
             units.swapItemsAt(idx, idx - 1);
-    }
-    else
-    {
-        for (int i = selectedUnitIndices.size() - 1; i >= 0; --i)
-        {
+    } else {
+        for (int i = selectedUnitIndices.size() - 1; i >= 0; --i) {
             int idx = selectedUnitIndices[i];
             units.swapItemsAt(idx, idx + 1);
         }
@@ -1766,13 +1643,10 @@ void TriggerEditorWidget::MoveSelected(int direction)
 
     // Track the new unit indices that were moved
     QSet<int> newMovedUnitIndices;
-    if (direction < 0)
-    {
+    if (direction < 0) {
         for (int idx : selectedUnitIndices)
             newMovedUnitIndices.insert(idx - 1);
-    }
-    else
-    {
+    } else {
         for (int idx : selectedUnitIndices)
             newMovedUnitIndices.insert(idx + 1);
     }
@@ -1780,11 +1654,9 @@ void TriggerEditorWidget::MoveSelected(int direction)
     // Determine the exact condition indices in group.Conditions that should be selected
     QSet<int> modelIndicesToSelect;
     int condOffset = 0;
-    for (int u = 0; u < units.size(); ++u)
-    {
+    for (int u = 0; u < units.size(); ++u) {
         int unitSize = units[u].size();
-        if (newMovedUnitIndices.contains(u))
-        {
+        if (newMovedUnitIndices.contains(u)) {
             for (int k = 0; k < unitSize; ++k)
                 modelIndicesToSelect.insert(condOffset + k);
         }
@@ -1793,10 +1665,8 @@ void TriggerEditorWidget::MoveSelected(int direction)
 
     const QList<AchievementCondition> originalConditions = group.Conditions;
     group.Conditions.clear();
-    for (const auto &unit : units)
-    {
-        for (int modelIdx : unit)
-        {
+    for (const auto& unit : units) {
+        for (int modelIdx : unit) {
             if (modelIdx >= 0 && modelIdx < originalConditions.size())
                 group.Conditions.append(originalConditions[modelIdx]);
         }
@@ -1805,15 +1675,14 @@ void TriggerEditorWidget::MoveSelected(int direction)
     _viewModel.UpdateLogic(false);
     RefreshCurrentGridDisplay();
 
-    auto &groupsAfter = _viewModel.GetActiveGroups();
-    if (row >= groupsAfter.size()) return;
-    auto &groupAfter = groupsAfter[row];
+    auto& groupsAfter = _viewModel.GetActiveGroups();
+    if (row >= groupsAfter.size())
+        return;
+    auto& groupAfter = groupsAfter[row];
 
     QList<int> visualRowsToSelect;
-    for (int mIdx : modelIndicesToSelect)
-    {
-        if (mIdx >= 0 && mIdx < groupAfter.Conditions.size())
-        {
+    for (int mIdx : modelIndicesToSelect) {
+        if (mIdx >= 0 && mIdx < groupAfter.Conditions.size()) {
             int vRow = _conditionModel.GetVisualRowForCondition(&groupAfter.Conditions[mIdx]);
             if (vRow != -1 && !visualRowsToSelect.contains(vRow))
                 visualRowsToSelect.append(vRow);
@@ -1823,21 +1692,16 @@ void TriggerEditorWidget::MoveSelected(int direction)
     std::sort(visualRowsToSelect.begin(), visualRowsToSelect.end());
 
     QItemSelection selection;
-    for (int vRow : visualRowsToSelect)
-    {
+    for (int vRow : visualRowsToSelect) {
         auto left = _conditionModel.index(vRow, 0);
         auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
         selection.select(left, right);
     }
     conditionGrid->selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 
-    if (!visualRowsToSelect.isEmpty())
-    {
+    if (!visualRowsToSelect.isEmpty()) {
         int focusRow = (direction > 0) ? visualRowsToSelect.last() : visualRowsToSelect.first();
-        conditionGrid->selectionModel()->setCurrentIndex(
-            _conditionModel.index(focusRow, savedCurrentCol),
-            QItemSelectionModel::NoUpdate
-        );
+        conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(focusRow, savedCurrentCol), QItemSelectionModel::NoUpdate);
         conditionGrid->scrollTo(_conditionModel.index(focusRow, savedCurrentCol));
     }
 
@@ -1847,51 +1711,47 @@ void TriggerEditorWidget::MoveSelected(int direction)
     SetStatus("Conditions moved.");
 }
 
-void TriggerEditorWidget::ExtendSelectionByPattern()
-{
+void TriggerEditorWidget::ExtendSelectionByPattern() {
     // Order selected rows by visual row index ascending to establish correct sequential pattern
     auto selectedVisualRows = GetSelectedVisualRows();
-    if (selectedVisualRows.size() < 2)
-    {
+    if (selectedVisualRows.size() < 2) {
         QMessageBox::information(this, "Extend Selection", "Please select at least two sequential rows to establish a pattern.");
         return;
     }
 
     int row = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (row < 0 || row >= groups.size()) return;
+    auto& groups = _viewModel.GetActiveGroups();
+    if (row < 0 || row >= groups.size())
+        return;
 
-    auto ParseNumeric = [](const Operand &op) -> int64_t {
+    auto ParseNumeric = [](const Operand& op) -> int64_t {
         QString val = op.Value.trimmed();
-        if (val.isEmpty()) return 0;
+        if (val.isEmpty())
+            return 0;
         bool ok = false;
-        if (val.startsWith("0x", Qt::CaseInsensitive))
-        {
+        if (val.startsWith("0x", Qt::CaseInsensitive)) {
             uint64_t u = val.mid(2).toULongLong(&ok, 16);
             return ok ? static_cast<int64_t>(u) : 0;
         }
         int64_t v = val.toLongLong(&ok, 10);
-        if (!ok)
-        {
+        if (!ok) {
             uint64_t u = val.toULongLong(&ok, 16);
             return ok ? static_cast<int64_t>(u) : 0;
         }
         return v;
     };
 
-    auto ParseBitIndex = [](const QString &size) -> int {
-        if (size.startsWith("Bit", Qt::CaseInsensitive))
-        {
+    auto ParseBitIndex = [](const QString& size) -> int {
+        if (size.startsWith("Bit", Qt::CaseInsensitive)) {
             bool ok = false;
             int idx = size.mid(3).toInt(&ok);
-            if (ok && idx >= 0 && idx <= 7) return idx;
+            if (ok && idx >= 0 && idx <= 7)
+                return idx;
         }
         return -1;
     };
 
-    auto IsFloatOrRecall = [](const Operand &op) {
-        return op.Type == "Float" || op.Type == "Recall";
-    };
+    auto IsFloatOrRecall = [](const Operand& op) { return op.Type == "Float" || op.Type == "Recall"; };
 
     struct ConditionDelta {
         int64_t leftDelta = 0;
@@ -1903,22 +1763,19 @@ void TriggerEditorWidget::ExtendSelectionByPattern()
         bool rightIsFloatOrRecall = false;
     };
 
-    auto AreStructureCompatible = [](const AchievementCondition &a, const AchievementCondition &b) -> bool {
-        return a.Flag == b.Flag &&
-               a.Operator == b.Operator &&
-               a.LeftOperand.Type == b.LeftOperand.Type &&
+    auto AreStructureCompatible = [](const AchievementCondition& a, const AchievementCondition& b) -> bool {
+        return a.Flag == b.Flag && a.Operator == b.Operator && a.LeftOperand.Type == b.LeftOperand.Type &&
                a.RightOperand.Type == b.RightOperand.Type;
     };
 
-    auto ComputeDelta = [&](const AchievementCondition &a, const AchievementCondition &b) -> ConditionDelta {
+    auto ComputeDelta = [&](const AchievementCondition& a, const AchievementCondition& b) -> ConditionDelta {
         ConditionDelta d;
         d.leftIsFloatOrRecall = IsFloatOrRecall(a.LeftOperand);
         d.rightIsFloatOrRecall = IsFloatOrRecall(a.RightOperand);
 
         int bitA = ParseBitIndex(a.LeftOperand.Size);
         int bitB = ParseBitIndex(b.LeftOperand.Size);
-        if (bitA != -1 && bitB != -1)
-        {
+        if (bitA != -1 && bitB != -1) {
             d.leftIsBit = true;
             d.leftBitDelta = bitB - bitA;
         }
@@ -1929,51 +1786,51 @@ void TriggerEditorWidget::ExtendSelectionByPattern()
         return d;
     };
 
-    auto MatchesExpected = [&](const AchievementCondition &prev, const AchievementCondition &target, const ConditionDelta &d) -> bool {
-        if (!AreStructureCompatible(prev, target)) return false;
+    auto MatchesExpected = [&](const AchievementCondition& prev, const AchievementCondition& target, const ConditionDelta& d) -> bool {
+        if (!AreStructureCompatible(prev, target))
+            return false;
 
         int64_t expectedLeftDelta = d.leftDelta;
 
-        if (d.leftIsBit)
-        {
+        if (d.leftIsBit) {
             int prevBit = ParseBitIndex(prev.LeftOperand.Size);
             int targetBit = ParseBitIndex(target.LeftOperand.Size);
-            if (prevBit == -1 || targetBit == -1) return false;
+            if (prevBit == -1 || targetBit == -1)
+                return false;
 
             int expectedBit = prevBit + d.leftBitDelta;
             // Support wrapping from Bit7 -> Bit0 (+1 byte) or Bit0 -> Bit7 (-1 byte) when stepping bits sequentially
-            if (expectedBit > 7 && d.leftDelta == 0)
-            {
+            if (expectedBit > 7 && d.leftDelta == 0) {
                 expectedBit %= 8;
                 expectedLeftDelta += 1;
-            }
-            else if (expectedBit < 0 && d.leftDelta == 0)
-            {
+            } else if (expectedBit < 0 && d.leftDelta == 0) {
                 expectedBit = (expectedBit % 8 + 8) % 8;
                 expectedLeftDelta -= 1;
             }
 
-            if (targetBit != expectedBit) return false;
-        }
-        else
-        {
-            if (target.LeftOperand.Size != prev.LeftOperand.Size) return false;
+            if (targetBit != expectedBit)
+                return false;
+        } else {
+            if (target.LeftOperand.Size != prev.LeftOperand.Size)
+                return false;
         }
 
-        if (target.RightOperand.Size != prev.RightOperand.Size) return false;
+        if (target.RightOperand.Size != prev.RightOperand.Size)
+            return false;
 
         // Float/Recall values cannot be stepped numerically; require an exact match.
-        bool leftOk = d.leftIsFloatOrRecall
-            ? (target.LeftOperand.Value == prev.LeftOperand.Value)
-            : (ParseNumeric(target.LeftOperand) == ParseNumeric(prev.LeftOperand) + expectedLeftDelta);
-        if (!leftOk) return false;
+        bool leftOk = d.leftIsFloatOrRecall ? (target.LeftOperand.Value == prev.LeftOperand.Value)
+                                            : (ParseNumeric(target.LeftOperand) == ParseNumeric(prev.LeftOperand) + expectedLeftDelta);
+        if (!leftOk)
+            return false;
 
-        bool rightOk = d.rightIsFloatOrRecall
-            ? (target.RightOperand.Value == prev.RightOperand.Value)
-            : (ParseNumeric(target.RightOperand) == ParseNumeric(prev.RightOperand) + d.rightDelta);
-        if (!rightOk) return false;
+        bool rightOk = d.rightIsFloatOrRecall ? (target.RightOperand.Value == prev.RightOperand.Value)
+                                              : (ParseNumeric(target.RightOperand) == ParseNumeric(prev.RightOperand) + d.rightDelta);
+        if (!rightOk)
+            return false;
 
-        if (static_cast<int64_t>(target.RequiredHits) != static_cast<int64_t>(prev.RequiredHits) + d.hitsDelta) return false;
+        if (static_cast<int64_t>(target.RequiredHits) != static_cast<int64_t>(prev.RequiredHits) + d.hitsDelta)
+            return false;
 
         return true;
     };
@@ -1981,10 +1838,8 @@ void TriggerEditorWidget::ExtendSelectionByPattern()
     // Determine pattern block size (B) and visual stride across contiguous or gapped selections
     const int k = selectedVisualRows.size();
     bool isContiguous = true;
-    for (int i = 1; i < k; ++i)
-    {
-        if (selectedVisualRows[i] != selectedVisualRows[i - 1] + 1)
-        {
+    for (int i = 1; i < k; ++i) {
+        if (selectedVisualRows[i] != selectedVisualRows[i - 1] + 1) {
             isContiguous = false;
             break;
         }
@@ -1994,49 +1849,44 @@ void TriggerEditorWidget::ExtendSelectionByPattern()
     int visualStride = 1;
     QList<ConditionDelta> deltas;
 
-    if (isContiguous)
-    {
+    if (isContiguous) {
         bool foundPattern = false;
         // Find the smallest repeating block divisor B of k (where at least 2 blocks are selected)
-        for (int b = 1; b <= k / 2; ++b)
-        {
-            if (k % b != 0) continue;
+        for (int b = 1; b <= k / 2; ++b) {
+            if (k % b != 0)
+                continue;
             int numBlocks = k / b;
 
             QList<ConditionDelta> candidateDeltas;
             bool structureOk = true;
-            for (int j = 0; j < b; ++j)
-            {
-                auto *c0 = _conditionModel.GetConditionAtRow(selectedVisualRows[j]);
-                auto *c1 = _conditionModel.GetConditionAtRow(selectedVisualRows[b + j]);
-                if (!c0 || !c1 || !AreStructureCompatible(*c0, *c1))
-                {
+            for (int j = 0; j < b; ++j) {
+                auto* c0 = _conditionModel.GetConditionAtRow(selectedVisualRows[j]);
+                auto* c1 = _conditionModel.GetConditionAtRow(selectedVisualRows[b + j]);
+                if (!c0 || !c1 || !AreStructureCompatible(*c0, *c1)) {
                     structureOk = false;
                     break;
                 }
                 candidateDeltas.append(ComputeDelta(*c0, *c1));
             }
-            if (!structureOk) continue;
+            if (!structureOk)
+                continue;
 
             // Verify all selected blocks follow this exact candidate delta progression
             bool allBlocksMatch = true;
-            for (int blockIdx = 1; blockIdx < numBlocks; ++blockIdx)
-            {
-                for (int j = 0; j < b; ++j)
-                {
-                    auto *cPrev = _conditionModel.GetConditionAtRow(selectedVisualRows[(blockIdx - 1) * b + j]);
-                    auto *cCurr = _conditionModel.GetConditionAtRow(selectedVisualRows[blockIdx * b + j]);
-                    if (!cPrev || !cCurr || !MatchesExpected(*cPrev, *cCurr, candidateDeltas[j]))
-                    {
+            for (int blockIdx = 1; blockIdx < numBlocks; ++blockIdx) {
+                for (int j = 0; j < b; ++j) {
+                    auto* cPrev = _conditionModel.GetConditionAtRow(selectedVisualRows[(blockIdx - 1) * b + j]);
+                    auto* cCurr = _conditionModel.GetConditionAtRow(selectedVisualRows[blockIdx * b + j]);
+                    if (!cPrev || !cCurr || !MatchesExpected(*cPrev, *cCurr, candidateDeltas[j])) {
                         allBlocksMatch = false;
                         break;
                     }
                 }
-                if (!allBlocksMatch) break;
+                if (!allBlocksMatch)
+                    break;
             }
 
-            if (allBlocksMatch)
-            {
+            if (allBlocksMatch) {
                 blockSize = b;
                 visualStride = b;
                 deltas = candidateDeltas;
@@ -2045,62 +1895,57 @@ void TriggerEditorWidget::ExtendSelectionByPattern()
             }
         }
 
-        if (!foundPattern)
-        {
+        if (!foundPattern) {
             // Fallback: use last two selected rows as single-row pattern
             blockSize = 1;
             visualStride = 1;
-            auto *c1 = _conditionModel.GetConditionAtRow(selectedVisualRows[k - 2]);
-            auto *c2 = _conditionModel.GetConditionAtRow(selectedVisualRows.last());
-            if (!c1 || !c2) return;
+            auto* c1 = _conditionModel.GetConditionAtRow(selectedVisualRows[k - 2]);
+            auto* c2 = _conditionModel.GetConditionAtRow(selectedVisualRows.last());
+            if (!c1 || !c2)
+                return;
             deltas.append(ComputeDelta(*c1, *c2));
         }
-    }
-    else
-    {
+    } else {
         // Gapped / non-contiguous selection: detect whether rows form uniform gapped blocks or uniform single rows
         QList<QList<int>> blocks;
-        QList<int> currBlock = { selectedVisualRows[0] };
-        for (int i = 1; i < k; ++i)
-        {
+        QList<int> currBlock = {selectedVisualRows[0]};
+        for (int i = 1; i < k; ++i) {
             if (selectedVisualRows[i] == selectedVisualRows[i - 1] + 1)
                 currBlock.append(selectedVisualRows[i]);
-            else
-            {
+            else {
                 blocks.append(currBlock);
-                currBlock = { selectedVisualRows[i] };
+                currBlock = {selectedVisualRows[i]};
             }
         }
         blocks.append(currBlock);
 
-        if (blocks.size() >= 2 && blocks.last().size() == blocks[blocks.size() - 2].size())
-        {
-            const auto &b1 = blocks[blocks.size() - 2];
-            const auto &b2 = blocks.last();
+        if (blocks.size() >= 2 && blocks.last().size() == blocks[blocks.size() - 2].size()) {
+            const auto& b1 = blocks[blocks.size() - 2];
+            const auto& b2 = blocks.last();
             blockSize = b2.size();
             visualStride = b2.first() - b1.first();
-            for (int j = 0; j < blockSize; ++j)
-            {
-                auto *c1 = _conditionModel.GetConditionAtRow(b1[j]);
-                auto *c2 = _conditionModel.GetConditionAtRow(b2[j]);
-                if (!c1 || !c2) return;
+            for (int j = 0; j < blockSize; ++j) {
+                auto* c1 = _conditionModel.GetConditionAtRow(b1[j]);
+                auto* c2 = _conditionModel.GetConditionAtRow(b2[j]);
+                if (!c1 || !c2)
+                    return;
                 deltas.append(ComputeDelta(*c1, *c2));
             }
-        }
-        else
-        {
+        } else {
             int v1 = selectedVisualRows[k - 2];
             int v2 = selectedVisualRows.last();
             blockSize = 1;
             visualStride = v2 - v1;
-            auto *c1 = _conditionModel.GetConditionAtRow(v1);
-            auto *c2 = _conditionModel.GetConditionAtRow(v2);
-            if (!c1 || !c2) return;
+            auto* c1 = _conditionModel.GetConditionAtRow(v1);
+            auto* c2 = _conditionModel.GetConditionAtRow(v2);
+            if (!c1 || !c2)
+                return;
             deltas.append(ComputeDelta(*c1, *c2));
         }
     }
 
-    if (visualStride <= 0 || deltas.size() != blockSize) return;
+    if (visualStride <= 0 || deltas.size() != blockSize)
+        return;
 
     // Walk the VISIBLE rows (C# semantics): with collapsed chains, model indices
     // contain hidden Add Address gaps and must not be used as the stride.
@@ -2109,27 +1954,25 @@ void TriggerEditorWidget::ExtendSelectionByPattern()
     int selectedCount = 0;
     int lastSelectedVisual = -1;
 
-    while (true)
-    {
+    while (true) {
         int nextBlockStart = prevBlockStart + visualStride;
-        if (nextBlockStart < 0 || nextBlockStart + blockSize - 1 >= totalRows) break;
+        if (nextBlockStart < 0 || nextBlockStart + blockSize - 1 >= totalRows)
+            break;
 
         bool blockMatches = true;
-        for (int j = 0; j < blockSize; ++j)
-        {
-            auto *cPrev = _conditionModel.GetConditionAtRow(prevBlockStart + j);
-            auto *cNext = _conditionModel.GetConditionAtRow(nextBlockStart + j);
-            if (!cPrev || !cNext || !MatchesExpected(*cPrev, *cNext, deltas[j]))
-            {
+        for (int j = 0; j < blockSize; ++j) {
+            auto* cPrev = _conditionModel.GetConditionAtRow(prevBlockStart + j);
+            auto* cNext = _conditionModel.GetConditionAtRow(nextBlockStart + j);
+            if (!cPrev || !cNext || !MatchesExpected(*cPrev, *cNext, deltas[j])) {
                 blockMatches = false;
                 break;
             }
         }
 
-        if (!blockMatches) break;
+        if (!blockMatches)
+            break;
 
-        for (int j = 0; j < blockSize; ++j)
-        {
+        for (int j = 0; j < blockSize; ++j) {
             int targetRow = nextBlockStart + j;
             auto left = _conditionModel.index(targetRow, 0);
             auto right = _conditionModel.index(targetRow, _conditionModel.columnCount() - 1);
@@ -2141,67 +1984,61 @@ void TriggerEditorWidget::ExtendSelectionByPattern()
         prevBlockStart = nextBlockStart;
     }
 
-    if (selectedCount > 0)
-    {
-        if (lastSelectedVisual != -1)
-        {
-            conditionGrid->selectionModel()->setCurrentIndex(
-                _conditionModel.index(lastSelectedVisual, 0),
-                QItemSelectionModel::NoUpdate
-            );
+    if (selectedCount > 0) {
+        if (lastSelectedVisual != -1) {
+            conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(lastSelectedVisual, 0), QItemSelectionModel::NoUpdate);
             conditionGrid->scrollTo(_conditionModel.index(lastSelectedVisual, 0));
         }
         conditionGrid->viewport()->update();
-        if (_headerView != nullptr) _headerView->viewport()->update();
+        if (_headerView != nullptr)
+            _headerView->viewport()->update();
         SetStatus(QString("Extended selection by %1 row(s).").arg(selectedCount));
-    }
-    else
-    {
+    } else {
         SetStatus("No matching pattern found to extend.");
     }
 }
 
-void TriggerEditorWidget::PasteLogic(const QString &logicToPaste)
-{
-    if (IsGridReadOnly()) return;
+void TriggerEditorWidget::PasteLogic(const QString& logicToPaste) {
+    if (IsGridReadOnly())
+        return;
 
     QString txt = !logicToPaste.isEmpty() ? logicToPaste : QGuiApplication::clipboard()->text();
     txt = txt.trimmed().remove('\r').remove('\n');
-    if (txt.isEmpty()) return;
+    if (txt.isEmpty())
+        return;
 
-    if (txt[0].isDigit() && txt.contains(":\"") && txt.count(':') > 5)
-    {
-        if (QMessageBox::question(this, "Confirm", "Apply Smart Paste?") == QMessageBox::Yes)
-        {
+    if (txt[0].isDigit() && txt.contains(":\"") && txt.count(':') > 5) {
+        if (QMessageBox::question(this, "Confirm", "Apply Smart Paste?") == QMessageBox::Yes) {
             ParseAndApplySmartPaste(txt);
             return;
         }
     }
 
     int row = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (row < 0 || row >= groups.size()) return;
+    auto& groups = _viewModel.GetActiveGroups();
+    if (row < 0 || row >= groups.size())
+        return;
 
     _viewModel.PushUndoState();
-    auto &group = groups[row];
+    auto& group = groups[row];
 
     int insertIdx = group.Conditions.size();
     auto selectedRows = conditionGrid->selectionModel()->selectedRows();
-    if (!selectedRows.isEmpty())
-    {
+    if (!selectedRows.isEmpty()) {
         int maxVisualRow = -1;
-        for (const auto &idx : selectedRows)
-            if (idx.row() > maxVisualRow) maxVisualRow = idx.row();
+        for (const auto& idx : selectedRows)
+            if (idx.row() > maxVisualRow)
+                maxVisualRow = idx.row();
 
         int mIdx = _conditionModel.GetModelIndexForVisualRow(maxVisualRow);
-        if (mIdx != -1) insertIdx = mIdx + 1;
+        if (mIdx != -1)
+            insertIdx = mIdx + 1;
     }
 
     auto parsedGroups = AchievementParser::ParseAchievementTrigger(txt, 'S', false);
     QList<AchievementCondition> newConditions;
-    for (const auto &g : parsedGroups)
-    {
-        for (const auto &c : g.Conditions)
+    for (const auto& g : parsedGroups) {
+        for (const auto& c : g.Conditions)
             newConditions.append(c);
     }
 
@@ -2211,18 +2048,18 @@ void TriggerEditorWidget::PasteLogic(const QString &logicToPaste)
     _viewModel.UpdateLogic(false);
     RefreshCurrentGridDisplay();
 
-    auto &groupsAfter = _viewModel.GetActiveGroups();
-    if (row >= groupsAfter.size()) return;
-    auto &groupAfter = groupsAfter[row];
+    auto& groupsAfter = _viewModel.GetActiveGroups();
+    if (row >= groupsAfter.size())
+        return;
+    auto& groupAfter = groupsAfter[row];
 
     QItemSelection selection;
-    for (int i = 0; i < newConditions.size(); ++i)
-    {
+    for (int i = 0; i < newConditions.size(); ++i) {
         int idx = insertIdx + i;
-        if (idx < 0 || idx >= groupAfter.Conditions.size()) continue;
+        if (idx < 0 || idx >= groupAfter.Conditions.size())
+            continue;
         int vRow = _conditionModel.GetVisualRowForCondition(&groupAfter.Conditions[idx]);
-        if (vRow != -1)
-        {
+        if (vRow != -1) {
             auto left = _conditionModel.index(vRow, 0);
             auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
             selection.select(left, right);
@@ -2230,11 +2067,9 @@ void TriggerEditorWidget::PasteLogic(const QString &logicToPaste)
     }
     conditionGrid->selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 
-    if (!newConditions.isEmpty() && insertIdx >= 0 && insertIdx < groupAfter.Conditions.size())
-    {
+    if (!newConditions.isEmpty() && insertIdx >= 0 && insertIdx < groupAfter.Conditions.size()) {
         int vRow = _conditionModel.GetVisualRowForCondition(&groupAfter.Conditions[insertIdx]);
-        if (vRow != -1)
-        {
+        if (vRow != -1) {
             conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, 0), QItemSelectionModel::NoUpdate);
             conditionGrid->scrollTo(_conditionModel.index(vRow, 0));
         }
@@ -2246,89 +2081,93 @@ void TriggerEditorWidget::PasteLogic(const QString &logicToPaste)
     SetStatus(QString("Logic pasted (%1 lines).").arg(newConditions.size()));
 }
 
-void TriggerEditorWidget::ParseAndApplySmartPaste(const QString &raw)
-{
+void TriggerEditorWidget::ParseAndApplySmartPaste(const QString& raw) {
     int firstColon = raw.indexOf(':');
-    if (firstColon == -1) return;
+    if (firstColon == -1)
+        return;
 
     QString content = raw.mid(firstColon + 1);
     QStringList parts;
     bool inQuote = false;
     int start = 0;
-    for (int i = 0; i < content.length(); i++)
-    {
-        if (content[i] == '"') inQuote = !inQuote;
-        else if (content[i] == ':' && !inQuote)
-        {
+    for (int i = 0; i < content.length(); i++) {
+        if (content[i] == '"')
+            inQuote = !inQuote;
+        else if (content[i] == ':' && !inQuote) {
             QString val = content.mid(start, i - start);
-            if (val.startsWith('"') && val.endsWith('"')) val = val.mid(1, val.length() - 2).replace("\\\"", "\"");
+            if (val.startsWith('"') && val.endsWith('"'))
+                val = val.mid(1, val.length() - 2).replace("\\\"", "\"");
             parts.append(val);
             start = i + 1;
         }
     }
-    if (start <= content.length())
-    {
+    if (start <= content.length()) {
         QString val = content.mid(start);
-        if (val.startsWith('"') && val.endsWith('"')) val = val.mid(1, val.length() - 2).replace("\\\"", "\"");
+        if (val.startsWith('"') && val.endsWith('"'))
+            val = val.mid(1, val.length() - 2).replace("\\\"", "\"");
         parts.append(val);
     }
 
-    if (parts.size() >= 3)
-    {
+    if (parts.size() >= 3) {
         SetTriggerText(parts[0]);
         txtTitle->setText(parts[1]);
         txtDescription->setText(parts[2]);
 
-        if (parts.size() > 5 && !parts[5].isEmpty())
-        {
+        if (parts.size() > 5 && !parts[5].isEmpty()) {
             QString t = parts[5].toLower();
-            if (t.contains("prog")) cmbType->setCurrentText("Progression");
-            else if (t.contains("win")) cmbType->setCurrentText("Win");
-            else if (t.contains("miss")) cmbType->setCurrentText("Missable");
+            if (t.contains("prog"))
+                cmbType->setCurrentText("Progression");
+            else if (t.contains("win"))
+                cmbType->setCurrentText("Win");
+            else if (t.contains("miss"))
+                cmbType->setCurrentText("Missable");
         }
 
-        if (parts.size() > 7)
-        {
+        if (parts.size() > 7) {
             bool ok = false;
             int pts = parts[7].toInt(&ok);
-            if (ok) cmbPoints->setCurrentText(QString::number(pts));
+            if (ok)
+                cmbPoints->setCurrentText(QString::number(pts));
         }
 
         SetStatus("Smart Paste applied successfully.");
     }
 }
 
-void TriggerEditorWidget::HandleAddressSelection(int row, int col)
-{
-    if (col != ConditionTableModel::ColLValue && col != ConditionTableModel::ColRValue) return;
+void TriggerEditorWidget::HandleAddressSelection(int row, int col) {
+    if (col != ConditionTableModel::ColLValue && col != ConditionTableModel::ColRValue)
+        return;
 
-    auto *cond = _conditionModel.GetConditionAtRow(row);
-    if (cond == nullptr) return;
+    auto* cond = _conditionModel.GetConditionAtRow(row);
+    if (cond == nullptr)
+        return;
 
     QString val = (col == ConditionTableModel::ColLValue) ? cond->LeftOperand.Value : cond->RightOperand.Value;
-    if (!val.startsWith("0x", Qt::CaseInsensitive)) return;
+    if (!val.startsWith("0x", Qt::CaseInsensitive))
+        return;
 
     int gRow = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (gRow < 0 || gRow >= groups.size()) return;
-    const auto &group = groups[gRow];
+    auto& groups = _viewModel.GetActiveGroups();
+    if (gRow < 0 || gRow >= groups.size())
+        return;
+    const auto& group = groups[gRow];
 
     int modelIdx = _conditionModel.GetModelIndexForVisualRow(row);
-    if (modelIdx < 0) return;
+    if (modelIdx < 0)
+        return;
 
     QList<AchievementCondition> collected;
     int scanIndex = modelIdx - 1;
-    while (scanIndex >= 0)
-    {
-        const auto &prev = group.Conditions[scanIndex];
-        if (prev.Flag != "Add Address") break;
+    while (scanIndex >= 0) {
+        const auto& prev = group.Conditions[scanIndex];
+        if (prev.Flag != "Add Address")
+            break;
         collected.prepend(prev);
         scanIndex--;
     }
 
-    if (!collected.isEmpty())
-    {
-        auto ParseHex = [](const QString &hex) -> int64_t {
+    if (!collected.isEmpty()) {
+        auto ParseHex = [](const QString& hex) -> int64_t {
             QString clean = hex;
             clean.remove("0x", Qt::CaseInsensitive);
             bool ok = false;
@@ -2336,28 +2175,26 @@ void TriggerEditorWidget::HandleAddressSelection(int row, int col)
             return ok ? v : -1;
         };
 
-        while (!collected.isEmpty())
-        {
+        while (!collected.isEmpty()) {
             int64_t baseAddrNum = ParseHex(collected[0].LeftOperand.Value);
             if (!RaLogicSyntax::MemoryTypes.contains(collected[0].LeftOperand.Type) ||
-                ConditionFormatter::GetEffectiveNote(_notesLookup, baseAddrNum) == nullptr)
-            {
+                ConditionFormatter::GetEffectiveNote(_notesLookup, baseAddrNum) == nullptr) {
                 collected.removeFirst();
-            }
-            else break;
+            } else
+                break;
         }
 
-        if (!collected.isEmpty())
-        {
+        if (!collected.isEmpty()) {
             int64_t baseAddrLong = ParseHex(collected[0].LeftOperand.Value);
             QString baseAddress = QString("0x%1").arg(baseAddrLong, 0, 16);
             QList<int64_t> offsets;
-            for (const auto &c : collected)
+            for (const auto& c : collected)
                 offsets.append(ParseHex(c.LeftOperand.Value));
 
             bool ok = false;
             int64_t currentOffset = val.mid(2).toLongLong(&ok, 16);
-            if (ok) offsets.append(currentOffset);
+            if (ok)
+                offsets.append(currentOffset);
 
             emit PointerChainSelected(PointerChainArgs(baseAddress, offsets));
             return;
@@ -2367,52 +2204,48 @@ void TriggerEditorWidget::HandleAddressSelection(int row, int col)
     emit AddressSelected(val);
 }
 
-void TriggerEditorWidget::AddConditionFromNote(const QString &logicString, const QString &type, const QString &size)
-{
-    if (logicString.isEmpty()) return;
+void TriggerEditorWidget::AddConditionFromNote(const QString& logicString, const QString& type, const QString& size) {
+    if (logicString.isEmpty())
+        return;
 
     _viewModel.PushUndoState();
     auto parsed = AchievementParser::ParseAchievementTrigger(logicString, 'S', false);
 
-    if (!parsed.isEmpty() && !parsed[0].Conditions.isEmpty())
-    {
+    if (!parsed.isEmpty() && !parsed[0].Conditions.isEmpty()) {
         auto conditions = parsed[0].Conditions;
 
-        for (auto &c : conditions)
-        {
+        for (auto& c : conditions) {
             if (c.Flag == "Add Address" && c.LeftOperand.Size.isEmpty())
                 c.LeftOperand.Size = "32-bit";
         }
 
-        auto &lastCond = conditions.last();
-        if (lastCond.LeftOperand.Type == "Mem")
-        {
+        auto& lastCond = conditions.last();
+        if (lastCond.LeftOperand.Type == "Mem") {
             lastCond.LeftOperand.Type = type;
             lastCond.LeftOperand.Size = ValidateMemorySize(size);
         }
 
-        if (lastCond.Operator.isEmpty())
-        {
+        if (lastCond.Operator.isEmpty()) {
             lastCond.Operator = "=";
-            lastCond.RightOperand = Operand{ "Value", "", type.compare("Float", Qt::CaseInsensitive) == 0 ? "0.0" : "0" };
+            lastCond.RightOperand = Operand{"Value", "", type.compare("Float", Qt::CaseInsensitive) == 0 ? "0.0" : "0"};
         }
 
         int gRow = groupsList->currentRow();
-        auto &groups = _viewModel.GetActiveGroups();
-        if (gRow >= 0 && gRow < groups.size())
-        {
-            auto &group = groups[gRow];
+        auto& groups = _viewModel.GetActiveGroups();
+        if (gRow >= 0 && gRow < groups.size()) {
+            auto& group = groups[gRow];
 
             // Insert after the last selected row (C# behaviour), not always at the end.
             int insertIdx = group.Conditions.size();
             auto selectedRows = conditionGrid->selectionModel()->selectedRows();
-            if (!selectedRows.isEmpty())
-            {
+            if (!selectedRows.isEmpty()) {
                 int maxVisualRow = -1;
-                for (const auto &idx : selectedRows)
-                    if (idx.row() > maxVisualRow) maxVisualRow = idx.row();
+                for (const auto& idx : selectedRows)
+                    if (idx.row() > maxVisualRow)
+                        maxVisualRow = idx.row();
                 int mIdx = _conditionModel.GetModelIndexForVisualRow(maxVisualRow);
-                if (mIdx != -1) insertIdx = mIdx + 1;
+                if (mIdx != -1)
+                    insertIdx = mIdx + 1;
             }
 
             for (int i = 0; i < conditions.size(); ++i)
@@ -2421,32 +2254,30 @@ void TriggerEditorWidget::AddConditionFromNote(const QString &logicString, const
             _viewModel.UpdateLogic(false);
             RefreshCurrentGridDisplay();
 
-            auto &groupsAfter = _viewModel.GetActiveGroups();
-            if (gRow >= groupsAfter.size()) return;
-            auto &groupAfter = groupsAfter[gRow];
+            auto& groupsAfter = _viewModel.GetActiveGroups();
+            if (gRow >= groupsAfter.size())
+                return;
+            auto& groupAfter = groupsAfter[gRow];
 
             // Select and focus the inserted chain so the user can see where it landed.
             QItemSelection selection;
-            for (int i = 0; i < conditions.size(); ++i)
-            {
+            for (int i = 0; i < conditions.size(); ++i) {
                 int idx = insertIdx + i;
-                if (idx < 0 || idx >= groupAfter.Conditions.size()) continue;
+                if (idx < 0 || idx >= groupAfter.Conditions.size())
+                    continue;
                 int vRow = _conditionModel.GetVisualRowForCondition(&groupAfter.Conditions[idx]);
-                if (vRow != -1)
-                {
-                    selection.select(_conditionModel.index(vRow, 0),
-                                     _conditionModel.index(vRow, _conditionModel.columnCount() - 1));
+                if (vRow != -1) {
+                    selection.select(_conditionModel.index(vRow, 0), _conditionModel.index(vRow, _conditionModel.columnCount() - 1));
                 }
             }
             conditionGrid->selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 
-            for (int i = 0; i < conditions.size(); ++i)
-            {
+            for (int i = 0; i < conditions.size(); ++i) {
                 int idx = insertIdx + i;
-                if (idx < 0 || idx >= groupAfter.Conditions.size()) continue;
+                if (idx < 0 || idx >= groupAfter.Conditions.size())
+                    continue;
                 int vRow = _conditionModel.GetVisualRowForCondition(&groupAfter.Conditions[idx]);
-                if (vRow != -1)
-                {
+                if (vRow != -1) {
                     conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, 0), QItemSelectionModel::NoUpdate);
                     conditionGrid->scrollTo(_conditionModel.index(vRow, 0));
                     break;
@@ -2459,75 +2290,70 @@ void TriggerEditorWidget::AddConditionFromNote(const QString &logicString, const
     }
 }
 
-QString TriggerEditorWidget::ValidateMemorySize(const QString &inputSize)
-{
-    if (inputSize.isEmpty()) return "8-bit";
-    if (inputSize.compare("Float", Qt::CaseInsensitive) == 0) return "Float";
+QString TriggerEditorWidget::ValidateMemorySize(const QString& inputSize) {
+    if (inputSize.isEmpty())
+        return "8-bit";
+    if (inputSize.compare("Float", Qt::CaseInsensitive) == 0)
+        return "Float";
     return RaLogicSyntax::MemorySizes.contains(inputSize) ? inputSize : "8-bit";
 }
 
-void TriggerEditorWidget::SelectCondition(const AchievementCondition *target)
-{
-    if (target == nullptr) return;
+void TriggerEditorWidget::SelectCondition(const AchievementCondition* target) {
+    if (target == nullptr)
+        return;
 
-    const auto &groups = _viewModel.GetActiveGroups();
+    const auto& groups = _viewModel.GetActiveGroups();
     int groupIndex = -1;
-    const AchievementCondition *actualCond = nullptr;
+    const AchievementCondition* actualCond = nullptr;
 
-    for (int i = 0; i < groups.size(); i++)
-    {
-        for (const auto &c : groups[i].Conditions)
-        {
+    for (int i = 0; i < groups.size(); i++) {
+        for (const auto& c : groups[i].Conditions) {
             if (c == *target) {
                 groupIndex = i;
                 actualCond = &c;
                 break;
             }
         }
-        if (groupIndex != -1) break;
+        if (groupIndex != -1)
+            break;
     }
 
     // Fallback matching the C# reviewer: the validation snapshot may be stale after
     // the user edits the row, so match on ID + flag + memory address.
-    if (groupIndex == -1)
-    {
-        for (int i = 0; i < groups.size(); i++)
-        {
-            for (const auto &c : groups[i].Conditions)
-            {
-                if (c.ID == target->ID && c.Flag == target->Flag &&
-                    c.LeftOperand.Value == target->LeftOperand.Value)
-                {
+    if (groupIndex == -1) {
+        for (int i = 0; i < groups.size(); i++) {
+            for (const auto& c : groups[i].Conditions) {
+                if (c.ID == target->ID && c.Flag == target->Flag && c.LeftOperand.Value == target->LeftOperand.Value) {
                     groupIndex = i;
                     actualCond = &c;
                     break;
                 }
             }
-            if (groupIndex != -1) break;
+            if (groupIndex != -1)
+                break;
         }
     }
 
-    if (groupIndex != -1)
-    {
+    if (groupIndex != -1) {
         groupsList->setCurrentRow(groupIndex);
         int vRow = _conditionModel.GetVisualRowForCondition(actualCond != nullptr ? actualCond : target);
-        if (vRow != -1)
-        {
+        if (vRow != -1) {
             auto left = _conditionModel.index(vRow, 0);
             auto right = _conditionModel.index(vRow, _conditionModel.columnCount() - 1);
-            conditionGrid->selectionModel()->select(QItemSelection(left, right), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+            conditionGrid->selectionModel()->select(QItemSelection(left, right),
+                                                    QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
             conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, 0), QItemSelectionModel::NoUpdate);
             conditionGrid->scrollTo(_conditionModel.index(vRow, 0));
         }
     }
 }
 
-void TriggerEditorWidget::onCreateGeneratorClicked()
-{
+void TriggerEditorWidget::onCreateGeneratorClicked() {
     int row = groupsList->currentRow();
-    auto &groups = _viewModel.GetActiveGroups();
-    if (row < 0 || row >= groups.size()) return;
-    auto *group = &groups[row];
+    auto& groups = _viewModel.GetActiveGroups();
+    if (row < 0 || row >= groups.size())
+        return;
+    auto* group = &groups[row];
 
     int groupIndex = row;
 
@@ -2540,36 +2366,31 @@ void TriggerEditorWidget::onCreateGeneratorClicked()
     std::shared_ptr<GeneratorConfigDialog::GeneratorItemViewModel> activeChainParent = nullptr;
     std::shared_ptr<NoteNode> activeNoteNode = nullptr;
 
-    auto GetOrCreateNode = [&](const QString &addr, bool isPointerBase,
-                               std::shared_ptr<GeneratorConfigDialog::GeneratorItemViewModel> parent,
-                               std::shared_ptr<NoteNode> contextNode)
-        -> std::pair<std::shared_ptr<GeneratorConfigDialog::GeneratorItemViewModel>, std::shared_ptr<NoteNode>>
-    {
+    auto GetOrCreateNode = [&](const QString& addr, bool isPointerBase,
+                               std::shared_ptr<GeneratorConfigDialog::GeneratorItemViewModel> parent, std::shared_ptr<NoteNode> contextNode)
+        -> std::pair<std::shared_ptr<GeneratorConfigDialog::GeneratorItemViewModel>, std::shared_ptr<NoteNode>> {
         QString normAddr = LogicFormatter::NormalizeAddress(addr);
         QString desc = "";
         std::shared_ptr<NoteNode> currentNote = nullptr;
         bool foundAsOffset = false;
 
-        if (contextNode != nullptr)
-        {
+        if (contextNode != nullptr) {
             bool ok = false;
             QString clean = normAddr;
             clean.remove("0x", Qt::CaseInsensitive);
             int64_t offsetVal = clean.toLongLong(&ok, 16);
-            if (ok)
-            {
-                for (const auto &n : contextNode->Children)
-                {
+            if (ok) {
+                for (const auto& n : contextNode->Children) {
                     QString nClean = n->Offset.trimmed();
                     nClean.remove("0x", Qt::CaseInsensitive);
                     nClean.remove('+');
                     nClean.remove('-');
                     nClean = nClean.trimmed();
                     int64_t nodeOff = nClean.toLongLong(&ok, 16);
-                    if (n->Offset.contains('-')) nodeOff = -nodeOff;
+                    if (n->Offset.contains('-'))
+                        nodeOff = -nodeOff;
 
-                    if (ok && offsetVal >= nodeOff && offsetVal < nodeOff + n->Size)
-                    {
+                    if (ok && offsetVal >= nodeOff && offsetVal < nodeOff + n->Size) {
                         desc = n->Description;
                         currentNote = n;
                         foundAsOffset = true;
@@ -2579,58 +2400,53 @@ void TriggerEditorWidget::onCreateGeneratorClicked()
             }
         }
 
-        if (!foundAsOffset && (isPointerBase || parent == nullptr))
-        {
-            if (_notesLookup.contains(normAddr))
-            {
-                const auto &nodes = _notesLookup.value(normAddr);
+        if (!foundAsOffset && (isPointerBase || parent == nullptr)) {
+            if (_notesLookup.contains(normAddr)) {
+                const auto& nodes = _notesLookup.value(normAddr);
                 auto root = (!nodes.isEmpty()) ? nodes[0] : nullptr;
-                if (root != nullptr)
-                {
+                if (root != nullptr) {
                     desc = root->Description;
-                    if (desc.isEmpty() || desc.compare("Full Note", Qt::CaseInsensitive) == 0)
-                    {
+                    if (desc.isEmpty() || desc.compare("Full Note", Qt::CaseInsensitive) == 0) {
                         QString norm = root->Content;
                         norm.replace("\r\n", "\n").replace('\r', '\n');
                         QStringList parts = norm.split('\n', Qt::SkipEmptyParts);
-                        if (!parts.isEmpty()) desc = parts.first();
+                        if (!parts.isEmpty())
+                            desc = parts.first();
                     }
 
-                    if (autoStride == 0 && root->Size > 1) autoStride = static_cast<int>(root->Size);
-                    if (root->Size > 1) sizeCounts[root->Size]++;
+                    if (autoStride == 0 && root->Size > 1)
+                        autoStride = static_cast<int>(root->Size);
+                    if (root->Size > 1)
+                        sizeCounts[root->Size]++;
 
                     auto syntheticContext = std::make_shared<NoteNode>();
-                    for (const auto &n : nodes)
-                    {
+                    for (const auto& n : nodes) {
                         if (n->IndentLevel != -2 && (n->Parent == nullptr || n->Parent->IndentLevel == -1))
                             syntheticContext->Children.append(n);
                     }
                     currentNote = syntheticContext;
                 }
-            }
-            else
-            {
+            } else {
                 bool ok = false;
                 QString clean = normAddr;
                 clean.remove("0x", Qt::CaseInsensitive);
                 int64_t targetVal = clean.toLongLong(&ok, 16);
-                if (ok)
-                {
-                    for (const auto &match : _rangeCache)
-                    {
-                        if (targetVal >= match.Start && targetVal < match.End && match.Node != nullptr)
-                        {
+                if (ok) {
+                    for (const auto& match : _rangeCache) {
+                        if (targetVal >= match.Start && targetVal < match.End && match.Node != nullptr) {
                             desc = match.Node->Description;
-                            if (desc.isEmpty() || desc.compare("Full Note", Qt::CaseInsensitive) == 0)
-                            {
+                            if (desc.isEmpty() || desc.compare("Full Note", Qt::CaseInsensitive) == 0) {
                                 QString norm = match.Node->Content;
                                 norm.replace("\r\n", "\n").replace('\r', '\n');
                                 QStringList parts = norm.split('\n', Qt::SkipEmptyParts);
-                                if (!parts.isEmpty()) desc = parts.first();
+                                if (!parts.isEmpty())
+                                    desc = parts.first();
                             }
 
-                            if (autoStride == 0 && match.Node->Size > 1) autoStride = static_cast<int>(match.Node->Size);
-                            if (match.Node->Size > 1) sizeCounts[match.Node->Size]++;
+                            if (autoStride == 0 && match.Node->Size > 1)
+                                autoStride = static_cast<int>(match.Node->Size);
+                            if (match.Node->Size > 1)
+                                sizeCounts[match.Node->Size]++;
                             break;
                         }
                     }
@@ -2639,12 +2455,10 @@ void TriggerEditorWidget::onCreateGeneratorClicked()
         }
 
         // Check if node already exists under parent or rootItems to deduplicate
-        auto &targetList = (parent != nullptr) ? parent->Children : rootItems;
-        for (const auto &existing : targetList)
-        {
-            if (existing != nullptr && LogicFormatter::NormalizeAddress(existing->Address) == normAddr)
-            {
-                return { existing, currentNote };
+        auto& targetList = (parent != nullptr) ? parent->Children : rootItems;
+        for (const auto& existing : targetList) {
+            if (existing != nullptr && LogicFormatter::NormalizeAddress(existing->Address) == normAddr) {
+                return {existing, currentNote};
             }
         }
 
@@ -2652,33 +2466,25 @@ void TriggerEditorWidget::onCreateGeneratorClicked()
         item->Address = addr.startsWith("0x", Qt::CaseInsensitive) ? addr : "0x" + addr;
         item->Description = desc;
 
-        if (parent != nullptr)
-        {
+        if (parent != nullptr) {
             parent->Children.append(item);
-        }
-        else
-        {
+        } else {
             rootItems.append(item);
         }
 
-        return { item, currentNote };
+        return {item, currentNote};
     };
 
-    for (const auto &cond : group->Conditions)
-    {
-        if (cond.Flag == "Add Address")
-        {
-            if (RaLogicSyntax::MemoryTypes.contains(cond.LeftOperand.Type))
-            {
+    for (const auto& cond : group->Conditions) {
+        if (cond.Flag == "Add Address") {
+            if (RaLogicSyntax::MemoryTypes.contains(cond.LeftOperand.Type)) {
                 auto val = cond.LeftOperand.Value;
                 auto result = GetOrCreateNode(val, true, activeChainParent, activeNoteNode);
                 // Advance activeChainParent so each level in the pointer chain nests under the previous level
                 activeChainParent = result.first;
                 activeNoteNode = result.second;
             }
-        }
-        else
-        {
+        } else {
             if (RaLogicSyntax::MemoryTypes.contains(cond.LeftOperand.Type))
                 GetOrCreateNode(cond.LeftOperand.Value, false, activeChainParent, activeNoteNode);
             if (RaLogicSyntax::MemoryTypes.contains(cond.RightOperand.Type))
@@ -2692,33 +2498,29 @@ void TriggerEditorWidget::onCreateGeneratorClicked()
     ApplySmartPadding(rootItems);
 
     // Stride Heuristic
-    if (autoStride > 0)
-    {
+    if (autoStride > 0) {
         int count = 0;
-        for (const auto &match : _rangeCache)
-        {
+        for (const auto& match : _rangeCache) {
             if (match.Node != nullptr && match.Node->Size == autoStride)
                 count++;
         }
-        if (count > 1) detectedCopies = count - 1;
+        if (count > 1)
+            detectedCopies = count - 1;
     }
 
-    if (rootItems.isEmpty())
-    {
+    if (rootItems.isEmpty()) {
         QMessageBox::information(this, "Generator", "No memory addresses found in this group to generate from.");
         return;
     }
 
     GeneratorDefinition existingDef;
     bool hasExistingDef = false;
-    if (_viewModel.GeneratorRules.contains(groupIndex))
-    {
+    if (_viewModel.GeneratorRules.contains(groupIndex)) {
         existingDef = _viewModel.GeneratorRules.value(groupIndex);
         hasExistingDef = true;
     }
 
-    if (!hasExistingDef && detectedCopies > 1)
-    {
+    if (!hasExistingDef && detectedCopies > 1) {
         existingDef.Copies = detectedCopies;
         hasExistingDef = true;
     }
@@ -2726,13 +2528,12 @@ void TriggerEditorWidget::onCreateGeneratorClicked()
     QSet<QString> preSelectedAddresses;
     // C# preselects from the visible grid rows, not the expanded hidden chains.
     QList<AchievementCondition> effectiveSelected;
-    for (int vRow : GetSelectedVisualRows())
-    {
-        auto *c = _conditionModel.GetConditionAtRow(vRow);
-        if (c != nullptr) effectiveSelected.append(*c);
+    for (int vRow : GetSelectedVisualRows()) {
+        auto* c = _conditionModel.GetConditionAtRow(vRow);
+        if (c != nullptr)
+            effectiveSelected.append(*c);
     }
-    for (const auto &cond : effectiveSelected)
-    {
+    for (const auto& cond : effectiveSelected) {
         if (RaLogicSyntax::MemoryTypes.contains(cond.LeftOperand.Type) && !cond.LeftOperand.Value.trimmed().isEmpty())
             preSelectedAddresses.insert(LogicFormatter::NormalizeAddress(cond.LeftOperand.Value));
         if (RaLogicSyntax::MemoryTypes.contains(cond.RightOperand.Type) && !cond.RightOperand.Value.trimmed().isEmpty())
@@ -2741,30 +2542,25 @@ void TriggerEditorWidget::onCreateGeneratorClicked()
 
     GeneratorConfigDialog form(rootItems, autoStride, hasExistingDef ? &existingDef : nullptr, &preSelectedAddresses, this);
 
-    if (form.exec() == QDialog::Accepted)
-    {
+    if (form.exec() == QDialog::Accepted) {
         _viewModel.PushUndoState();
 
-        if (!form.IsArray && groupIndex < _viewModel.GetActiveGroups().size() - 1)
-        {
+        if (!form.IsArray && groupIndex < _viewModel.GetActiveGroups().size() - 1) {
             auto result = QMessageBox::warning(
-                this,
-                "Overwrite Confirmation",
+                this, "Overwrite Confirmation",
                 "There are existing Alt groups after this group. Do you want to delete them to make room for the generator?",
                 QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
 
-            if (result == QMessageBox::Cancel) return;
+            if (result == QMessageBox::Cancel)
+                return;
 
-            if (result == QMessageBox::Yes)
-            {
-                auto &activeGroups = _viewModel.GetActiveGroups();
-                while (activeGroups.size() > groupIndex + 1)
-                {
+            if (result == QMessageBox::Yes) {
+                auto& activeGroups = _viewModel.GetActiveGroups();
+                while (activeGroups.size() > groupIndex + 1) {
                     activeGroups.removeLast();
                 }
 
-                for (auto it = _viewModel.GeneratorRules.begin(); it != _viewModel.GeneratorRules.end(); )
-                {
+                for (auto it = _viewModel.GeneratorRules.begin(); it != _viewModel.GeneratorRules.end();) {
                     if (it.key() > groupIndex)
                         it = _viewModel.GeneratorRules.erase(it);
                     else
@@ -2777,13 +2573,11 @@ void TriggerEditorWidget::onCreateGeneratorClicked()
         def.Copies = form.Copies;
         def.IsArray = form.IsArray;
 
-        if (def.IsArray)
-        {
+        if (def.IsArray) {
             def.TemplateConditionCount = group->Conditions.size();
         }
 
-        for (const auto &addr : form.SelectedAddresses)
-        {
+        for (const auto& addr : form.SelectedAddresses) {
             GeneratorRule rule;
             rule.SourceAddress = addr;
             rule.Stride = form.Stride;
@@ -2796,23 +2590,22 @@ void TriggerEditorWidget::onCreateGeneratorClicked()
     }
 }
 
-void TriggerEditorWidget::ApplySmartPadding(QList<std::shared_ptr<GeneratorConfigDialog::GeneratorItemViewModel>> &roots)
-{
-    for (auto &root : roots)
-    {
-        if (root == nullptr || root->Children.isEmpty()) continue;
+void TriggerEditorWidget::ApplySmartPadding(QList<std::shared_ptr<GeneratorConfigDialog::GeneratorItemViewModel>>& roots) {
+    for (auto& root : roots) {
+        if (root == nullptr || root->Children.isEmpty())
+            continue;
         int maxLen = 0;
-        for (const auto &child : root->Children)
-        {
-            if (child == nullptr) continue;
+        for (const auto& child : root->Children) {
+            if (child == nullptr)
+                continue;
             QString hex = child->Address.startsWith("0x", Qt::CaseInsensitive) ? child->Address.mid(2) : child->Address;
-            if (hex.length() > maxLen) maxLen = hex.length();
+            if (hex.length() > maxLen)
+                maxLen = hex.length();
         }
-        if (maxLen > 1)
-        {
-            for (auto &child : root->Children)
-            {
-                if (child == nullptr) continue;
+        if (maxLen > 1) {
+            for (auto& child : root->Children) {
+                if (child == nullptr)
+                    continue;
                 QString hex = child->Address.startsWith("0x", Qt::CaseInsensitive) ? child->Address.mid(2) : child->Address;
                 child->Address = "0x" + hex.rightJustified(maxLen, '0');
             }
@@ -2821,16 +2614,13 @@ void TriggerEditorWidget::ApplySmartPadding(QList<std::shared_ptr<GeneratorConfi
     }
 }
 
-void TriggerEditorWidget::onCommitGeneratorClicked()
-{
+void TriggerEditorWidget::onCommitGeneratorClicked() {
     int row = groupsList->currentRow();
-    if (_viewModel.GeneratorRules.contains(row))
-    {
+    if (_viewModel.GeneratorRules.contains(row)) {
         _viewModel.PushUndoState();
         _viewModel.GeneratorRules.remove(row);
-        if (!_viewModel.AssetStrategy->isLeaderboard())
-        {
-            auto &groups = _viewModel.GetActiveGroups();
+        if (!_viewModel.AssetStrategy->isLeaderboard()) {
+            auto& groups = _viewModel.GetActiveGroups();
             for (int i = 1; i < groups.size(); i++)
                 groups[i].GroupName = QString("Alt %1").arg(i);
         }
@@ -2839,26 +2629,20 @@ void TriggerEditorWidget::onCommitGeneratorClicked()
     }
 }
 
-void TriggerEditorWidget::onMultiRegionClicked()
-{
+void TriggerEditorWidget::onMultiRegionClicked() {
     MultiRegionDialog form(_rawNotes, this);
-    if (form.exec() == QDialog::Accepted)
-    {
+    if (form.exec() == QDialog::Accepted) {
         emit MultiRegionLogicRequested(&form);
     }
 }
 
-void TriggerEditorWidget::onLogicOptimizerClicked()
-{
-    emit LogicOptimizationRequested();
-}
+void TriggerEditorWidget::onLogicOptimizerClicked() { emit LogicOptimizationRequested(); }
 
-void TriggerEditorWidget::onBatchMultiplyNotesClicked()
-{
-    if (_rawNotes.isEmpty()) return;
+void TriggerEditorWidget::onBatchMultiplyNotesClicked() {
+    if (_rawNotes.isEmpty())
+        return;
     BatchNoteMultiplierDialog form(_rawNotes, this);
-    if (form.exec() == QDialog::Accepted)
-    {
+    if (form.exec() == QDialog::Accepted) {
         emit BatchMultiplyNotesRequested(&form);
     }
 }
