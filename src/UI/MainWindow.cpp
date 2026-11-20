@@ -143,6 +143,14 @@ MainWindow::MainWindow(QWidget *parent)
     // Code Note Editor actions
     connect(codeNoteEditor, &CodeNoteEditorWidget::ReloadRequested, this, &MainWindow::onReload);
     connect(codeNoteEditor, &CodeNoteEditorWidget::SaveRequested, this, &MainWindow::onSaveFile);
+    connect(codeNoteEditor, &CodeNoteEditorWidget::BeforeBatchNotesChange, this, [this]() {
+        _projectRepo.EnsureLocalDataExists();
+        PushMainUndo();
+    });
+    connect(codeNoteEditor, &CodeNoteEditorWidget::BatchNotesApplied, this, [this]() {
+        _notesCacheDirty = true;
+        RunGlobalValidation();
+    });
 
     // Real-time grid updates & bidirectional note synchronization
     connect(codeNoteEditor, &CodeNoteEditorWidget::NoteUpdated, this, [this]() {

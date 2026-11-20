@@ -118,6 +118,17 @@ QTreeWidget::item, QListWidget::item {
     color: #8a8a8a;
 }
 
+QLabel#strideHexLabel {
+    color: #58a6ff;
+    font-weight: bold;
+    font-family: "Consolas", monospace;
+}
+
+QLabel#subTextDescLabel {
+    color: #8b949e;
+    font-size: 11px;
+}
+
 QLabel#settingsHelpTitleLabel {
     font-size: 13px;
     font-weight: bold;

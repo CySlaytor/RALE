@@ -1,9 +1,8 @@
 #include "CodeNoteEditorWidget.h"
 #include "../../Parsers/PointerTreeParser.h"
 #include "../../Common/AppSettings.h"
-#include "../../Common/CodeNoteMultiplier.h"
 #include "../../Logic/CodeNoteLogic.h"
-#include "../Dialogs/NoteMultiplierDialog.h"
+#include "../Dialogs/CloneStrideDialog.h"
 #include "../Styles/ThemeManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -103,6 +102,12 @@ void CodeNoteEditorWidget::InitializeUI()
     ThemeManager::SetupComboBox(cmbNotes, 14);
     connect(cmbNotes, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CodeNoteEditorWidget::onNoteIndexChanged);
     rowAddress->addWidget(cmbNotes, 1);
+    btnCloneStride = new QPushButton("Clone Stride...", panelTop);
+    btnCloneStride->setToolTip("Batch clone this structure across sequential memory strides (e.g. Levels, Slots)");
+    btnCloneStride->setFixedHeight(26);
+    btnCloneStride->setEnabled(false);
+    connect(btnCloneStride, &QPushButton::clicked, this, &CodeNoteEditorWidget::onBtnCloneStrideClicked);
+    rowAddress->addWidget(btnCloneStride);
     topLayout->addLayout(rowAddress);
 
     // Row 3: Variable
@@ -143,12 +148,8 @@ void CodeNoteEditorWidget::InitializeUI()
     actPaste->setProperty("iconPath", ":/icons/load.svg");
 
     cmsNoteContext->addSeparator();
-    auto *actDelNode = cmsNoteContext->addAction(getThemeIcon(":/icons/delete.svg"), "Intelligent Delete Node (Selected in Tree)", this, &CodeNoteEditorWidget::onDeleteNodeClicked);
+    auto *actDelNode = cmsNoteContext->addAction(getThemeIcon(":/icons/delete.svg"), "Delete Note (Selected in Tree)", this, &CodeNoteEditorWidget::onDeleteNodeClicked);
     actDelNode->setProperty("iconPath", ":/icons/delete.svg");
-
-    cmsNoteContext->addSeparator();
-    auto *actMultiply = cmsNoteContext->addAction(getThemeIcon(":/icons/copy.svg"), "Multiply Selected Text (Inside Note)...", this, &CodeNoteEditorWidget::onMultiplySelectedTextClicked);
-    actMultiply->setProperty("iconPath", ":/icons/copy.svg");
 
     connect(cmsNoteContext, &QMenu::aboutToShow, this, [this, actDelNode]() {
         actDelNode->setEnabled(!_viewModel->EditState.IsVirtual);
@@ -294,6 +295,88 @@ void CodeNoteEditorWidget::onBtnReloadClicked()
     emit ReloadRequested();
 }
 
+void CodeNoteEditorWidget::onBtnCloneStrideClicked()
+{
+    if (_viewModel->CurrentBaseNote == nullptr) return;
+
+    if (!_viewModel->EditState.IsVirtual && !_viewModel->IsRedirected && _viewModel->EditState.IsDirty)
+    {
+        CommitChanges();
+    }
+
+    QString noteText = _viewModel->IsRedirected
+        ? _viewModel->RedirectedContent
+        : _viewModel->CurrentBaseNote->Note;
+
+    CloneStrideDialog dialog(_viewModel->CurrentBaseNote->Address, noteText, this);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    auto generated = dialog.getGeneratedNotes();
+    if (generated.isEmpty()) return;
+
+    emit BeforeBatchNotesChange();
+
+    QList<CodeNote> notesToApply;
+    notesToApply.reserve(generated.size());
+    for (const auto &g : generated)
+    {
+        CodeNote n;
+        n.Address = g.addressHex;
+        n.Note = g.noteText;
+        n.User = "Local";
+        notesToApply.append(n);
+    }
+
+    int addedCount = 0;
+    int updatedCount = 0;
+    _viewModel->ApplyCloneStrideNotes(notesToApply, addedCount, updatedCount);
+
+    // Switch to the next generated note in sequence so the developer can immediately inspect it
+    QString nextInspectAddr = (generated.size() > 1) ? generated[1].addressHex : generated[0].addressHex;
+    _viewModel->HighlightAddress(nextInspectAddr);
+
+    if (_viewModel->CurrentBaseNote != nullptr)
+    {
+        bool wasUpdating = _isInternalUpdate;
+        _isInternalUpdate = true;
+
+        bool found = false;
+        for (int i = 0; i < _filteredNotes.size(); i++)
+        {
+            if (_filteredNotes[i].Address.compare(_viewModel->CurrentBaseNote->Address, Qt::CaseInsensitive) == 0)
+            {
+                cmbNotes->setCurrentIndex(i);
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        {
+            txtSearch->setText("");
+            ApplyFilter(false);
+            for (int i = 0; i < _filteredNotes.size(); i++)
+            {
+                if (_filteredNotes[i].Address.compare(_viewModel->CurrentBaseNote->Address, Qt::CaseInsensitive) == 0)
+                {
+                    cmbNotes->setCurrentIndex(i);
+                    break;
+                }
+            }
+        }
+        _isInternalUpdate = wasUpdating;
+    }
+
+    _hasUnsavedChanges = true;
+    QString msg = QString("Batch cloned %1 note(s) (%2 new, %3 updated).")
+        .arg(generated.size())
+        .arg(addedCount)
+        .arg(updatedCount);
+    UpdateStatusDisplay(&msg);
+
+    emit NoteUpdated();
+    emit BatchNotesApplied();
+}
+
 void CodeNoteEditorWidget::onBtnSaveClicked()
 {
     CommitChanges();
@@ -401,6 +484,7 @@ void CodeNoteEditorWidget::SetNotes(const QList<CodeNote> &notes)
         cmbNotes->setCurrentIndex(0);
         _viewModel->SelectBaseNote(_filteredNotes[0]);
     }
+    btnCloneStride->setEnabled(_viewModel->CurrentBaseNote != nullptr && !_viewModel->AllNotes.isEmpty());
     _isInternalUpdate = false;
 }
 
@@ -441,6 +525,8 @@ void CodeNoteEditorWidget::ApplyFilter(bool autoSelectFirst)
         QString msg = "No matches found.";
         UpdateStatusDisplay(&msg);
     }
+
+    btnCloneStride->setEnabled(_viewModel->CurrentBaseNote != nullptr && !_viewModel->AllNotes.isEmpty());
 }
 
 void CodeNoteEditorWidget::onSearchTextChanged(const QString & /*text*/)
@@ -450,7 +536,13 @@ void CodeNoteEditorWidget::onSearchTextChanged(const QString & /*text*/)
 
 void CodeNoteEditorWidget::onVmNoteContentChanged()
 {
-    if (_viewModel->CurrentBaseNote == nullptr) return;
+    if (_viewModel->CurrentBaseNote == nullptr)
+    {
+        btnCloneStride->setEnabled(false);
+        return;
+    }
+
+    btnCloneStride->setEnabled(true);
 
     // Keep cached filtered notes synchronized with latest ViewModel content
     for (auto &fn : _filteredNotes)
@@ -834,54 +926,6 @@ void CodeNoteEditorWidget::onDeleteNodeClicked()
     }
 
     QMessageBox::information(this, "No Node Selected", "Please select a specific node in the dropdown tree to use Intelligent Delete.");
-}
-
-void CodeNoteEditorWidget::onMultiplySelectedTextClicked()
-{
-    if (txtNoteBody->isReadOnly()) return;
-
-    QString targetText = txtNoteBody->textCursor().selectedText();
-    targetText.replace(QChar(0x2029), "\n");
-
-    if (targetText.isEmpty())
-    {
-        QMessageBox::information(this, "No Selection", "Please highlight the block of text you want to duplicate before clicking this option.");
-        return;
-    }
-
-    NoteMultiplierDialog form(this);
-    if (form.exec() == QDialog::Accepted)
-    {
-        QString generated = CodeNoteMultiplier::GenerateText(
-            targetText,
-            form.Copies,
-            form.Stride,
-            form.Naming,
-            form.SearchText,
-            form.ReplaceText,
-            form.StartNumber,
-            form.TargetMode);
-
-        _viewModel->PushUndoState();
-        auto cursor = txtNoteBody->textCursor();
-        int insertPos = cursor.selectionEnd();
-        QString current = txtNoteBody->toPlainText();
-        current.insert(insertPos, "\n" + generated);
-        txtNoteBody->setPlainText(current);
-
-        // Restore the block selection around the generated text (setPlainText moves
-        // the caret to the start of the document).
-        auto selectCursor = txtNoteBody->textCursor();
-        selectCursor.setPosition(insertPos + 1);
-        selectCursor.setPosition(insertPos + 1 + generated.length(), QTextCursor::KeepAnchor);
-        txtNoteBody->setTextCursor(selectCursor);
-
-        _viewModel->CommitEditState();
-
-        _hasUnsavedChanges = true;
-        QString msg = "Note multiplied.";
-        UpdateStatusDisplay(&msg);
-    }
 }
 
 void CodeNoteEditorWidget::ExecuteBatchMultiply(

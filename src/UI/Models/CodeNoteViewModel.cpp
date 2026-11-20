@@ -158,6 +158,8 @@ void CodeNoteViewModel::RebuildRangeCache()
 void CodeNoteViewModel::LoadNotes(const QList<CodeNote> &notes)
 {
     AllNotes = notes;
+    if (AllNotes.isEmpty())
+        CurrentBaseNote = nullptr;
     RebuildRangeCache();
     emit NotesLoaded();
 }
@@ -213,6 +215,58 @@ void CodeNoteViewModel::BatchMultiplyNotes(
     });
 
     RebuildRangeCache();
+
+    // Trigger complete UI refresh
+    emit NotesLoaded();
+}
+
+void CodeNoteViewModel::ApplyCloneStrideNotes(
+    const QList<CodeNote> &generatedNotes,
+    int &outAddedCount,
+    int &outUpdatedCount)
+{
+    outAddedCount = 0;
+    outUpdatedCount = 0;
+    if (generatedNotes.isEmpty()) return;
+
+    for (const auto &gen : generatedNotes)
+    {
+        int64_t targetAddr = ParseAddress(gen.Address);
+        if (targetAddr == -1) continue;
+
+        QString normalizedNote = gen.Note;
+        normalizedNote.replace("\r\n", "\n").replace('\r', '\n').replace("\n", "\r\n");
+
+        bool foundExisting = false;
+        for (auto &existing : AllNotes)
+        {
+            if (ParseAddress(existing.Address) == targetAddr)
+            {
+                existing.Note = normalizedNote;
+                foundExisting = true;
+                outUpdatedCount++;
+                break;
+            }
+        }
+
+        if (!foundExisting)
+        {
+            CodeNote note;
+            note.Address = gen.Address;
+            note.Note = normalizedNote;
+            note.User = "Local";
+            AllNotes.append(note);
+            outAddedCount++;
+        }
+    }
+
+    // Sort by Address to keep the combo box list clean
+    std::sort(AllNotes.begin(), AllNotes.end(), [this](const CodeNote &a, const CodeNote &b) {
+        return ParseAddress(a.Address) < ParseAddress(b.Address);
+    });
+
+    RebuildRangeCache();
+    ClearEditState();
 
     // Trigger complete UI refresh
     emit NotesLoaded();

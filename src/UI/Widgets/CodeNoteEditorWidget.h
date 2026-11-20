@@ -64,6 +64,8 @@ signals:
     void ReloadRequested();
     void SaveRequested();
     void NoteUpdated();
+    void BeforeBatchNotesChange();
+    void BatchNotesApplied();
     void NoteResetRequested(const QString &address);
 
 protected:
@@ -75,6 +77,7 @@ private slots:
     void onVariableIndexChanged(int index);
     void onNoteBodyTextChanged();
     void onBtnReloadClicked();
+    void onBtnCloneStrideClicked();
     void onBtnSaveClicked();
     void onBtnResetClicked();
     void onBtnFixHierarchyClicked();
@@ -87,12 +90,12 @@ private slots:
     void onCopyClicked();
     void onPasteClicked();
     void onDeleteNodeClicked();
-    void onMultiplySelectedTextClicked();
 
 private:
     QLineEdit *txtSearch = nullptr;
     QPushButton *btnReload = nullptr;
     QComboBox *cmbNotes = nullptr;
+    QPushButton *btnCloneStride = nullptr;
     QComboBox *cmbVariables = nullptr;
     QCheckBox *chkShowLeafsOnly = nullptr;
     QPlainTextEdit *txtNoteBody = nullptr;

@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 
-if(NOT DEFINED CMAKE_PREFIX_PATH AND DEFINED ENV{QTDIR})
-    set(CMAKE_PREFIX_PATH "$ENV{QTDIR}")
-else()
-    set(CMAKE_PREFIX_PATH "C:/Qt/6.11.2/msvc2022_64") # Local fallback path
+if(NOT DEFINED CMAKE_PREFIX_PATH)
+    if(DEFINED ENV{QTDIR})
+        set(CMAKE_PREFIX_PATH "$ENV{QTDIR}")
+    else()
+        set(CMAKE_PREFIX_PATH "C:/Qt/6.11.2/msvc2022_64") # Local fallback path
+    endif()
 endif()
 
 project(RALE VERSION 2.0.0 LANGUAGES CXX)
