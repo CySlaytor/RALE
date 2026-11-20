@@ -3,15 +3,27 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScreen>
 #include <QSettings>
+#include <QWidget>
+
+#include <algorithm>
 
 namespace RALE {
 
 UserSettings AppSettings::Current;
 
 QString AppSettings::GetSettingsPath() { return QDir(QCoreApplication::applicationDirPath()).filePath("settings.ini"); }
+
+QString AppSettings::GetLayoutPath() {
+    QString folder = QDir(QCoreApplication::applicationDirPath()).filePath("Metadata");
+    if (!QDir(folder).exists())
+        QDir().mkpath(folder);
+    return QDir(folder).filePath("layout.ini");
+}
 
 void AppSettings::MigrateFromJsonIfPresent(const QString& jsonPath) {
     if (!QFile::exists(jsonPath))
@@ -107,7 +119,10 @@ void AppSettings::Load() {
         Current.IsMaximized = ini.value("IsMaximized", Current.IsMaximized).toBool();
         Current.MainSplitterDistance = ini.value("MainSplitterDistance", Current.MainSplitterDistance).toInt();
         Current.EditorSplitterDistance = ini.value("EditorSplitterDistance", Current.EditorSplitterDistance).toInt();
+        Current.CodeNoteSplitterDistance = ini.value("CodeNoteSplitterDistance", Current.CodeNoteSplitterDistance).toInt();
         Current.VerticalSplitterDistance = ini.value("VerticalSplitterDistance", Current.VerticalSplitterDistance).toInt();
+        Current.VerticalSplitterBottomDistance =
+            ini.value("VerticalSplitterBottomDistance", Current.VerticalSplitterBottomDistance).toInt();
         ini.endGroup();
 
         ini.beginGroup("TriggerEditor");
@@ -169,14 +184,16 @@ void AppSettings::Save() {
         ini.endGroup();
 
         ini.beginGroup("MainWindow");
-        ini.setValue("WindowX", Current.WindowX);
-        ini.setValue("WindowY", Current.WindowY);
-        ini.setValue("WindowWidth", Current.WindowWidth);
-        ini.setValue("WindowHeight", Current.WindowHeight);
-        ini.setValue("IsMaximized", Current.IsMaximized);
+        ini.remove("WindowX");
+        ini.remove("WindowY");
+        ini.remove("WindowWidth");
+        ini.remove("WindowHeight");
+        ini.remove("IsMaximized");
         ini.setValue("MainSplitterDistance", Current.MainSplitterDistance);
         ini.setValue("EditorSplitterDistance", Current.EditorSplitterDistance);
+        ini.setValue("CodeNoteSplitterDistance", Current.CodeNoteSplitterDistance);
         ini.setValue("VerticalSplitterDistance", Current.VerticalSplitterDistance);
+        ini.setValue("VerticalSplitterBottomDistance", Current.VerticalSplitterBottomDistance);
         ini.endGroup();
 
         ini.beginGroup("TriggerEditor");
@@ -224,9 +241,60 @@ void AppSettings::Save() {
     }
 }
 
+void AppSettings::SaveWindowGeometry(const QString& windowName, const QWidget* widget) {
+    if (widget == nullptr)
+        return;
+    try {
+        QSettings ini(GetLayoutPath(), QSettings::IniFormat);
+        ini.beginGroup("Windows");
+        ini.setValue(windowName, widget->saveGeometry());
+        ini.endGroup();
+    } catch (...) {
+    }
+}
+
+bool AppSettings::LoadWindowGeometry(const QString& windowName, QWidget* widget) {
+    if (widget == nullptr)
+        return false;
+    try {
+        QString layoutPath = GetLayoutPath();
+        if (!QFile::exists(layoutPath))
+            return false;
+
+        QSettings ini(layoutPath, QSettings::IniFormat);
+        ini.beginGroup("Windows");
+        QByteArray geom = ini.value(windowName).toByteArray();
+        ini.endGroup();
+
+        if (geom.isEmpty() || !widget->restoreGeometry(geom))
+            return false;
+
+        // Clamp restored non-maximized window onto an active screen if disconnected
+        if (!widget->isMaximized()) {
+            QRect frame = widget->frameGeometry();
+            bool visibleOnScreen = false;
+            for (QScreen* screen : QGuiApplication::screens()) {
+                if (screen != nullptr && screen->availableGeometry().intersects(frame)) {
+                    visibleOnScreen = true;
+                    break;
+                }
+            }
+            if (!visibleOnScreen && QGuiApplication::primaryScreen() != nullptr) {
+                QRect avail = QGuiApplication::primaryScreen()->availableGeometry();
+                QSize clampedSize(std::min(widget->width(), avail.width()), std::min(widget->height(), avail.height()));
+                widget->resize(clampedSize);
+                widget->move(avail.center() - QPoint(clampedSize.width() / 2, clampedSize.height() / 2));
+            }
+        }
+        return true;
+    } catch (...) {
+    }
+    return false;
+}
+
 void AppSettings::SaveDialogGeometry(const QString& dialogName, const QPoint& pos, const QSize& size) {
     try {
-        QSettings ini(GetSettingsPath(), QSettings::IniFormat);
+        QSettings ini(GetLayoutPath(), QSettings::IniFormat);
         ini.beginGroup("DialogPositions");
         if (size.isValid() && size.width() > 0 && size.height() > 0) {
             ini.setValue(dialogName, QString("%1, %2, %3, %4").arg(pos.x()).arg(pos.y()).arg(size.width()).arg(size.height()));
@@ -240,21 +308,34 @@ void AppSettings::SaveDialogGeometry(const QString& dialogName, const QPoint& po
 
 bool AppSettings::LoadDialogGeometry(const QString& dialogName, QPoint& pos, QSize& size) {
     try {
-        QString iniPath = GetSettingsPath();
-        if (!QFile::exists(iniPath))
-            return false;
+        QString val;
+        QString layoutPath = GetLayoutPath();
+        if (QFile::exists(layoutPath)) {
+            QSettings layoutIni(layoutPath, QSettings::IniFormat);
+            layoutIni.beginGroup("DialogPositions");
+            if (layoutIni.contains(dialogName))
+                val = layoutIni.value(dialogName).toString();
+            layoutIni.endGroup();
+        }
 
-        QSettings ini(iniPath, QSettings::IniFormat);
-        ini.beginGroup("DialogPositions");
-        if (!ini.contains(dialogName))
-            return false;
+        // One-time fallback to legacy settings.ini DialogPositions if not yet in layout.ini
+        if (val.isEmpty()) {
+            QString iniPath = GetSettingsPath();
+            if (!QFile::exists(iniPath))
+                return false;
 
-        QString val = ini.value(dialogName).toString();
-        ini.endGroup();
+            QSettings ini(iniPath, QSettings::IniFormat);
+            ini.beginGroup("DialogPositions");
+            if (!ini.contains(dialogName))
+                return false;
+            val = ini.value(dialogName).toString();
+            ini.endGroup();
+        }
 
         if (val.startsWith("@ByteArray"))
             return false;
 
+        bool parsed = false;
         QStringList parts = val.split(',');
         if (parts.size() >= 4) {
             bool okX = false, okY = false, okW = false, okH = false;
@@ -265,7 +346,7 @@ bool AppSettings::LoadDialogGeometry(const QString& dialogName, QPoint& pos, QSi
             if (okX && okY && okW && okH) {
                 pos = QPoint(x, y);
                 size = QSize(w, h);
-                return true;
+                parsed = true;
             }
         } else if (parts.size() >= 2) {
             bool okX = false, okY = false;
@@ -273,9 +354,31 @@ bool AppSettings::LoadDialogGeometry(const QString& dialogName, QPoint& pos, QSi
             int y = parts[1].trimmed().toInt(&okY);
             if (okX && okY) {
                 pos = QPoint(x, y);
-                return true;
+                parsed = true;
             }
         }
+
+        if (!parsed)
+            return false;
+
+        // Clamp position onto an available screen so dialogs never open off-screen
+        QSize checkSize = (size.isValid() && size.width() > 0 && size.height() > 0) ? size : QSize(200, 150);
+        QRect targetRect(pos, checkSize);
+        bool onScreen = false;
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (screen != nullptr && screen->availableGeometry().intersects(targetRect)) {
+                onScreen = true;
+                break;
+            }
+        }
+        if (!onScreen && QGuiApplication::primaryScreen() != nullptr) {
+            QRect avail = QGuiApplication::primaryScreen()->availableGeometry();
+            int maxX = std::max(avail.left(), avail.right() - checkSize.width());
+            int maxY = std::max(avail.top(), avail.bottom() - checkSize.height());
+            pos = QPoint(std::clamp(pos.x(), avail.left(), maxX), std::clamp(pos.y(), avail.top(), maxY));
+        }
+
+        return true;
     } catch (...) {
     }
     return false;

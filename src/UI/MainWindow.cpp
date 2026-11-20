@@ -20,6 +20,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QKeyEvent>
+#include <QLayout>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProcess>
@@ -353,8 +354,14 @@ void MainWindow::InitializeUI() {
     splitEditor->addWidget(codeNoteEditor);
 
     splitMain->addWidget(splitEditor);
+    splitMain->setStretchFactor(0, 0);
+    splitMain->setStretchFactor(1, 1);
     splitMain->setSizes({260, 940});
+    splitEditor->setStretchFactor(0, 1);
+    splitEditor->setStretchFactor(1, 0);
     splitEditor->setSizes({600, 340});
+    splitMiddle->setStretchFactor(0, 1);
+    splitMiddle->setStretchFactor(1, 0);
     splitMiddle->setSizes({400, 250});
 
     centralLayout->addWidget(splitMain);
@@ -560,30 +567,78 @@ void MainWindow::showEvent(QShowEvent* event) {
     QMainWindow::showEvent(event);
     if (_isFirstShow) {
         _isFirstShow = false;
-        if (AppSettings::Current.MainSplitterDistance > 0) {
-            int rightW = std::max(200, width() - AppSettings::Current.MainSplitterDistance);
-            splitMain->setSizes({AppSettings::Current.MainSplitterDistance, rightW});
+        // Defer splitter restoration until after ShowWindow / Qt::WindowMaximized layout completes
+        QTimer::singleShot(0, this, [this]() {
+            RestoreSplitterSizes();
+            _splittersRestored = true;
+        });
+    }
+}
+
+void MainWindow::RestoreSplitterSizes() {
+    if (AppSettings::Current.MainSplitterDistance > 0 && splitMain->width() > 0) {
+        int avail = std::max(460, splitMain->width() - splitMain->handleWidth());
+        int maxLeft = std::max(260, avail - 200);
+        int leftW = std::clamp(AppSettings::Current.MainSplitterDistance, 260, maxLeft);
+        int rightW = std::max(200, avail - leftW);
+        splitMain->setSizes({leftW, rightW});
+    }
+
+    if (splitMain->layout() != nullptr)
+        splitMain->layout()->activate();
+
+    int editorTotalW = splitEditor->width();
+    if (editorTotalW <= 0 && splitMain->sizes().size() >= 2)
+        editorTotalW = splitMain->sizes().at(1);
+
+    if (editorTotalW > 0) {
+        int avail = std::max(320, editorTotalW - splitEditor->handleWidth());
+        int rightW = -1;
+        if (AppSettings::Current.CodeNoteSplitterDistance > 0) {
+            int maxRight = std::max(120, avail - 200);
+            rightW = std::clamp(AppSettings::Current.CodeNoteSplitterDistance, 120, maxRight);
+        } else if (AppSettings::Current.EditorSplitterDistance > 0) {
+            int maxLeft = std::max(200, avail - 120);
+            int leftW = std::clamp(AppSettings::Current.EditorSplitterDistance, 200, maxLeft);
+            rightW = std::max(120, avail - leftW);
         }
-        if (AppSettings::Current.EditorSplitterDistance > 0) {
-            int rightW = std::max(280, splitEditor->width() - AppSettings::Current.EditorSplitterDistance);
-            splitEditor->setSizes({AppSettings::Current.EditorSplitterDistance, rightW});
+
+        if (rightW > 0) {
+            int leftW = std::max(200, avail - rightW);
+            splitEditor->setSizes({leftW, rightW});
         }
-        if (AppSettings::Current.VerticalSplitterDistance > 0) {
-            int bottomH = std::max(100, splitMiddle->height() - AppSettings::Current.VerticalSplitterDistance);
-            splitMiddle->setSizes({AppSettings::Current.VerticalSplitterDistance, bottomH});
+    }
+
+    if (codeReviewControl != nullptr && codeReviewControl->isVisible() && splitMiddle->height() > 0) {
+        int avail = std::max(160, splitMiddle->height() - splitMiddle->handleWidth());
+        int bottomH = -1;
+        if (AppSettings::Current.VerticalSplitterBottomDistance > 0) {
+            int maxBottom = std::max(60, avail - 100);
+            bottomH = std::clamp(AppSettings::Current.VerticalSplitterBottomDistance, 60, maxBottom);
+        } else if (AppSettings::Current.VerticalSplitterDistance > 0) {
+            int maxTop = std::max(100, avail - 60);
+            int topH = std::clamp(AppSettings::Current.VerticalSplitterDistance, 100, maxTop);
+            bottomH = std::max(60, avail - topH);
+        }
+
+        if (bottomH > 0) {
+            int topH = std::max(100, avail - bottomH);
+            splitMiddle->setSizes({topH, bottomH});
         }
     }
 }
 
 void MainWindow::ApplySettings() {
-    if (AppSettings::Current.WindowWidth > 0 && AppSettings::Current.WindowHeight > 0)
-        resize(AppSettings::Current.WindowWidth, AppSettings::Current.WindowHeight);
+    if (!AppSettings::LoadWindowGeometry("MainWindow", this)) {
+        if (AppSettings::Current.WindowWidth > 0 && AppSettings::Current.WindowHeight > 0)
+            resize(AppSettings::Current.WindowWidth, AppSettings::Current.WindowHeight);
 
-    if (AppSettings::Current.WindowX != -1 && AppSettings::Current.WindowY != -1)
-        move(AppSettings::Current.WindowX, AppSettings::Current.WindowY);
+        if (AppSettings::Current.WindowX != -1 && AppSettings::Current.WindowY != -1)
+            move(AppSettings::Current.WindowX, AppSettings::Current.WindowY);
 
-    if (AppSettings::Current.IsMaximized)
-        setWindowState(Qt::WindowMaximized);
+        if (AppSettings::Current.IsMaximized)
+            setWindowState(Qt::WindowMaximized);
+    }
 
     triggerEditor->SetShowDecimal(AppSettings::Current.Trigger_ShowDecimal);
     triggerEditor->SetShowAliases(AppSettings::Current.Trigger_ShowAliases);
@@ -597,32 +652,26 @@ void MainWindow::ApplySettings() {
 void MainWindow::SaveSettings() {
     const bool minimized = isMinimized();
 
-    if (!isMaximized() && !minimized) {
-        AppSettings::Current.WindowX = pos().x();
-        AppSettings::Current.WindowY = pos().y();
-        AppSettings::Current.WindowWidth = width();
-        AppSettings::Current.WindowHeight = height();
-        AppSettings::Current.IsMaximized = false;
-    } else {
-        AppSettings::Current.IsMaximized = isMaximized();
-
-        // Keep the restored (non-maximized) geometry so un-maximizing after a
-        // restart does not snap back to the stale/default 1200x700 size.
-        QRect normal = normalGeometry();
-        if (normal.width() > 0 && normal.height() > 0) {
-            AppSettings::Current.WindowX = normal.x();
-            AppSettings::Current.WindowY = normal.y();
-            AppSettings::Current.WindowWidth = normal.width();
-            AppSettings::Current.WindowHeight = normal.height();
-        }
-    }
+    AppSettings::SaveWindowGeometry("MainWindow", this);
 
     // Never persist splitter sizes while minimized (Qt reports collapsed sizes).
-    if (!minimized) {
-        AppSettings::Current.MainSplitterDistance = splitMain->sizes().value(0, 260);
-        AppSettings::Current.EditorSplitterDistance = splitEditor->sizes().value(0, 600);
+    if (!minimized && _splittersRestored) {
+        const QList<int> mainSizes = splitMain->sizes();
+        if (mainSizes.size() >= 2)
+            AppSettings::Current.MainSplitterDistance = mainSizes.at(0);
+
+        const QList<int> editorSizes = splitEditor->sizes();
+        if (editorSizes.size() >= 2) {
+            AppSettings::Current.EditorSplitterDistance = editorSizes.at(0);
+            AppSettings::Current.CodeNoteSplitterDistance = editorSizes.at(1);
+        }
+
         if (codeReviewControl != nullptr && codeReviewControl->isVisible()) {
-            AppSettings::Current.VerticalSplitterDistance = splitMiddle->sizes().value(0, 400);
+            const QList<int> midSizes = splitMiddle->sizes();
+            if (midSizes.size() >= 2) {
+                AppSettings::Current.VerticalSplitterDistance = midSizes.at(0);
+                AppSettings::Current.VerticalSplitterBottomDistance = midSizes.at(1);
+            }
         }
     }
 
@@ -644,16 +693,32 @@ void MainWindow::SaveSettings() {
 }
 
 void MainWindow::ToggleReviewer(std::optional<bool> forceState) {
-    bool newState = forceState.has_value() ? forceState.value() : !codeReviewControl->isVisible();
+    bool currentlyVisible = codeReviewControl->isVisible();
+    bool newState = forceState.has_value() ? forceState.value() : !currentlyVisible;
+
+    if (!newState && currentlyVisible && _splittersRestored) {
+        const QList<int> midSizes = splitMiddle->sizes();
+        if (midSizes.size() >= 2) {
+            AppSettings::Current.VerticalSplitterDistance = midSizes.at(0);
+            AppSettings::Current.VerticalSplitterBottomDistance = midSizes.at(1);
+        }
+    }
+
     actViewReviewer->setChecked(newState);
     codeReviewControl->setVisible(newState);
 
     if (newState) {
-        int totalH = splitMiddle->height();
-        int topH = (AppSettings::Current.VerticalSplitterDistance > 0 && AppSettings::Current.VerticalSplitterDistance < totalH - 60)
-                       ? AppSettings::Current.VerticalSplitterDistance
-                       : std::max(100, totalH * 60 / 100);
-        int bottomH = std::max(60, totalH - topH);
+        int totalH = std::max(160, splitMiddle->height() - splitMiddle->handleWidth());
+        int bottomH = -1;
+        if (AppSettings::Current.VerticalSplitterBottomDistance > 0) {
+            int maxBottom = std::max(60, totalH - 100);
+            bottomH = std::clamp(AppSettings::Current.VerticalSplitterBottomDistance, 60, maxBottom);
+        } else if (AppSettings::Current.VerticalSplitterDistance > 0 && AppSettings::Current.VerticalSplitterDistance < totalH - 60) {
+            bottomH = std::max(60, totalH - AppSettings::Current.VerticalSplitterDistance);
+        } else {
+            bottomH = std::max(60, totalH * 40 / 100);
+        }
+        int topH = std::max(100, totalH - bottomH);
         splitMiddle->setSizes({topH, bottomH});
     }
 }

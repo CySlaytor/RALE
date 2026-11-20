@@ -94,6 +94,7 @@ class MainWindow : public QMainWindow {
     bool _isLoading = false;
     bool _isDirty = false;
     bool _isFirstShow = true;
+    bool _splittersRestored = false;
     QString _currentFilePath = "";
     QString _currentUserFilePath = "";
     QList<std::shared_ptr<IAssetItem>> _currentDisplayList;
@@ -151,6 +152,7 @@ class MainWindow : public QMainWindow {
     void InitializeAssetContextMenu();
     void ApplySettings();
     void SaveSettings();
+    void RestoreSplitterSizes();
     void ToggleReviewer(std::optional<bool> forceState = std::nullopt);
     void UpdateUndoRedoState();
     void UpdateRecentMenu();

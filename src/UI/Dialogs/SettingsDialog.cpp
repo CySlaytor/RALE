@@ -346,6 +346,10 @@ void SettingsDialog::onResetAllClicked() {
         if (QFile::exists(settingsFile)) {
             QFile::remove(settingsFile);
         }
+        QString layoutFile = AppSettings::GetLayoutPath();
+        if (QFile::exists(layoutFile)) {
+            QFile::remove(layoutFile);
+        }
 
         QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList());
         QApplication::quit();
