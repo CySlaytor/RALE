@@ -232,8 +232,19 @@ void TriggerEditorWidget::InitializeUI() {
     connect(btnAddNote, &QPushButton::clicked, this, &TriggerEditorWidget::onBtnAddNoteClicked);
     row2->addWidget(btnAddNote);
 
+    btnRevert = new QPushButton("Revert", panelHeader);
+    btnRevert->setFixedSize(52, 24);
+    btnRevert->setToolTip("Discard local modifications and restore original values from the loaded JSON server snapshot");
+    btnRevert->setVisible(false);
+    btnRevert->setEnabled(false);
+    connect(btnRevert, &QPushButton::clicked, this, &TriggerEditorWidget::onBtnRevertClicked);
+    row2->addWidget(btnRevert);
+
     btnReset = new QPushButton("Reset", panelHeader);
     btnReset->setFixedSize(50, 24);
+    btnReset->setToolTip("Discard current unsaved changes and restore the last saved state");
+    btnReset->setVisible(false);
+    btnReset->setEnabled(false);
     connect(btnReset, &QPushButton::clicked, this, &TriggerEditorWidget::onBtnResetClicked);
     row2->addWidget(btnReset);
 
@@ -702,7 +713,9 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
         lblAssetState->style()->unpolish(lblAssetState);
         lblAssetState->style()->polish(lblAssetState);
 
-        btnReset->setVisible(asset->State != AssetState::Local);
+        btnRevert->setVisible(asset->State != AssetState::Local);
+        btnRevert->setEnabled(asset->State == AssetState::Modified);
+        btnReset->setVisible(true);
     }
 
     SetStatus("Asset loaded.");
@@ -739,6 +752,18 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
 
     _preserveSegmentSelection = "";
     _isProgrammaticallyChanging = false;
+}
+
+void TriggerEditorWidget::SetActionButtonStates(bool hasServerSnapshot, bool canRevert, bool canReset) {
+    const bool hasAsset = (_viewModel.BoundAsset != nullptr && _viewModel.BoundAsset->ID != 0);
+    if (btnRevert != nullptr) {
+        btnRevert->setVisible(hasAsset && hasServerSnapshot);
+        btnRevert->setEnabled(hasAsset && hasServerSnapshot && canRevert);
+    }
+    if (btnReset != nullptr) {
+        btnReset->setVisible(hasAsset);
+        btnReset->setEnabled(hasAsset && canReset);
+    }
 }
 
 void TriggerEditorWidget::SetupAchievementUI(const RaAchievement& cheevo) {
@@ -819,7 +844,10 @@ void TriggerEditorWidget::Clear() {
     cmbFormat->setVisible(false);
     chkLowerIsBetter->setVisible(false);
 
+    btnRevert->setVisible(false);
+    btnRevert->setEnabled(false);
     btnReset->setVisible(false);
+    btnReset->setEnabled(false);
     SetStatus("Ready");
     emit ValidationCompleted({});
     _isProgrammaticallyChanging = false;
@@ -1075,6 +1103,7 @@ void TriggerEditorWidget::onLbComponentsSelectionChanged() {
     RefreshGroupsListUI();
 }
 
+void TriggerEditorWidget::onBtnRevertClicked() { emit AssetRevertRequested(); }
 void TriggerEditorWidget::onBtnResetClicked() { emit AssetResetRequested(); }
 void TriggerEditorWidget::onBtnAddNoteClicked() { emit AddFromCodeNoteRequested(); }
 void TriggerEditorWidget::onBtnCopyDefClicked() {

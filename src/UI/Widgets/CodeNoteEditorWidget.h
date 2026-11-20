@@ -8,6 +8,7 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMap>
 #include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -34,6 +35,8 @@ class CodeNoteEditorWidget : public QWidget {
 
     void SetConsoleId(int consoleId);
 
+    void SetServerNotes(const QList<CodeNote>& serverNotes);
+    void SetSavedNotes(const QList<CodeNote>& savedNotes);
     void SetNotes(const QList<CodeNote>& notes);
     void CommitChanges();
 
@@ -54,12 +57,12 @@ class CodeNoteEditorWidget : public QWidget {
 
   signals:
     void ReloadRequested();
-    void SaveRequested();
     void NoteUpdated();
     void NoteDirtyStateChanged();
     void BeforeBatchNotesChange();
     void BatchNotesApplied();
     void NoteResetRequested(const QString& address);
+    void NoteRevertRequested(const QString& address);
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -71,7 +74,7 @@ class CodeNoteEditorWidget : public QWidget {
     void onNoteBodyTextChanged();
     void onBtnReloadClicked();
     void onBtnCloneStrideClicked();
-    void onBtnSaveClicked();
+    void onBtnRevertClicked();
     void onBtnResetClicked();
     void onBtnFixHierarchyClicked();
 
@@ -93,10 +96,10 @@ class CodeNoteEditorWidget : public QWidget {
     QCheckBox* chkShowLeafsOnly = nullptr;
     QPlainTextEdit* txtNoteBody = nullptr;
 
-    QPushButton* btnSave = nullptr;
     QPushButton* btnFixHierarchy = nullptr;
     QCheckBox* chkUnicodeTree = nullptr;
     QCheckBox* chkIndentValues = nullptr;
+    QPushButton* btnRevert = nullptr;
     QPushButton* btnReset = nullptr;
 
     QLabel* lblOffsetChain = nullptr;
@@ -104,6 +107,8 @@ class CodeNoteEditorWidget : public QWidget {
 
     std::unique_ptr<CodeNoteViewModel> _viewModel;
     QList<CodeNote> _filteredNotes;
+    QMap<QString, QString> _serverNotesMap;
+    QMap<QString, QString> _savedNotesMap;
     QString _lastVariableTreeAddress;
     int _consoleId = 0;
     bool _isInternalUpdate = false;
@@ -116,6 +121,9 @@ class CodeNoteEditorWidget : public QWidget {
     void ApplyFilter(bool autoSelectFirst = true);
     void RefreshVariableTreeDisplay();
     void UpdateStatusDisplay(const QString* overrideMsg = nullptr);
+    void UpdateActionButtons();
+    bool CanRevertCurrentNote() const;
+    bool CanResetCurrentNote() const;
 };
 
 } // namespace RALE

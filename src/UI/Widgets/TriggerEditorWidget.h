@@ -51,6 +51,7 @@ class TriggerEditorWidget : public QWidget {
 
     void SetNotes(const QList<CodeNote>& notes);
     void BindAchievement(std::shared_ptr<IAssetItem> asset, const QString& setType = "Core");
+    void SetActionButtonStates(bool hasServerSnapshot, bool canRevert, bool canReset);
     void Clear();
 
     void Undo();
@@ -77,6 +78,7 @@ class TriggerEditorWidget : public QWidget {
     void TriggerTextChanged();
     void AchievementDataChanged();
     void AssetResetRequested();
+    void AssetRevertRequested();
     void AddFromCodeNoteRequested();
     void AddressSelected(const QString& addr);
     void PointerChainSelected(const PointerChainArgs& args);
@@ -105,6 +107,7 @@ class TriggerEditorWidget : public QWidget {
     void onGroupsListSelectionChanged();
     void onLbComponentsSelectionChanged();
 
+    void onBtnRevertClicked();
     void onBtnResetClicked();
     void onBtnAddNoteClicked();
     void onBtnCopyDefClicked();
@@ -160,6 +163,7 @@ class TriggerEditorWidget : public QWidget {
     QPushButton* btnCopyDef = nullptr;
     QPushButton* btnTools = nullptr;
     QPushButton* btnAddNote = nullptr;
+    QPushButton* btnRevert = nullptr;
     QPushButton* btnReset = nullptr;
 
     QListWidget* lvLeaderboardComponents = nullptr;

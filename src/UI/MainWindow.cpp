@@ -70,6 +70,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         EnsureAssetIsLocal();
         UpdateAssetState(_selectedAsset);
         _isDirty = true;
+        UpdateSelectionUI();
+        UpdateTriggerActionButtons();
     });
 
     connect(triggerEditor, &TriggerEditorWidget::AchievementDataChanged, this, [this]() {
@@ -87,29 +89,72 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         _isDirty = true;
         _assetModel.NotifyAssetChanged(_selectedAsset);
         UpdateSelectionUI();
+        UpdateTriggerActionButtons();
     });
 
-    // The editor's Reset button targets the asset currently open in the editor only;
-    // the asset-grid context-menu Reset keeps its multi-row behaviour.
+    // The editor's Reset button resets current unsaved changes for the open asset only.
     connect(triggerEditor, &TriggerEditorWidget::AssetResetRequested, this, [this]() {
         if (_selectedAsset == nullptr || _projectRepo.LocalData == nullptr)
             return;
+        if (!_projectRepo.HasUnsavedAssetChanges(_selectedAsset.get()))
+            return;
+
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle("Confirm Reset");
+        msgBox.setText(QString("Discard current unsaved changes for '%1' (ID: %2)?").arg(_selectedAsset->Title).arg(_selectedAsset->ID));
+        msgBox.setInformativeText("Unsaved modifications made since the last load or save to User.txt will be discarded, restoring "
+                                  "this asset to its last saved state (User.txt override if saved, or server JSON baseline).");
+        msgBox.setIcon(QMessageBox::Warning);
+
+        QPushButton* resetBtn = msgBox.addButton("Reset", QMessageBox::DestructiveRole);
+        QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+        msgBox.setDefaultButton(cancelBtn);
+        msgBox.exec();
+
+        if (msgBox.clickedButton() != resetBtn)
+            return;
+
         PushMainUndo();
+        _projectRepo.ResetAssetToSaved(_selectedAsset->ID, _selectedAsset->isLeaderboard());
 
-        if (_selectedAsset->isLeaderboard()) {
-            for (int i = _projectRepo.LocalData->Leaderboards.size() - 1; i >= 0; --i)
-                if (_projectRepo.LocalData->Leaderboards[i]->ID == _selectedAsset->ID)
-                    _projectRepo.LocalData->Leaderboards.removeAt(i);
-        } else {
-            for (int i = _projectRepo.LocalData->Achievements.size() - 1; i >= 0; --i)
-                if (_projectRepo.LocalData->Achievements[i]->ID == _selectedAsset->ID)
-                    _projectRepo.LocalData->Achievements.removeAt(i);
-        }
-
-        _isDirty = true;
+        _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
         _notesCacheDirty = true;
         ReloadDataView();
         RefreshSelectedAssetAfterStoreChange();
+        RunGlobalValidation();
+    });
+
+    // The editor's Revert button restores the original values from the loaded JSON server snapshot.
+    connect(triggerEditor, &TriggerEditorWidget::AssetRevertRequested, this, [this]() {
+        if (_selectedAsset == nullptr || _projectRepo.LocalData == nullptr)
+            return;
+        if (!IsServerAssetId(_selectedAsset->ID, _selectedAsset->isLeaderboard()) || _selectedAsset->State != AssetState::Modified)
+            return;
+
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle("Confirm Revert to Server");
+        msgBox.setText(
+            QString("Discard local changes and revert '%1' (ID: %2) to the server snapshot?").arg(_selectedAsset->Title).arg(_selectedAsset->ID));
+        msgBox.setInformativeText("Warning: All current modifications and any local User.txt overrides for this asset will be "
+                                  "discarded, restoring the original values from the loaded JSON server snapshot.");
+        msgBox.setIcon(QMessageBox::Warning);
+
+        QPushButton* revertBtn = msgBox.addButton("Revert", QMessageBox::DestructiveRole);
+        QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+        msgBox.setDefaultButton(cancelBtn);
+        msgBox.exec();
+
+        if (msgBox.clickedButton() != revertBtn)
+            return;
+
+        PushMainUndo();
+        _projectRepo.RevertAssetToServer(_selectedAsset->ID, _selectedAsset->isLeaderboard());
+
+        _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
+        _notesCacheDirty = true;
+        ReloadDataView();
+        RefreshSelectedAssetAfterStoreChange();
+        RunGlobalValidation();
     });
 
     connect(triggerEditor, &TriggerEditorWidget::AddFromCodeNoteRequested, this, [this]() {
@@ -161,7 +206,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // Code Note Editor actions
     connect(codeNoteEditor, &CodeNoteEditorWidget::ReloadRequested, this, &MainWindow::onReload);
-    connect(codeNoteEditor, &CodeNoteEditorWidget::SaveRequested, this, &MainWindow::onSaveFile);
     connect(codeNoteEditor, &CodeNoteEditorWidget::NoteDirtyStateChanged, this, [this]() {
         if (!_isLoading)
             _isDirty = true;
@@ -193,18 +237,34 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         _isDirty = true;
     });
 
-    // Resets local note override
+    // Resets current unsaved note edits back to the last saved disk state
     connect(codeNoteEditor, &CodeNoteEditorWidget::NoteResetRequested, this, [this](const QString& address) {
         if (_projectRepo.LocalData == nullptr)
             return;
 
         PushMainUndo();
-        _projectRepo.RevertNote(address);
-        _isDirty = true;
+        _projectRepo.ResetNote(address);
 
         auto notes = _projectRepo.LocalData->Notes;
         codeNoteEditor->SetNotes(notes);
         triggerEditor->SetNotes(notes);
+        _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
+        _notesCacheDirty = true;
+        RunGlobalValidation();
+    });
+
+    // Reverts local note override back to the JSON server snapshot
+    connect(codeNoteEditor, &CodeNoteEditorWidget::NoteRevertRequested, this, [this](const QString& address) {
+        if (_projectRepo.LocalData == nullptr)
+            return;
+
+        PushMainUndo();
+        _projectRepo.RevertNote(address);
+
+        auto notes = _projectRepo.LocalData->Notes;
+        codeNoteEditor->SetNotes(notes);
+        triggerEditor->SetNotes(notes);
+        _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
         _notesCacheDirty = true;
         RunGlobalValidation();
     });
@@ -613,6 +673,10 @@ void MainWindow::InitializeAssetContextMenu() {
     actResetAsset = assetContextMenu->addAction(getThemeIcon(":/icons/refresh.svg"), "Reset", this, &MainWindow::onResetAsset);
     actResetAsset->setProperty("iconPath", ":/icons/refresh.svg");
 
+    actRevertAsset =
+        assetContextMenu->addAction(getThemeIcon(":/icons/undo.svg"), "Revert to Server", this, &MainWindow::onRevertAsset);
+    actRevertAsset->setProperty("iconPath", ":/icons/undo.svg");
+
     assetContextMenu->addSeparator();
 
     actMoveUp = assetContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Up", this, &MainWindow::onMoveAssetUp);
@@ -949,13 +1013,17 @@ void MainWindow::LoadFiles(const QString& primaryPath) {
         ReloadDataView();
 
         auto notes = (_projectRepo.LocalData != nullptr) ? _projectRepo.LocalData->Notes : QList<CodeNote>();
+        codeNoteEditor->SetServerNotes(_projectRepo.GetServerNotes());
+        codeNoteEditor->SetSavedNotes(_projectRepo.GetSavedNotes());
         codeNoteEditor->SetNotes(notes);
         triggerEditor->SetNotes(notes);
 
         _notesCacheDirty = true;
         RunGlobalValidation();
         UpdateUndoRedoState();
+        UpdateTriggerActionButtons();
 
+        _rpDirty = false;
         _isDirty = false;
     } catch (...) {
     }
@@ -1066,6 +1134,7 @@ void MainWindow::LoadSelectedAsset() {
         }
     }
     UpdateSelectionUI();
+    UpdateTriggerActionButtons();
 }
 
 void MainWindow::RefreshSelectedAssetAfterStoreChange() {
@@ -1099,10 +1168,12 @@ void MainWindow::RefreshSelectedAssetAfterStoreChange() {
         triggerEditor->BindAchievement(_selectedAsset, displayCat);
         _isLoading = false;
         UpdateSelectionUI();
+        UpdateTriggerActionButtons();
     } else {
         _selectedAsset = nullptr;
         triggerEditor->Clear();
         UpdateSelectionUI();
+        UpdateTriggerActionButtons();
     }
 }
 
@@ -1160,6 +1231,7 @@ void MainWindow::UpdateSelectionUI() {
     bool hasSelection = !selectedRows.isEmpty();
     bool allLocal = true;
     bool anyModified = false;
+    bool anyUnsavedChanges = false;
 
     for (const auto& idx : selectedRows) {
         auto asset = _assetModel.GetAsset(idx.row());
@@ -1168,6 +1240,8 @@ void MainWindow::UpdateSelectionUI() {
                 allLocal = false;
             if (asset->State == AssetState::Modified)
                 anyModified = true;
+            if (_projectRepo.HasUnsavedAssetChanges(asset.get()))
+                anyUnsavedChanges = true;
         }
     }
 
@@ -1179,7 +1253,9 @@ void MainWindow::UpdateSelectionUI() {
     if (actDeleteAsset)
         actDeleteAsset->setEnabled(hasSelection && allLocal);
     if (actResetAsset)
-        actResetAsset->setEnabled(hasSelection && anyModified);
+        actResetAsset->setEnabled(hasSelection && anyUnsavedChanges);
+    if (actRevertAsset)
+        actRevertAsset->setEnabled(hasSelection && anyModified);
     if (actMoveUp)
         actMoveUp->setEnabled(hasSelection && allLocal);
     if (actMoveDown)
@@ -1189,6 +1265,18 @@ void MainWindow::UpdateSelectionUI() {
     if (actRenumberIDs)
         actRenumberIDs->setEnabled(_projectRepo.LocalData != nullptr &&
                                    (!_projectRepo.LocalData->Achievements.isEmpty() || !_projectRepo.LocalData->Leaderboards.isEmpty()));
+}
+
+void MainWindow::UpdateTriggerActionButtons() {
+    if (_selectedAsset == nullptr) {
+        triggerEditor->SetActionButtonStates(false, false, false);
+        return;
+    }
+
+    const bool hasServer = IsServerAssetId(_selectedAsset->ID, _selectedAsset->isLeaderboard());
+    const bool canRevert = hasServer && (_selectedAsset->State == AssetState::Modified);
+    const bool canReset = _projectRepo.HasUnsavedAssetChanges(_selectedAsset.get());
+    triggerEditor->SetActionButtonStates(hasServer, canRevert, canReset);
 }
 
 void MainWindow::onAssetSelectionChanged() { UpdateSelectionUI(); }
@@ -1352,7 +1440,7 @@ void MainWindow::UndoMain() {
     _projectRepo.LocalData->Achievements = previousState.Achievements;
     _projectRepo.LocalData->Leaderboards = previousState.Leaderboards;
     _projectRepo.LocalData->Notes = previousState.Notes;
-    _isDirty = true;
+    _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
     _notesCacheDirty = true;
     // Reload the note editors too; otherwise the next note selection emits
     // NoteUpdated and writes the pre-undo note list straight back into LocalData.
@@ -1360,6 +1448,7 @@ void MainWindow::UndoMain() {
     triggerEditor->SetNotes(_projectRepo.LocalData->Notes);
     ReloadDataView();
     RefreshSelectedAssetAfterStoreChange();
+    RunGlobalValidation();
 }
 
 void MainWindow::RedoMain() {
@@ -1369,12 +1458,13 @@ void MainWindow::RedoMain() {
     _projectRepo.LocalData->Achievements = nextState.Achievements;
     _projectRepo.LocalData->Leaderboards = nextState.Leaderboards;
     _projectRepo.LocalData->Notes = nextState.Notes;
-    _isDirty = true;
+    _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
     _notesCacheDirty = true;
     codeNoteEditor->SetNotes(_projectRepo.LocalData->Notes);
     triggerEditor->SetNotes(_projectRepo.LocalData->Notes);
     ReloadDataView();
     RefreshSelectedAssetAfterStoreChange();
+    RunGlobalValidation();
 }
 
 void MainWindow::onUndo() {
@@ -1690,6 +1780,7 @@ void MainWindow::onDeleteAsset() {
         _selectedAsset = nullptr;
         triggerEditor->Clear();
         UpdateSelectionUI();
+        UpdateTriggerActionButtons();
     }
 }
 
@@ -1698,28 +1789,94 @@ void MainWindow::onResetAsset() {
     if (selectedRows.isEmpty() || _projectRepo.LocalData == nullptr)
         return;
 
-    PushMainUndo();
-
+    QList<std::shared_ptr<IAssetItem>> targets;
     for (const auto& idx : selectedRows) {
         auto item = _assetModel.GetAsset(idx.row());
-        if (item != nullptr && item->State == AssetState::Modified) {
-            if (!item->isLeaderboard()) {
-                for (int i = _projectRepo.LocalData->Achievements.size() - 1; i >= 0; --i) {
-                    if (_projectRepo.LocalData->Achievements[i]->ID == item->ID)
-                        _projectRepo.LocalData->Achievements.removeAt(i);
-                }
-            } else {
-                for (int i = _projectRepo.LocalData->Leaderboards.size() - 1; i >= 0; --i) {
-                    if (_projectRepo.LocalData->Leaderboards[i]->ID == item->ID)
-                        _projectRepo.LocalData->Leaderboards.removeAt(i);
-                }
-            }
-        }
+        if (item != nullptr && _projectRepo.HasUnsavedAssetChanges(item.get()))
+            targets.append(item);
     }
 
-    _isDirty = true;
+    if (targets.isEmpty())
+        return;
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("Confirm Reset");
+    if (targets.size() == 1) {
+        msgBox.setText(QString("Discard current unsaved changes for '%1' (ID: %2)?").arg(targets.first()->Title).arg(targets.first()->ID));
+    } else {
+        msgBox.setText(QString("Discard current unsaved changes for %1 selected asset(s)?").arg(targets.size()));
+    }
+    msgBox.setInformativeText("Unsaved modifications made since the last load or save to User.txt will be discarded, restoring the "
+                              "selected asset(s) to their last saved state (User.txt override if saved, or server JSON baseline).");
+    msgBox.setIcon(QMessageBox::Warning);
+
+    QPushButton* resetBtn = msgBox.addButton("Reset", QMessageBox::DestructiveRole);
+    QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+    msgBox.setDefaultButton(cancelBtn);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() != resetBtn)
+        return;
+
+    PushMainUndo();
+
+    for (const auto& item : targets) {
+        _projectRepo.ResetAssetToSaved(item->ID, item->isLeaderboard());
+    }
+
+    _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
+    _notesCacheDirty = true;
     ReloadDataView();
     RefreshSelectedAssetAfterStoreChange();
+    RunGlobalValidation();
+}
+
+void MainWindow::onRevertAsset() {
+    auto selectedRows = achievementGrid->selectionModel()->selectedRows();
+    if (selectedRows.isEmpty() || _projectRepo.LocalData == nullptr)
+        return;
+
+    QList<std::shared_ptr<IAssetItem>> targets;
+    for (const auto& idx : selectedRows) {
+        auto item = _assetModel.GetAsset(idx.row());
+        if (item != nullptr && item->State == AssetState::Modified)
+            targets.append(item);
+    }
+
+    if (targets.isEmpty())
+        return;
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("Confirm Revert to Server");
+    if (targets.size() == 1) {
+        msgBox.setText(
+            QString("Discard local changes and revert '%1' (ID: %2) to the server snapshot?").arg(targets.first()->Title).arg(targets.first()->ID));
+    } else {
+        msgBox.setText(QString("Discard local changes and revert %1 selected asset(s) to the server snapshot?").arg(targets.size()));
+    }
+    msgBox.setInformativeText("Warning: All current modifications and any local User.txt overrides for the selected asset(s) will be "
+                              "discarded, restoring the original values from the loaded JSON server snapshot.");
+    msgBox.setIcon(QMessageBox::Warning);
+
+    QPushButton* revertBtn = msgBox.addButton("Revert", QMessageBox::DestructiveRole);
+    QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+    msgBox.setDefaultButton(cancelBtn);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() != revertBtn)
+        return;
+
+    PushMainUndo();
+
+    for (const auto& item : targets) {
+        _projectRepo.RevertAssetToServer(item->ID, item->isLeaderboard());
+    }
+
+    _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
+    _notesCacheDirty = true;
+    ReloadDataView();
+    RefreshSelectedAssetAfterStoreChange();
+    RunGlobalValidation();
 }
 
 void MainWindow::onMoveAssetUp() { MoveAsset(-1); }
@@ -2042,8 +2199,13 @@ void MainWindow::onSaveFile() {
         _currentUserFilePath = savePath;
         _projectRepo.SaveRichPresence();
         _projectRepo.Metadata.Save();
+        _projectRepo.MarkCurrentAsSaved();
+        codeNoteEditor->SetSavedNotes(_projectRepo.GetSavedNotes());
 
+        _rpDirty = false;
         _isDirty = false;
+        UpdateSelectionUI();
+        UpdateTriggerActionButtons();
 
         QMessageBox::information(this, "Save", "Saved to " + savePath);
     } catch (const std::exception& ex) {
@@ -2106,6 +2268,7 @@ void MainWindow::onRevertRichPresence() {
         try {
             _projectRepo.RichPresence =
                 std::make_shared<RichPresenceScript>(RichPresenceParser::Parse(_rpMetadata.CurrentBackup->OriginalScript));
+            _rpDirty = true;
             _isDirty = true;
             QMessageBox::information(this, "Revert Rich Presence", "Reverted.");
         } catch (const std::exception& ex) {
@@ -2322,6 +2485,7 @@ void MainWindow::onMultiRegionBatch(MultiRegionDialog* dialog) {
         _rpMetadata.SaveBackup(_projectRepo.RichPresence->ToString());
         auto newRp = _rpService.GenerateMultiRegion(*_projectRepo.RichPresence, configs);
         _projectRepo.RichPresence = std::make_shared<RichPresenceScript>(newRp);
+        _rpDirty = true;
         QMessageBox::information(this, "RP Updated", "Rich Presence script updated in memory.");
     }
 

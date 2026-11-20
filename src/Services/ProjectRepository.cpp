@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
 #include <QSet>
 
 #include <algorithm>
@@ -20,6 +21,7 @@ void ProjectRepository::LoadFiles(const QString& primaryPath, QString& userFileP
     LocalData = nullptr;
     RichPresence = nullptr;
     _serverNotes.clear();
+    _savedLocalData = nullptr;
     userFilePath = "";
     CurrentGameId = "";
     RichPresenceFilePath = "";
@@ -100,6 +102,8 @@ void ProjectRepository::LoadFiles(const QString& primaryPath, QString& userFileP
         } catch (...) { /* Ignore RP load errors */
         }
     }
+
+    MarkCurrentAsSaved();
 }
 
 void ProjectRepository::LoadServerLogic(const QString& filepath) {
@@ -278,6 +282,196 @@ void ProjectRepository::RevertNote(const QString& address) {
             break;
         }
     }
+}
+
+void ProjectRepository::ResetNote(const QString& address) {
+    if (LocalData == nullptr)
+        return;
+
+    const QString normAddr = LogicFormatter::NormalizeAddress(address);
+    for (int i = 0; i < LocalData->Notes.size(); i++) {
+        if (LogicFormatter::NormalizeAddress(LocalData->Notes[i].Address) == normAddr) {
+            LocalData->Notes.removeAt(i);
+            break;
+        }
+    }
+
+    bool restored = false;
+    if (_savedLocalData != nullptr) {
+        for (const auto& savedNote : _savedLocalData->Notes) {
+            if (LogicFormatter::NormalizeAddress(savedNote.Address) == normAddr) {
+                LocalData->Notes.append(CodeNote{savedNote.User, savedNote.Address, savedNote.Note});
+                restored = true;
+                break;
+            }
+        }
+    }
+
+    if (!restored) {
+        for (const auto& serverNote : _serverNotes) {
+            if (LogicFormatter::NormalizeAddress(serverNote.Address) == normAddr) {
+                LocalData->Notes.append(CodeNote{serverNote.User, serverNote.Address, serverNote.Note});
+                restored = true;
+                break;
+            }
+        }
+    }
+
+    if (restored) {
+        std::sort(LocalData->Notes.begin(), LocalData->Notes.end(),
+                  [](const CodeNote& a, const CodeNote& b) { return a.Address < b.Address; });
+    }
+}
+
+void ProjectRepository::ResetAssetToSaved(int id, bool isLeaderboard) {
+    if (LocalData == nullptr)
+        return;
+
+    if (isLeaderboard) {
+        for (int i = LocalData->Leaderboards.size() - 1; i >= 0; --i) {
+            if (LocalData->Leaderboards[i]->ID == id)
+                LocalData->Leaderboards.removeAt(i);
+        }
+        if (_savedLocalData != nullptr) {
+            for (const auto& saved : _savedLocalData->Leaderboards) {
+                if (saved->ID == id) {
+                    LocalData->Leaderboards.append(saved->cloneLeaderboard(false));
+                    break;
+                }
+            }
+        }
+    } else {
+        for (int i = LocalData->Achievements.size() - 1; i >= 0; --i) {
+            if (LocalData->Achievements[i]->ID == id)
+                LocalData->Achievements.removeAt(i);
+        }
+        if (_savedLocalData != nullptr) {
+            for (const auto& saved : _savedLocalData->Achievements) {
+                if (saved->ID == id) {
+                    LocalData->Achievements.append(saved->cloneAchievement(false));
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void ProjectRepository::RevertAssetToServer(int id, bool isLeaderboard) {
+    if (LocalData == nullptr)
+        return;
+
+    if (isLeaderboard) {
+        for (int i = LocalData->Leaderboards.size() - 1; i >= 0; --i) {
+            if (LocalData->Leaderboards[i]->ID == id)
+                LocalData->Leaderboards.removeAt(i);
+        }
+    } else {
+        for (int i = LocalData->Achievements.size() - 1; i >= 0; --i) {
+            if (LocalData->Achievements[i]->ID == id)
+                LocalData->Achievements.removeAt(i);
+        }
+    }
+}
+
+std::shared_ptr<UserTextParser::UserData> ProjectRepository::CloneUserData(const UserTextParser::UserData* src) const {
+    auto copy = std::make_shared<UserTextParser::UserData>();
+    if (src == nullptr)
+        return copy;
+
+    for (const auto& ach : src->Achievements) {
+        if (ach != nullptr)
+            copy->Achievements.append(ach->cloneAchievement(false));
+    }
+    for (const auto& lb : src->Leaderboards) {
+        if (lb != nullptr)
+            copy->Leaderboards.append(lb->cloneLeaderboard(false));
+    }
+    for (const auto& n : src->Notes) {
+        copy->Notes.append(CodeNote{n.User, n.Address, n.Note});
+    }
+    return copy;
+}
+
+void ProjectRepository::MarkCurrentAsSaved() { _savedLocalData = CloneUserData(LocalData.get()); }
+
+QList<CodeNote> ProjectRepository::GetSavedNotes() const {
+    if (_savedLocalData != nullptr)
+        return _savedLocalData->Notes;
+    return {};
+}
+
+bool ProjectRepository::HasUnsavedAssetChanges(const IAssetItem* item) const {
+    if (item == nullptr)
+        return false;
+
+    const bool isLb = item->isLeaderboard();
+    if (_savedLocalData != nullptr) {
+        if (isLb) {
+            for (const auto& saved : _savedLocalData->Leaderboards) {
+                if (saved != nullptr && saved->ID == item->ID)
+                    return !AreAssetsEqual(*item, *saved);
+            }
+        } else {
+            for (const auto& saved : _savedLocalData->Achievements) {
+                if (saved != nullptr && saved->ID == item->ID)
+                    return !AreAssetsEqual(*item, *saved);
+            }
+        }
+    }
+
+    if (ServerData != nullptr) {
+        for (const auto& s : ServerData->Sets) {
+            if (isLb) {
+                for (const auto& lb : s.Leaderboards) {
+                    if (lb != nullptr && lb->ID == item->ID)
+                        return !AreAssetsEqual(*item, *lb);
+                }
+            } else {
+                for (const auto& ach : s.Achievements) {
+                    if (ach != nullptr && ach->ID == item->ID)
+                        return !AreAssetsEqual(*item, *ach);
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+bool ProjectRepository::HasUnsavedChanges() const {
+    if (LocalData == nullptr && _savedLocalData == nullptr)
+        return false;
+    if (LocalData == nullptr || _savedLocalData == nullptr)
+        return true;
+
+    if (LocalData->Achievements.size() != _savedLocalData->Achievements.size())
+        return true;
+    for (int i = 0; i < LocalData->Achievements.size(); ++i) {
+        const auto& a = LocalData->Achievements[i];
+        const auto& b = _savedLocalData->Achievements[i];
+        if (a == nullptr || b == nullptr || a->ID != b->ID || !AreAssetsEqual(*a, *b))
+            return true;
+    }
+
+    if (LocalData->Leaderboards.size() != _savedLocalData->Leaderboards.size())
+        return true;
+    for (int i = 0; i < LocalData->Leaderboards.size(); ++i) {
+        const auto& a = LocalData->Leaderboards[i];
+        const auto& b = _savedLocalData->Leaderboards[i];
+        if (a == nullptr || b == nullptr || a->ID != b->ID || !AreAssetsEqual(*a, *b))
+            return true;
+    }
+
+    auto buildNoteMap = [](const QList<CodeNote>& list) {
+        QMap<QString, QString> m;
+        for (const auto& n : list)
+            m.insert(LogicFormatter::NormalizeAddress(n.Address), n.Note);
+        return m;
+    };
+    if (buildNoteMap(LocalData->Notes) != buildNoteMap(_savedLocalData->Notes))
+        return true;
+
+    return false;
 }
 
 QList<std::shared_ptr<RaAchievement>> ProjectRepository::GetMergedAchievements() {

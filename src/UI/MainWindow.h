@@ -58,6 +58,7 @@ class MainWindow : public QMainWindow {
     void onDuplicateAsset();
     void onDeleteAsset();
     void onResetAsset();
+    void onRevertAsset();
     void onMoveAssetUp();
     void onMoveAssetDown();
     void onRestoreOrder();
@@ -101,6 +102,7 @@ class MainWindow : public QMainWindow {
     std::shared_ptr<IAssetItem> _selectedAsset = nullptr;
     bool _isLoading = false;
     bool _isDirty = false;
+    bool _rpDirty = false;
     bool _isFirstShow = true;
     bool _splittersRestored = false;
     bool _updateCheckCanceled = false;
@@ -151,6 +153,7 @@ class MainWindow : public QMainWindow {
     QAction* actDuplicateAsset = nullptr;
     QAction* actDeleteAsset = nullptr;
     QAction* actResetAsset = nullptr;
+    QAction* actRevertAsset = nullptr;
     QAction* actMoveUp = nullptr;
     QAction* actMoveDown = nullptr;
     QAction* actRestoreOrder = nullptr;
@@ -181,6 +184,7 @@ class MainWindow : public QMainWindow {
     void LoadSelectedAsset();
     void UpdateAssetState(const std::shared_ptr<IAssetItem>& item);
     void UpdateSelectionUI();
+    void UpdateTriggerActionButtons();
     void SelectAssetInGrid(const std::shared_ptr<IAssetItem>& asset);
     void RunGlobalValidation();
     void RefreshSelectedAssetAfterStoreChange();

@@ -17,6 +17,15 @@
 
 namespace RALE {
 
+namespace {
+
+QString NormalizeLineEndings(QString text) {
+    text.replace("\r\n", "\n").replace('\r', '\n');
+    return text;
+}
+
+} // namespace
+
 CodeNoteEditorWidget::CodeNoteEditorWidget(QWidget* parent) : QWidget(parent) {
     static PointerTreeParser staticParser;
     _viewModel = std::make_unique<CodeNoteViewModel>(staticParser, this);
@@ -149,7 +158,20 @@ void CodeNoteEditorWidget::InitializeUI() {
                                                  &CodeNoteEditorWidget::onDeleteNodeClicked);
     actDelNode->setProperty("iconPath", ":/icons/delete.svg");
 
-    connect(cmsNoteContext, &QMenu::aboutToShow, this, [this, actDelNode]() { actDelNode->setEnabled(!_viewModel->EditState.IsVirtual); });
+    cmsNoteContext->addSeparator();
+    auto* actRevertNote =
+        cmsNoteContext->addAction(getThemeIcon(":/icons/undo.svg"), "Revert to Server", this, &CodeNoteEditorWidget::onBtnRevertClicked);
+    actRevertNote->setProperty("iconPath", ":/icons/undo.svg");
+
+    auto* actResetNote =
+        cmsNoteContext->addAction(getThemeIcon(":/icons/refresh.svg"), "Reset", this, &CodeNoteEditorWidget::onBtnResetClicked);
+    actResetNote->setProperty("iconPath", ":/icons/refresh.svg");
+
+    connect(cmsNoteContext, &QMenu::aboutToShow, this, [this, actDelNode, actRevertNote, actResetNote]() {
+        actDelNode->setEnabled(!_viewModel->EditState.IsVirtual);
+        actRevertNote->setEnabled(CanRevertCurrentNote());
+        actResetNote->setEnabled(CanResetCurrentNote());
+    });
 
     txtNoteBody->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(txtNoteBody, &QWidget::customContextMenuRequested, this,
@@ -163,11 +185,6 @@ void CodeNoteEditorWidget::InitializeUI() {
     auto* bottomLayout = new QHBoxLayout(panelBottom);
     bottomLayout->setContentsMargins(4, 4, 4, 4);
     bottomLayout->setSpacing(6);
-
-    btnSave = new QPushButton("Save", panelBottom);
-    btnSave->setFixedSize(48, 26);
-    connect(btnSave, &QPushButton::clicked, this, &CodeNoteEditorWidget::onBtnSaveClicked);
-    bottomLayout->addWidget(btnSave);
 
     btnFixHierarchy = new QPushButton("Fix Hierarchy", panelBottom);
     btnFixHierarchy->setFixedSize(82, 26);
@@ -185,8 +202,17 @@ void CodeNoteEditorWidget::InitializeUI() {
 
     bottomLayout->addStretch();
 
+    btnRevert = new QPushButton("Revert", panelBottom);
+    btnRevert->setFixedSize(54, 26);
+    btnRevert->setToolTip("Discard local modifications and restore original values from the loaded JSON server snapshot");
+    btnRevert->setEnabled(false);
+    connect(btnRevert, &QPushButton::clicked, this, &CodeNoteEditorWidget::onBtnRevertClicked);
+    bottomLayout->addWidget(btnRevert);
+
     btnReset = new QPushButton("Reset", panelBottom);
     btnReset->setFixedSize(54, 26);
+    btnReset->setToolTip("Discard current unsaved changes and restore the last saved state");
+    btnReset->setEnabled(false);
     connect(btnReset, &QPushButton::clicked, this, &CodeNoteEditorWidget::onBtnResetClicked);
     bottomLayout->addWidget(btnReset);
 
@@ -234,6 +260,7 @@ void CodeNoteEditorWidget::Undo() {
         _hasUnsavedChanges = true;
         QString msg = "Undone.";
         UpdateStatusDisplay(&msg);
+        UpdateActionButtons();
     }
 }
 
@@ -243,6 +270,7 @@ void CodeNoteEditorWidget::Redo() {
         _hasUnsavedChanges = true;
         QString msg = "Redone.";
         UpdateStatusDisplay(&msg);
+        UpdateActionButtons();
     }
 }
 
@@ -259,6 +287,25 @@ void CodeNoteEditorWidget::SetConsoleId(int consoleId) {
     _consoleId = consoleId;
     if (_viewModel)
         _viewModel->ConsoleId = consoleId;
+}
+
+void CodeNoteEditorWidget::SetServerNotes(const QList<CodeNote>& serverNotes) {
+    _serverNotesMap.clear();
+    for (const auto& n : serverNotes) {
+        const QString key = LogicFormatter::NormalizeAddress(n.Address);
+        if (!_serverNotesMap.contains(key))
+            _serverNotesMap.insert(key, n.Note);
+    }
+    UpdateActionButtons();
+}
+
+void CodeNoteEditorWidget::SetSavedNotes(const QList<CodeNote>& savedNotes) {
+    _savedNotesMap.clear();
+    for (const auto& n : savedNotes) {
+        const QString key = LogicFormatter::NormalizeAddress(n.Address);
+        _savedNotesMap.insert(key, n.Note);
+    }
+    UpdateActionButtons();
 }
 
 void CodeNoteEditorWidget::onBtnReloadClicked() { emit ReloadRequested(); }
@@ -334,31 +381,55 @@ void CodeNoteEditorWidget::onBtnCloneStrideClicked() {
     _hasUnsavedChanges = true;
     QString msg = QString("Batch cloned %1 note(s) (%2 new, %3 updated).").arg(generated.size()).arg(addedCount).arg(updatedCount);
     UpdateStatusDisplay(&msg);
+    UpdateActionButtons();
 
     emit NoteUpdated();
     emit BatchNotesApplied();
 }
 
-void CodeNoteEditorWidget::onBtnSaveClicked() {
-    CommitChanges();
-    emit SaveRequested();
-    _hasUnsavedChanges = false;
-    QString msg = "Notes saved.";
-    UpdateStatusDisplay(&msg);
+void CodeNoteEditorWidget::onBtnRevertClicked() {
+    if (!CanRevertCurrentNote() || _viewModel->CurrentBaseNote == nullptr)
+        return;
+
+    const QString addr = _viewModel->CurrentBaseNote->Address;
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("Confirm Revert to Server");
+    msgBox.setText(QString("Discard local changes and revert code note %1 to the server snapshot?").arg(addr));
+    msgBox.setInformativeText("Warning: All current modifications and any local User.txt overrides for this code note will be "
+                              "discarded, restoring the original values from the loaded JSON server snapshot.");
+    msgBox.setIcon(QMessageBox::Warning);
+
+    QPushButton* revertBtn = msgBox.addButton("Revert", QMessageBox::DestructiveRole);
+    QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+    msgBox.setDefaultButton(cancelBtn);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == revertBtn) {
+        emit NoteRevertRequested(addr);
+    }
 }
 
 void CodeNoteEditorWidget::onBtnResetClicked() {
-    if (cmbNotes->currentIndex() >= 0 && cmbNotes->currentIndex() < _filteredNotes.size()) {
-        const auto& note = _filteredNotes[cmbNotes->currentIndex()];
-        auto result = QMessageBox::warning(this, "Reset Note",
-                                           QString("Are you sure you want to reset the note for %1 to its original state?\n\nThis will "
-                                                   "delete your local modifications and reload the file.")
-                                               .arg(note.Address),
-                                           QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (!CanResetCurrentNote() || _viewModel->CurrentBaseNote == nullptr)
+        return;
 
-        if (result == QMessageBox::Yes) {
-            emit NoteResetRequested(note.Address);
-        }
+    const QString addr = _viewModel->CurrentBaseNote->Address;
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("Confirm Code Note Reset");
+    msgBox.setText(QString("Discard current unsaved changes and reset code note %1?").arg(addr));
+    msgBox.setInformativeText("Any unsaved modifications made to this code note since the last load or save to User.txt will be "
+                              "discarded, restoring its last saved state (User.txt override if saved, or server JSON baseline).");
+    msgBox.setIcon(QMessageBox::Warning);
+
+    QPushButton* resetBtn = msgBox.addButton("Reset", QMessageBox::DestructiveRole);
+    QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+    msgBox.setDefaultButton(cancelBtn);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == resetBtn) {
+        emit NoteResetRequested(addr);
     }
 }
 
@@ -380,6 +451,7 @@ void CodeNoteEditorWidget::onBtnFixHierarchyClicked() {
         _hasUnsavedChanges = true;
         QString msg = "Hierarchy fixed.";
         UpdateStatusDisplay(&msg);
+        UpdateActionButtons();
     }
 }
 
@@ -404,6 +476,7 @@ void CodeNoteEditorWidget::SetNotes(const QList<CodeNote>& notes) {
         previousAddress = _filteredNotes[cmbNotes->currentIndex()].Address;
 
     txtNoteBody->clear();
+    _hasUnsavedChanges = false;
     _viewModel->ClearEditState();
     _viewModel->LoadNotes(notes);
 
@@ -425,6 +498,8 @@ void CodeNoteEditorWidget::SetNotes(const QList<CodeNote>& notes) {
         _viewModel->SelectBaseNote(_filteredNotes[0]);
     }
     btnCloneStride->setEnabled(_viewModel->CurrentBaseNote != nullptr && !_viewModel->AllNotes.isEmpty());
+    UpdateStatusDisplay(nullptr);
+    UpdateActionButtons();
     _isInternalUpdate = false;
 }
 
@@ -462,6 +537,7 @@ void CodeNoteEditorWidget::ApplyFilter(bool autoSelectFirst) {
     }
 
     btnCloneStride->setEnabled(_viewModel->CurrentBaseNote != nullptr && !_viewModel->AllNotes.isEmpty());
+    UpdateActionButtons();
 }
 
 void CodeNoteEditorWidget::onSearchTextChanged(const QString& /*text*/) {
@@ -472,6 +548,7 @@ void CodeNoteEditorWidget::onSearchTextChanged(const QString& /*text*/) {
 void CodeNoteEditorWidget::onVmNoteContentChanged() {
     if (_viewModel->CurrentBaseNote == nullptr) {
         btnCloneStride->setEnabled(false);
+        UpdateActionButtons();
         return;
     }
 
@@ -504,6 +581,7 @@ void CodeNoteEditorWidget::onVmNoteContentChanged() {
         cmbVariables->setCurrentIndex(0);
 
     UpdateStatusDisplay(nullptr);
+    UpdateActionButtons();
     _isInternalUpdate = wasUpdating;
 }
 
@@ -598,6 +676,7 @@ void CodeNoteEditorWidget::onVmEditStateChanged() {
     btnFixHierarchy->setEnabled(!txtNoteBody->isReadOnly());
 
     UpdateStatusDisplay(nullptr);
+    UpdateActionButtons();
     _isInternalUpdate = wasUpdating;
 }
 
@@ -627,6 +706,7 @@ void CodeNoteEditorWidget::onNoteIndexChanged(int index) {
         return;
     _viewModel->SelectBaseNote(_filteredNotes[index]);
     _hasUnsavedChanges = false;
+    UpdateActionButtons();
 }
 
 void CodeNoteEditorWidget::onVariableIndexChanged(int index) {
@@ -649,7 +729,63 @@ void CodeNoteEditorWidget::onNoteBodyTextChanged() {
     _viewModel->UpdateBufferedText(txtNoteBody->toPlainText());
     _hasUnsavedChanges = true;
     UpdateStatusDisplay(nullptr);
+    UpdateActionButtons();
     emit NoteDirtyStateChanged();
+}
+
+bool CodeNoteEditorWidget::CanRevertCurrentNote() const {
+    if (_viewModel->CurrentBaseNote == nullptr)
+        return false;
+
+    const QString normAddr = LogicFormatter::NormalizeAddress(_viewModel->CurrentBaseNote->Address);
+    if (!_serverNotesMap.contains(normAddr))
+        return false;
+
+    const QString serverText = NormalizeLineEndings(_serverNotesMap.value(normAddr));
+    const bool isEditingFullRoot =
+        !_viewModel->IsRedirected && !_viewModel->EditState.IsVirtual &&
+        (_viewModel->EditState.TargetNode == nullptr || _viewModel->EditState.TargetNode->IndentLevel == -2);
+
+    if (isEditingFullRoot) {
+        return NormalizeLineEndings(txtNoteBody->toPlainText()) != serverText;
+    }
+
+    if (_hasUnsavedChanges || _viewModel->EditState.IsDirty)
+        return true;
+
+    return NormalizeLineEndings(_viewModel->CurrentBaseNote->Note) != serverText;
+}
+
+bool CodeNoteEditorWidget::CanResetCurrentNote() const {
+    if (_viewModel->CurrentBaseNote == nullptr)
+        return false;
+
+    const QString normAddr = LogicFormatter::NormalizeAddress(_viewModel->CurrentBaseNote->Address);
+    const bool hasSaved = _savedNotesMap.contains(normAddr);
+    const bool hasServer = _serverNotesMap.contains(normAddr);
+    if (!hasSaved && !hasServer)
+        return false;
+
+    const QString baselineText = NormalizeLineEndings(hasSaved ? _savedNotesMap.value(normAddr) : _serverNotesMap.value(normAddr));
+    const bool isEditingFullRoot =
+        !_viewModel->IsRedirected && !_viewModel->EditState.IsVirtual &&
+        (_viewModel->EditState.TargetNode == nullptr || _viewModel->EditState.TargetNode->IndentLevel == -2);
+
+    if (isEditingFullRoot) {
+        return NormalizeLineEndings(txtNoteBody->toPlainText()) != baselineText;
+    }
+
+    if (_hasUnsavedChanges || _viewModel->EditState.IsDirty)
+        return true;
+
+    return NormalizeLineEndings(_viewModel->CurrentBaseNote->Note) != baselineText;
+}
+
+void CodeNoteEditorWidget::UpdateActionButtons() {
+    if (btnRevert != nullptr)
+        btnRevert->setEnabled(CanRevertCurrentNote());
+    if (btnReset != nullptr)
+        btnReset->setEnabled(CanResetCurrentNote());
 }
 
 void CodeNoteEditorWidget::UpdateStatusDisplay(const QString* overrideMsg) {
@@ -708,6 +844,7 @@ void CodeNoteEditorWidget::HighlightAddress(const QString& address) {
         }
         _isInternalUpdate = wasUpdating;
     }
+    UpdateActionButtons();
 }
 
 void CodeNoteEditorWidget::HighlightVariable(const QList<int64_t>& offsets) {
@@ -737,6 +874,7 @@ void CodeNoteEditorWidget::HighlightVariable(const QList<int64_t>& offsets) {
         }
         _isInternalUpdate = wasUpdating;
     }
+    UpdateActionButtons();
 }
 
 std::tuple<QString, QString, QString> CodeNoteEditorWidget::GetSelectedLogic() {
@@ -806,6 +944,7 @@ void CodeNoteEditorWidget::onDeleteNodeClicked() {
             _hasUnsavedChanges = true;
             QString msg = "Node and orphaned parents deleted.";
             UpdateStatusDisplay(&msg);
+            UpdateActionButtons();
             return;
         }
     }
