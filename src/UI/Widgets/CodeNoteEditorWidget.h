@@ -48,8 +48,7 @@ class CodeNoteEditorWidget : public QWidget {
     void Undo();
     void Redo();
 
-    void ExecuteBatchMultiply(const QList<CodeNote>& selectedNotes, const QString& searchKeyword, const QString& replacePattern, int copies,
-                              int64_t stride, int startNum);
+    void OpenCloneStrideDialog();
 
     void updateThemeIcons();
 

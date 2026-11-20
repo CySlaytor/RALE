@@ -13,6 +13,7 @@ class UserSettings {
     // View State
     bool ShowLogicReviewer = false;
     QString Theme = "Light"; // "Light" or "Dark"
+    QString SkippedUpdateVersion = "";
 
     // Layout (Splitters)
     int MainSplitterDistance = 260;
@@ -47,12 +48,6 @@ class UserSettings {
     // Dialog States & Preferences
     bool MultiRegion_UsePauseLocks = true;
     bool MultiRegion_UpdateRP = true;
-
-    int BatchMultiply_Copies = 1;
-    QString BatchMultiply_Stride = "0x0";
-    int BatchMultiply_StartNum = 2;
-    QString BatchMultiply_Search = "";
-    QString BatchMultiply_Replace = "";
 
     QString Generator_Copies = "1";
     QString Generator_Stride = "0x0";

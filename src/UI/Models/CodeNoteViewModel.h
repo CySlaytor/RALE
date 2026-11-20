@@ -84,8 +84,6 @@ class CodeNoteViewModel : public QObject {
 
     // -- Logic --
     void LoadNotes(const QList<CodeNote>& notes);
-    void BatchMultiplyNotes(const QList<CodeNote>& sourceNotes, const QString& searchKeyword, const QString& replacePattern, int copies,
-                            int64_t stride, int startNum);
     void ApplyCloneStrideNotes(const QList<CodeNote>& generatedNotes, int& outAddedCount, int& outUpdatedCount);
     void IntelligentDelete(const std::shared_ptr<NoteNode>& target);
     void SelectBaseNote(const CodeNote& note);

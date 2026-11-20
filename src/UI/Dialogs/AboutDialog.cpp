@@ -80,11 +80,13 @@ void AboutDialog::setupLayout() {
     m_descLabel->setWordWrap(true);
     m_descLabel->setTextFormat(Qt::RichText);
     m_descLabel->setText(
-        "<p style='line-height: 120%;'>RetroAchievements Logic Editor (RALE) is a specialized logic authoring, review, "
-        "and optimization utility designed for RetroAchievements achievement developers and quality assurance teams.</p>"
-        "<p style='line-height: 120%;'>Originally created to replace manual text editor workflows, RALE provides rich condition "
-        "manipulation, code note hierarchy restructuring, multi-region generation, and live validation directly within a modern, "
-        "responsive environment.</p>");
+        "<p style='line-height: 125%;'><b>RALE</b> is an independent achievement development and memory note editing "
+        "utility built to offer a more streamlined, feature-rich authoring experience. Its design brings together the "
+        "workflow improvements and capabilities we wish were available natively in the RetroAchievements toolkit.</p>"
+        "<p style='line-height: 125%;'>Originally developed in C# as <b>RALogicEditor</b>, the project was rebranded as "
+        "<b>RALE</b> and ported to C++ and Qt. Since then, it has grown well beyond its original implementation with a "
+        "renewed architecture, a refreshed interface, and deeper tooling for logic validation, hierarchy management, and "
+        "multi-region development.</p>");
     mainLayout->addWidget(m_descLabel);
 
     auto* divider = new QFrame(this);
@@ -102,8 +104,8 @@ void AboutDialog::setupLayout() {
         "<table cellspacing='4' cellpadding='0' style='margin-top: 5px;'>"
         "<tr>"
         "<td valign='top' style='width: 80px;'><b>Creator:</b></td>"
-        "<td valign='top'><a href='https://retroachievements.org/user/CySlaytor'>CySlaytor</a> &mdash; Core concept, logic architecture, "
-        "and tool design. Developed to streamline RetroAchievements logic authoring and verification.</td>"
+        "<td valign='top'><a href='https://retroachievements.org/user/CySlaytor'>CySlaytor</a> &mdash; Concept, architecture, "
+        "and ongoing development of RALE.</td>"
         "</tr>"
         "<tr>"
         "<td valign='top'><b>Artwork:</b></td>"

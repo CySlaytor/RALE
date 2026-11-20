@@ -7,6 +7,7 @@
 #include "../Services/ProjectRepository.h"
 #include "../Services/RichPresenceMetadataService.h"
 #include "../Services/RichPresenceService.h"
+#include "../Services/UpdateChecker.h"
 #include "../Services/UserFileSerializer.h"
 #include "Models/AssetTableModel.h"
 #include "Styles/ThemeManager.h"
@@ -18,6 +19,8 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QMenu>
+#include <QPointer>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QSplitter>
 #include <QTableView>
@@ -27,7 +30,7 @@
 namespace RALE {
 
 class MultiRegionDialog;
-class BatchNoteMultiplierDialog;
+class UpdateDialog;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -63,7 +66,12 @@ class MainWindow : public QMainWindow {
     void onClearDataReset();
     void onToggleReviewer();
     void onSettings();
+    void onCheckForUpdates();
     void onAbout();
+
+    void onUpdateCheckFinished(bool updateAvailable, const QString& latestVersion, const QString& releaseNotes, const QString& downloadUrl,
+                               bool silentOnLatest);
+    void onUpdateCheckFailed(const QString& errorMessage, bool silentOnLatest);
 
     void onOpenFile();
     void onSaveFile();
@@ -73,7 +81,6 @@ class MainWindow : public QMainWindow {
     void onLogicOptimizer();
 
     void onMultiRegionBatch(MultiRegionDialog* dialog);
-    void onBatchMultiplyNotes(BatchNoteMultiplierDialog* dialog);
 
     void onUndo();
     void onRedo();
@@ -86,6 +93,7 @@ class MainWindow : public QMainWindow {
     LogicValidator _validator;
     RichPresenceService _rpService;
     RichPresenceMetadataService _rpMetadata;
+    UpdateChecker _updateChecker;
 
     UserFileSerializer _fileSerializer;
     std::unique_ptr<MultiRegionBatchProcessor> _batchProcessor;
@@ -95,10 +103,14 @@ class MainWindow : public QMainWindow {
     bool _isDirty = false;
     bool _isFirstShow = true;
     bool _splittersRestored = false;
+    bool _updateCheckCanceled = false;
     QString _currentFilePath = "";
     QString _currentUserFilePath = "";
     QList<std::shared_ptr<IAssetItem>> _currentDisplayList;
     QList<ValidationIssue> _globalIssues;
+
+    QPointer<QProgressDialog> _updateProgressDialog;
+    QPointer<UpdateDialog> _updateDialog;
 
     // Cache for global validation note lookup to prevent reparsing all project notes on every validation run
     QMap<QString, QList<std::shared_ptr<NoteNode>>> _cachedNotesLookup;
@@ -131,6 +143,7 @@ class MainWindow : public QMainWindow {
     QAction* actUndo = nullptr;
     QAction* actRedo = nullptr;
     QAction* actViewReviewer = nullptr;
+    QAction* actCheckForUpdates = nullptr;
     QAction* actAbout = nullptr;
 
     QMenu* assetContextMenu = nullptr;

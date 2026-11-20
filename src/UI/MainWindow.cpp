@@ -7,12 +7,12 @@
 #include "../Utilities/LogicFormatter.h"
 #include "Dialogs/AboutDialog.h"
 #include "Dialogs/AssetDiffDialog.h"
-#include "Dialogs/BatchNoteMultiplierDialog.h"
 #include "Dialogs/LogicOptimizerDialog.h"
 #include "Dialogs/MultiRegionDialog.h"
 #include "Dialogs/RevertRegionDialog.h"
 #include "Dialogs/SettingsDialog.h"
 #include "Dialogs/TextDiffDialog.h"
+#include "Dialogs/UpdateDialog.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -32,7 +32,22 @@
 
 #include <algorithm>
 
+#ifndef VERSION_STRING
+#define VERSION_STRING "2.0.0"
+#endif
+
 namespace RALE {
+
+namespace {
+
+QString NormalizeVersionTag(const QString& version) {
+    QString clean = version.trimmed();
+    if (clean.startsWith('v', Qt::CaseInsensitive))
+        clean.remove(0, 1);
+    return clean;
+}
+
+} // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // Load UI settings first so they are available to controls during construction
@@ -131,8 +146,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             codeNoteEditor->HighlightVariable(e.Offsets);
     });
 
-    // Trigger Editor -> MainForm Bridge for Multiplier
-    connect(triggerEditor, &TriggerEditorWidget::BatchMultiplyNotesRequested, this, &MainWindow::onBatchMultiplyNotes);
+    // Trigger Editor -> Code Note Editor Bridge for Clone Stride
+    connect(triggerEditor, &TriggerEditorWidget::CloneStrideRequested, this, [this]() { codeNoteEditor->OpenCloneStrideDialog(); });
 
     // Code Reviewer
     connect(codeReviewControl, &CodeReviewWidget::IssueSelected, this, [this](ValidationIssue issue) {
@@ -199,11 +214,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(triggerEditor, &TriggerEditorWidget::HistoryChanged, this, &MainWindow::UpdateUndoRedoState);
     connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget*) { UpdateUndoRedoState(); });
 
+    // Update Checker
+    connect(&_updateChecker, &UpdateChecker::updateCheckFinished, this, &MainWindow::onUpdateCheckFinished);
+    connect(&_updateChecker, &UpdateChecker::updateCheckFailed, this, &MainWindow::onUpdateCheckFailed);
+
     // Initial Load
     _recentFiles.Load();
     UpdateRecentMenu();
     ToggleReviewer(AppSettings::Current.ShowLogicReviewer);
     UpdateUndoRedoState();
+
+    _updateChecker.checkForUpdates(true);
 }
 
 MainWindow::~MainWindow() = default;
@@ -429,8 +450,8 @@ void MainWindow::InitializeMainMenu() {
     actRedo->setProperty("iconPath", ":/icons/redo.svg");
 
     auto* actRenumber =
-        editMenu->addAction(getThemeIcon(":/icons/rename.svg"), "Renumber Local IDs", this, &MainWindow::onRenumberLocalIDs);
-    actRenumber->setProperty("iconPath", ":/icons/rename.svg");
+        editMenu->addAction(getThemeIcon(":/icons/renumber.svg"), "Renumber Local IDs", this, &MainWindow::onRenumberLocalIDs);
+    actRenumber->setProperty("iconPath", ":/icons/renumber.svg");
 
     auto* actClearData =
         editMenu->addAction(getThemeIcon(":/icons/refresh.svg"), "Clear Data / Reset...", this, &MainWindow::onClearDataReset);
@@ -451,18 +472,113 @@ void MainWindow::InitializeMainMenu() {
     // View Menu
     auto* viewMenu = menuBar->addMenu("&View");
     actViewReviewer =
-        viewMenu->addAction(getThemeIcon(":/icons/hierarchy_fixer.svg"), "Logic Reviewer", this, &MainWindow::onToggleReviewer);
+        viewMenu->addAction(getThemeIcon(":/icons/logic_reviewer.svg"), "Logic Reviewer", this, &MainWindow::onToggleReviewer);
     actViewReviewer->setShortcut(QKeySequence(Qt::Key_F8));
     actViewReviewer->setCheckable(true);
-    actViewReviewer->setProperty("iconPath", ":/icons/hierarchy_fixer.svg");
+    actViewReviewer->setProperty("iconPath", ":/icons/logic_reviewer.svg");
 
-    auto* actRpDiff = viewMenu->addAction(getThemeIcon(":/icons/converter.svg"), "View RP Diff", this, &MainWindow::onViewRpDiff);
-    actRpDiff->setProperty("iconPath", ":/icons/converter.svg");
+    auto* actRpDiff = viewMenu->addAction(getThemeIcon(":/icons/diff.svg"), "View RP Diff", this, &MainWindow::onViewRpDiff);
+    actRpDiff->setProperty("iconPath", ":/icons/diff.svg");
 
     // Help Menu
     auto* helpMenu = menuBar->addMenu("&Help");
+    actCheckForUpdates =
+        helpMenu->addAction(getThemeIcon(":/icons/update.svg"), "Check for &Updates...", this, &MainWindow::onCheckForUpdates);
+    actCheckForUpdates->setProperty("iconPath", ":/icons/update.svg");
+
+    helpMenu->addSeparator();
+
     actAbout = helpMenu->addAction(getThemeIcon(":/icons/about.svg"), "About RetroAchievements Logic Editor", this, &MainWindow::onAbout);
     actAbout->setProperty("iconPath", ":/icons/about.svg");
+}
+
+void MainWindow::onCheckForUpdates() {
+    if (_updateProgressDialog) {
+        return;
+    }
+
+    _updateCheckCanceled = false;
+    _updateProgressDialog = new QProgressDialog("Checking for updates...", "Cancel", 0, 0, this);
+    _updateProgressDialog->setWindowTitle("Software Update");
+    _updateProgressDialog->setWindowModality(Qt::WindowModal);
+    _updateProgressDialog->setMinimumDuration(0);
+    _updateProgressDialog->setAutoClose(false);
+    _updateProgressDialog->setAutoReset(false);
+    _updateProgressDialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(_updateProgressDialog, &QProgressDialog::canceled, this, [this]() {
+        _updateCheckCanceled = true;
+        _updateChecker.cancelManualCheck();
+    });
+    _updateProgressDialog->show();
+
+    _updateChecker.checkForUpdates(false);
+}
+
+void MainWindow::onUpdateCheckFinished(bool updateAvailable, const QString& latestVersion, const QString& releaseNotes,
+                                       const QString& downloadUrl, bool silentOnLatest) {
+    if (!silentOnLatest && _updateProgressDialog) {
+        // Disconnect before hiding so QProgressDialog::closeEvent does not emit canceled().
+        _updateProgressDialog->disconnect(this);
+        _updateProgressDialog->hide();
+        _updateProgressDialog->deleteLater();
+        _updateProgressDialog = nullptr;
+    }
+
+    if (!silentOnLatest && _updateCheckCanceled) {
+        return;
+    }
+
+    if (updateAvailable) {
+        const QString normLatest = NormalizeVersionTag(latestVersion);
+        const QString normSkipped = NormalizeVersionTag(AppSettings::Current.SkippedUpdateVersion);
+
+        if (silentOnLatest && !normSkipped.isEmpty() && normLatest.compare(normSkipped, Qt::CaseInsensitive) == 0) {
+            return;
+        }
+
+        if (_updateDialog) {
+            _updateDialog->raise();
+            _updateDialog->activateWindow();
+            return;
+        }
+
+        _updateDialog = new UpdateDialog(VERSION_STRING, latestVersion, releaseNotes, downloadUrl, this);
+        _updateDialog->setAttribute(Qt::WA_DeleteOnClose);
+        connect(_updateDialog, &QDialog::finished, this, [this, latestVersion, normLatest](int) {
+            if (!_updateDialog)
+                return;
+
+            const auto action = _updateDialog->SelectedAction();
+            if (action == UpdateDialog::Action::SkipUpdate) {
+                AppSettings::Current.SkippedUpdateVersion = latestVersion;
+                AppSettings::Save();
+            } else if (action == UpdateDialog::Action::RemindLater) {
+                const QString normSkippedCurrent = NormalizeVersionTag(AppSettings::Current.SkippedUpdateVersion);
+                if (!normSkippedCurrent.isEmpty() && normLatest.compare(normSkippedCurrent, Qt::CaseInsensitive) == 0) {
+                    AppSettings::Current.SkippedUpdateVersion.clear();
+                    AppSettings::Save();
+                }
+            }
+        });
+        _updateDialog->show();
+    } else if (!silentOnLatest) {
+        QMessageBox::information(
+            this, "Software Update",
+            QString("You're running the latest version of RALE.\n\nCurrent Version: %1").arg(VERSION_STRING));
+    }
+}
+
+void MainWindow::onUpdateCheckFailed(const QString& errorMessage, bool silentOnLatest) {
+    if (!silentOnLatest && _updateProgressDialog) {
+        _updateProgressDialog->disconnect(this);
+        _updateProgressDialog->hide();
+        _updateProgressDialog->deleteLater();
+        _updateProgressDialog = nullptr;
+    }
+
+    if (!silentOnLatest && !_updateCheckCanceled) {
+        QMessageBox::warning(this, "Update Check Failed", QString("Could not reach update server:\n%1").arg(errorMessage));
+    }
 }
 
 void MainWindow::onAbout() {
@@ -483,8 +599,8 @@ void MainWindow::onSettings() {
 void MainWindow::InitializeAssetContextMenu() {
     assetContextMenu = new QMenu(this);
 
-    actNewAsset = assetContextMenu->addAction(getThemeIcon(":/icons/bookmark_add.svg"), "New", this, &MainWindow::onNewAsset);
-    actNewAsset->setProperty("iconPath", ":/icons/bookmark_add.svg");
+    actNewAsset = assetContextMenu->addAction(getThemeIcon(":/icons/add.svg"), "New", this, &MainWindow::onNewAsset);
+    actNewAsset->setProperty("iconPath", ":/icons/add.svg");
 
     actDuplicateAsset = assetContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Duplicate", this, &MainWindow::onDuplicateAsset);
     actDuplicateAsset->setShortcut(QKeySequence("Ctrl+D"));
@@ -516,12 +632,12 @@ void MainWindow::InitializeAssetContextMenu() {
     assetContextMenu->addSeparator();
 
     actRenumberIDs =
-        assetContextMenu->addAction(getThemeIcon(":/icons/rename.svg"), "Renumber Local IDs", this, &MainWindow::onRenumberLocalIDs);
-    actRenumberIDs->setProperty("iconPath", ":/icons/rename.svg");
+        assetContextMenu->addAction(getThemeIcon(":/icons/renumber.svg"), "Renumber Local IDs", this, &MainWindow::onRenumberLocalIDs);
+    actRenumberIDs->setProperty("iconPath", ":/icons/renumber.svg");
 
     actViewDiff =
-        assetContextMenu->addAction(getThemeIcon(":/icons/converter.svg"), "View Diff (Server/Local)", this, &MainWindow::onViewDiff);
-    actViewDiff->setProperty("iconPath", ":/icons/converter.svg");
+        assetContextMenu->addAction(getThemeIcon(":/icons/diff.svg"), "View Diff (Server/Local)", this, &MainWindow::onViewDiff);
+    actViewDiff->setProperty("iconPath", ":/icons/diff.svg");
 
     assetContextMenu->addSeparator();
 
@@ -2278,24 +2394,6 @@ void MainWindow::onMultiRegionBatch(MultiRegionDialog* dialog) {
     ReloadDataView();
     if (_selectedAsset != nullptr)
         RefreshSelectedAssetAfterStoreChange();
-}
-
-void MainWindow::onBatchMultiplyNotes(BatchNoteMultiplierDialog* dialog) {
-    if (dialog == nullptr)
-        return;
-    _projectRepo.EnsureLocalDataExists();
-    PushMainUndo();
-
-    codeNoteEditor->ExecuteBatchMultiply(dialog->SelectedNotes, dialog->SearchKeyword, dialog->ReplacePattern, dialog->Copies,
-                                         dialog->Stride, dialog->StartNumber);
-
-    _isDirty = true;
-
-    // Immediately copy newly multiplied notes to LocalData so they persist across project saves
-    _projectRepo.LocalData->Notes = codeNoteEditor->GetAllNotes();
-    triggerEditor->SetNotes(_projectRepo.LocalData->Notes);
-    _notesCacheDirty = true;
-    RunGlobalValidation();
 }
 
 bool MainWindow::IsAssetInLocalStore(const std::shared_ptr<IAssetItem>& item) {

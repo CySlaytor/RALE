@@ -145,54 +145,6 @@ void CodeNoteViewModel::LoadNotes(const QList<CodeNote>& notes) {
     emit NotesLoaded();
 }
 
-void CodeNoteViewModel::BatchMultiplyNotes(const QList<CodeNote>& sourceNotes, const QString& searchKeyword, const QString& replacePattern,
-                                           int copies, int64_t stride, int startNum) {
-    if (sourceNotes.isEmpty())
-        return;
-
-    QList<CodeNote> newNotes;
-
-    for (const auto& baseNote : sourceNotes) {
-        int64_t baseAddr = ParseAddress(baseNote.Address);
-        if (baseAddr == -1)
-            continue;
-
-        for (int i = 0; i < copies; i++) {
-            int num = startNum + i;
-            int64_t newAddr = baseAddr + (stride * (i + 1));
-            QString newAddrStr = QString("0x%1").arg(newAddr, 0, 16);
-
-            QString newNoteText = baseNote.Note;
-
-            // Only perform text replacement if fields are provided
-            if (!searchKeyword.isEmpty()) {
-                QString replacement = replacePattern;
-                replacement.replace("{N}", QString::number(num));
-                // Apply replacement globally inside the note text, ignoring case
-                QRegularExpression regex(QRegularExpression::escape(searchKeyword), QRegularExpression::CaseInsensitiveOption);
-                newNoteText.replace(regex, replacement);
-            }
-
-            CodeNote note;
-            note.Address = newAddrStr;
-            note.Note = newNoteText;
-            note.User = "Local";
-            newNotes.append(note);
-        }
-    }
-
-    AllNotes.append(newNotes);
-
-    // Sort by Address to keep the combo box list clean
-    std::sort(AllNotes.begin(), AllNotes.end(),
-              [this](const CodeNote& a, const CodeNote& b) { return ParseAddress(a.Address) < ParseAddress(b.Address); });
-
-    RebuildRangeCache();
-
-    // Trigger complete UI refresh
-    emit NotesLoaded();
-}
-
 void CodeNoteViewModel::ApplyCloneStrideNotes(const QList<CodeNote>& generatedNotes, int& outAddedCount, int& outUpdatedCount) {
     outAddedCount = 0;
     outUpdatedCount = 0;

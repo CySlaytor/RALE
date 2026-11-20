@@ -35,6 +35,7 @@ void AppSettings::Load() {
         ini.beginGroup("General");
         Current.Theme = ini.value("Theme", Current.Theme).toString();
         Current.ShowLogicReviewer = ini.value("ShowLogicReviewer", Current.ShowLogicReviewer).toBool();
+        Current.SkippedUpdateVersion = ini.value("SkippedUpdateVersion", Current.SkippedUpdateVersion).toString();
         Current.LastAssetTypeIndex = ini.value("LastAssetTypeIndex", Current.LastAssetTypeIndex).toInt();
         Current.LastCategoryIndex = ini.value("LastCategoryIndex", Current.LastCategoryIndex).toInt();
         Current.LastSourceIndex = ini.value("LastSourceIndex", Current.LastSourceIndex).toInt();
@@ -71,12 +72,6 @@ void AppSettings::Load() {
         Current.MultiRegion_UsePauseLocks = ini.value("MultiRegion_UsePauseLocks", Current.MultiRegion_UsePauseLocks).toBool();
         Current.MultiRegion_UpdateRP = ini.value("MultiRegion_UpdateRP", Current.MultiRegion_UpdateRP).toBool();
 
-        Current.BatchMultiply_Copies = ini.value("BatchMultiply_Copies", Current.BatchMultiply_Copies).toInt();
-        Current.BatchMultiply_Stride = ini.value("BatchMultiply_Stride", Current.BatchMultiply_Stride).toString();
-        Current.BatchMultiply_StartNum = ini.value("BatchMultiply_StartNum", Current.BatchMultiply_StartNum).toInt();
-        Current.BatchMultiply_Search = ini.value("BatchMultiply_Search", Current.BatchMultiply_Search).toString();
-        Current.BatchMultiply_Replace = ini.value("BatchMultiply_Replace", Current.BatchMultiply_Replace).toString();
-
         Current.Generator_Copies = ini.value("Generator_Copies", Current.Generator_Copies).toString();
         Current.Generator_Stride = ini.value("Generator_Stride", Current.Generator_Stride).toString();
         Current.Generator_IsArray = ini.value("Generator_IsArray", Current.Generator_IsArray).toBool();
@@ -92,6 +87,7 @@ void AppSettings::Save() {
         ini.beginGroup("General");
         ini.setValue("Theme", Current.Theme);
         ini.setValue("ShowLogicReviewer", Current.ShowLogicReviewer);
+        ini.setValue("SkippedUpdateVersion", Current.SkippedUpdateVersion);
         ini.setValue("LastAssetTypeIndex", Current.LastAssetTypeIndex);
         ini.setValue("LastCategoryIndex", Current.LastCategoryIndex);
         ini.setValue("LastSourceIndex", Current.LastSourceIndex);
@@ -126,12 +122,6 @@ void AppSettings::Save() {
         ini.beginGroup("DialogStates");
         ini.setValue("MultiRegion_UsePauseLocks", Current.MultiRegion_UsePauseLocks);
         ini.setValue("MultiRegion_UpdateRP", Current.MultiRegion_UpdateRP);
-
-        ini.setValue("BatchMultiply_Copies", Current.BatchMultiply_Copies);
-        ini.setValue("BatchMultiply_Stride", Current.BatchMultiply_Stride);
-        ini.setValue("BatchMultiply_StartNum", Current.BatchMultiply_StartNum);
-        ini.setValue("BatchMultiply_Search", Current.BatchMultiply_Search);
-        ini.setValue("BatchMultiply_Replace", Current.BatchMultiply_Replace);
 
         ini.setValue("Generator_Copies", Current.Generator_Copies);
         ini.setValue("Generator_Stride", Current.Generator_Stride);

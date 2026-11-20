@@ -257,6 +257,11 @@ QPushButton#closeButton {
     font-size: 11px;
 }
 
+QPushButton#updateNowButton {
+    font-weight: bold;
+    padding: 2px 12px;
+}
+
 QPushButton#resetAllButton {
     color: #ff5555;
     font-weight: bold;

@@ -28,7 +28,6 @@
 namespace RALE {
 
 class MultiRegionDialog;
-class BatchNoteMultiplierDialog;
 
 class TriggerEditorWidget : public QWidget {
     Q_OBJECT
@@ -86,7 +85,7 @@ class TriggerEditorWidget : public QWidget {
 
     void MultiRegionLogicRequested(MultiRegionDialog* dialog);
     void LogicOptimizationRequested();
-    void BatchMultiplyNotesRequested(BatchNoteMultiplierDialog* dialog);
+    void CloneStrideRequested();
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -119,7 +118,7 @@ class TriggerEditorWidget : public QWidget {
     void onCommitGeneratorClicked();
     void onMultiRegionClicked();
     void onLogicOptimizerClicked();
-    void onBatchMultiplyNotesClicked();
+    void onCloneStrideClicked();
 
   private:
     struct LeaderboardFormatEntry {
@@ -185,7 +184,7 @@ class TriggerEditorWidget : public QWidget {
     QAction* actCommitGenerator = nullptr;
     QAction* actMultiRegion = nullptr;
     QAction* actLogicOptimizer = nullptr;
-    QAction* actBatchMultiply = nullptr;
+    QAction* actCloneStride = nullptr;
 
     QMenu* groupsContextMenu = nullptr;
     QAction* actAddGroup = nullptr;

@@ -140,9 +140,9 @@ void CodeNoteEditorWidget::InitializeUI() {
     actCopy->setShortcut(QKeySequence::Copy);
     actCopy->setProperty("iconPath", ":/icons/copy.svg");
 
-    auto* actPaste = cmsNoteContext->addAction(getThemeIcon(":/icons/load.svg"), "Paste", this, &CodeNoteEditorWidget::onPasteClicked);
+    auto* actPaste = cmsNoteContext->addAction(getThemeIcon(":/icons/paste.svg"), "Paste", this, &CodeNoteEditorWidget::onPasteClicked);
     actPaste->setShortcut(QKeySequence::Paste);
-    actPaste->setProperty("iconPath", ":/icons/load.svg");
+    actPaste->setProperty("iconPath", ":/icons/paste.svg");
 
     cmsNoteContext->addSeparator();
     auto* actDelNode = cmsNoteContext->addAction(getThemeIcon(":/icons/delete.svg"), "Delete Note (Selected in Tree)", this,
@@ -263,9 +263,13 @@ void CodeNoteEditorWidget::SetConsoleId(int consoleId) {
 
 void CodeNoteEditorWidget::onBtnReloadClicked() { emit ReloadRequested(); }
 
+void CodeNoteEditorWidget::OpenCloneStrideDialog() { onBtnCloneStrideClicked(); }
+
 void CodeNoteEditorWidget::onBtnCloneStrideClicked() {
-    if (_viewModel->CurrentBaseNote == nullptr)
+    if (_viewModel->CurrentBaseNote == nullptr) {
+        QMessageBox::information(this, "Clone Stride", "Please select a Code Note first.");
         return;
+    }
 
     if (!_viewModel->EditState.IsVirtual && !_viewModel->IsRedirected && _viewModel->EditState.IsDirty) {
         CommitChanges();
@@ -807,16 +811,6 @@ void CodeNoteEditorWidget::onDeleteNodeClicked() {
     }
 
     QMessageBox::information(this, "No Node Selected", "Please select a specific node in the dropdown tree to use Intelligent Delete.");
-}
-
-void CodeNoteEditorWidget::ExecuteBatchMultiply(const QList<CodeNote>& selectedNotes, const QString& searchKeyword,
-                                                const QString& replacePattern, int copies, int64_t stride, int startNum) {
-    _viewModel->PushUndoState();
-    _viewModel->BatchMultiplyNotes(selectedNotes, searchKeyword, replacePattern, copies, stride, startNum);
-    _hasUnsavedChanges = true;
-    QString msg = QString("Batch duplicated %1 note(s).").arg(selectedNotes.size());
-    UpdateStatusDisplay(&msg);
-    emit NoteUpdated();
 }
 
 } // namespace RALE
