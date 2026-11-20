@@ -13,6 +13,7 @@ QMap<QString, QPixmap> ImageCache::_memoryCache;
 QMap<QString, QList<ImageCache::CallbackEntry>> ImageCache::_pendingCallbacks;
 QString ImageCache::LocalBadgeDirectory = "";
 std::unique_ptr<QNetworkAccessManager> ImageCache::_networkManager = nullptr;
+int ImageCache::_cacheGeneration = 0;
 
 QString ImageCache::GetCacheDir() {
     // Saves to bin/Debug/Cache/Badges
@@ -23,6 +24,7 @@ QString ImageCache::GetCacheDir() {
 }
 
 void ImageCache::Clear() {
+    ++_cacheGeneration;
     _memoryCache.clear();
     _pendingCallbacks.clear();
     LocalBadgeDirectory = "";
@@ -125,8 +127,9 @@ QPixmap ImageCache::GetBadge(const QString& badgeName, std::function<void(const 
     QUrl url(QString("https://media.retroachievements.org/Badge/%1.png").arg(cleanName));
     QNetworkRequest request(url);
     QNetworkReply* reply = _networkManager->get(request);
+    int requestGen = _cacheGeneration;
 
-    QObject::connect(reply, &QNetworkReply::finished, [reply, cleanName, appCachePath]() {
+    QObject::connect(reply, &QNetworkReply::finished, [reply, cleanName, appCachePath, requestGen]() {
         reply->deleteLater();
         QPixmap resultPixmap;
 
@@ -140,10 +143,14 @@ QPixmap ImageCache::GetBadge(const QString& badgeName, std::function<void(const 
 
             QPixmap pix;
             if (pix.loadFromData(data)) {
-                _memoryCache.insert(cleanName, pix);
+                if (requestGen == _cacheGeneration)
+                    _memoryCache.insert(cleanName, pix);
                 resultPixmap = pix;
             }
         }
+
+        if (requestGen != _cacheGeneration)
+            return;
 
         if (resultPixmap.isNull())
             resultPixmap = CreatePlaceholder();

@@ -8,6 +8,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <tuple>
 
 namespace RALE {
 
@@ -50,7 +51,7 @@ void CodeNoteViewModel::Undo() {
         CurrentBaseNote->Note = previous;
 
         for (auto& n : AllNotes) {
-            if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
+            if (LogicFormatter::NormalizeAddress(n.Address) == LogicFormatter::NormalizeAddress(CurrentBaseNote->Address)) {
                 n.Note = previous;
                 break;
             }
@@ -73,7 +74,7 @@ void CodeNoteViewModel::Redo() {
         CurrentBaseNote->Note = next;
 
         for (auto& n : AllNotes) {
-            if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
+            if (LogicFormatter::NormalizeAddress(n.Address) == LogicFormatter::NormalizeAddress(CurrentBaseNote->Address)) {
                 n.Note = next;
                 break;
             }
@@ -268,7 +269,7 @@ void CodeNoteViewModel::IntelligentDelete(const std::shared_ptr<NoteNode>& targe
     CurrentBaseNote->Note = updatedNote;
 
     for (auto& n : AllNotes) {
-        if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
+        if (LogicFormatter::NormalizeAddress(n.Address) == LogicFormatter::NormalizeAddress(CurrentBaseNote->Address)) {
             n.Note = updatedNote;
             break;
         }
@@ -303,7 +304,7 @@ void CodeNoteViewModel::SelectBaseNote(const CodeNote& note) {
     static const QRegularExpression structRegex(QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"), QRegularExpression::MultilineOption);
     bool hasStructure = structRegex.match(note.Note).hasMatch();
 
-    static const QRegularExpression referralRegex(R"(refer to \$0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression referralRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
     auto referralMatch = referralRegex.match(note.Note);
 
     IsRedirected = false;
@@ -351,7 +352,7 @@ void CodeNoteViewModel::UpdateNoteContent(const QString& newText) {
     CurrentBaseNote->Note = newText;
 
     for (auto& n : AllNotes) {
-        if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
+        if (LogicFormatter::NormalizeAddress(n.Address) == LogicFormatter::NormalizeAddress(CurrentBaseNote->Address)) {
             n.Note = newText;
             break;
         }
@@ -367,12 +368,6 @@ void CodeNoteViewModel::UpdateNoteContent(const QString& newText) {
 void CodeNoteViewModel::UpdateBufferedText(const QString& newText) {
     if (CurrentBaseNote == nullptr || IsRedirected)
         return;
-
-    // If we weren't in a specific edit state, we are now editing the Root note (default fallback)
-    if (EditState.TargetNode == nullptr && !EditState.IsVirtual) {
-        // Root editing context is usually handled by SelectBaseNote,
-        // but if user just starts typing, we assume root.
-    }
 
     EditState.DisplayText = newText;
     EditState.IsDirty = true;
@@ -407,7 +402,7 @@ void CodeNoteViewModel::CommitEditState() {
             } else {
                 // Splicing for child node
                 updatedBaseNote = CodeNoteModifier::UpdateRealNode(CurrentBaseNote->Note, EditState.TargetNode, EditState.DisplayText,
-                                                                   style, styleStr, indentDescriptions);
+                                                                   style);
             }
         } else {
             // Fallback -> editing root
@@ -426,7 +421,7 @@ void CodeNoteViewModel::CommitEditState() {
 
     // Synchronize the committed change back into AllNotes
     for (auto& n : AllNotes) {
-        if (n.Address.compare(CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
+        if (LogicFormatter::NormalizeAddress(n.Address) == LogicFormatter::NormalizeAddress(CurrentBaseNote->Address)) {
             n.Note = updatedBaseNote;
             break;
         }
@@ -564,7 +559,7 @@ void CodeNoteViewModel::HighlightAddress(const QString& address) {
             // during LoadNotes, and using it would discard edits made since then.
             CodeNote liveNote = r.Note;
             for (const auto& n : AllNotes) {
-                if (n.Address.compare(r.Note.Address, Qt::CaseInsensitive) == 0) {
+                if (LogicFormatter::NormalizeAddress(n.Address) == LogicFormatter::NormalizeAddress(r.Note.Address)) {
                     liveNote = n;
                     break;
                 }
@@ -633,18 +628,18 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
         return;
 
     // Re-apply Array Indexing Filter just in case it wasn't cleaned by the caller
+    const auto notesLookup = NotesLookup();
     while (offsets.size() > 1) {
         int64_t baseAddr = offsets[0];
-        if (ConditionFormatter::GetEffectiveNote(NotesLookup(), baseAddr) == nullptr) {
+        if (ConditionFormatter::GetEffectiveNote(notesLookup, baseAddr) == nullptr) {
             offsets.removeAt(0);
         } else {
             break;
         }
     }
 
-    QString baseHex = QString("0x%1").arg(offsets[0], 0, 16);
     for (const auto& n : AllNotes) {
-        if (n.Address.compare(baseHex, Qt::CaseInsensitive) == 0) {
+        if (ParseAddress(n.Address) == offsets[0]) {
             SelectBaseNote(n);
             break;
         }
@@ -751,7 +746,8 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
 
     // Partial Match or No Match -> Virtual Mode
     if (bestMatchNode != nullptr) {
-        auto [baseLogic, type, size] = _parser.GeneratePointerLogic(*CurrentBaseNote, bestMatchNode, ConsoleId);
+        QString type, size;
+        std::tie(std::ignore, type, size) = _parser.GeneratePointerLogic(*CurrentBaseNote, bestMatchNode, ConsoleId);
 
         QString baseAddrStr =
             CurrentBaseNote->Address.startsWith("0x", Qt::CaseInsensitive) ? CurrentBaseNote->Address.mid(2) : CurrentBaseNote->Address;

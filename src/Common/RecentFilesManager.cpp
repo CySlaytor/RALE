@@ -19,20 +19,10 @@ QString RecentFilesManager::GetFilePathJson() const {
     return QDir(folder).filePath("recent.json");
 }
 
-QString RecentFilesManager::GetFilePathTxt() const { return QDir(QCoreApplication::applicationDirPath()).filePath("recent.txt"); }
-
 void RecentFilesManager::Load() {
     Files.clear();
     QString pathJson = GetFilePathJson();
-    QString pathTxt = GetFilePathTxt();
-    QString legacyRootJson = QDir(QCoreApplication::applicationDirPath()).filePath("recent.json");
 
-    // Migrate existing recent.json from root to Metadata/ folder if needed
-    if (!QFile::exists(pathJson) && QFile::exists(legacyRootJson)) {
-        QFile::rename(legacyRootJson, pathJson);
-    }
-
-    // 1. Try loading new JSON format
     if (QFile::exists(pathJson)) {
         try {
             QFile file(pathJson);
@@ -57,26 +47,6 @@ void RecentFilesManager::Load() {
                 }
             }
         } catch (...) { /* Ignore corrupt file */
-        }
-    }
-    // 2. Fallback: Migrate from old TXT format
-    else if (QFile::exists(pathTxt)) {
-        try {
-            QFile file(pathTxt);
-            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                QTextStream in(&file);
-                while (!in.atEnd()) {
-                    QString p = in.readLine().trimmed();
-                    if (QFile::exists(p)) {
-                        QString title = ExtractGameTitle(p);
-                        Files.append(RecentFileEntry{p, title});
-                    }
-                }
-                file.close();
-                // Save immediately to JSON format
-                Save();
-            }
-        } catch (...) { /* Ignore errors */
         }
     }
 }
@@ -140,11 +110,13 @@ QString RecentFilesManager::ExtractGameTitle(const QString& path) {
                 QString content = QString::fromUtf8(file.readAll());
                 file.close();
 
-                // Simple Regex to capture Title value
-                static const QRegularExpression titleRegex(R"raw("Title"\s*:\s*"(.*?)")raw");
+                // Simple Regex to capture Title value (handling escaped quotes)
+                static const QRegularExpression titleRegex(R"raw("Title"\s*:\s*"((?:[^"\\]|\\.)*)")raw");
                 auto match = titleRegex.match(content);
                 if (match.hasMatch()) {
-                    return match.captured(1);
+                    QString title = match.captured(1);
+                    title.replace("\\\"", "\"").replace("\\\\", "\\");
+                    return title;
                 }
             }
         }

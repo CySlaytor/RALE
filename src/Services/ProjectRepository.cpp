@@ -1,6 +1,7 @@
 #include "ProjectRepository.h"
 
 #include "../Parsers/RichPresenceParser.h"
+#include "../Utilities/LogicFormatter.h"
 
 #include <QDir>
 #include <QFile>
@@ -224,14 +225,16 @@ void ProjectRepository::LoadAndMergeNotes(const QString& notesPath) {
 
     for (const auto& n : _serverNotes) {
         // Store a copy to ensure we don't modify the reference in _serverNotes list
-        if (!mergedNotesMap.contains(n.Address))
-            mergedNotesMap.insert(n.Address, CodeNote{n.User, n.Address, n.Note});
+        QString key = LogicFormatter::NormalizeAddress(n.Address);
+        if (!mergedNotesMap.contains(key))
+            mergedNotesMap.insert(key, CodeNote{n.User, n.Address, n.Note});
     }
 
     if (LocalData != nullptr) {
         for (const auto& n : LocalData->Notes) {
             // Local notes take precedence (edits)
-            mergedNotesMap.insert(n.Address, n);
+            QString key = LogicFormatter::NormalizeAddress(n.Address);
+            mergedNotesMap.insert(key, n);
         }
 
         // Update the LocalData list to contain the full merged set for the UI
@@ -243,8 +246,9 @@ void ProjectRepository::LoadAndMergeNotes(const QString& notesPath) {
 
 // Checks if a note matches exactly what is on the server (Address and Content)
 bool ProjectRepository::IsNoteSynced(const CodeNote& note) const {
+    const QString normAddr = LogicFormatter::NormalizeAddress(note.Address);
     for (const auto& n : _serverNotes) {
-        if (n.Address == note.Address) {
+        if (LogicFormatter::NormalizeAddress(n.Address) == normAddr) {
             // Compare content, ignoring User field
             return n.Note == note.Note;
         }
@@ -257,15 +261,16 @@ void ProjectRepository::RevertNote(const QString& address) {
     if (LocalData == nullptr)
         return;
 
+    const QString normAddr = LogicFormatter::NormalizeAddress(address);
     for (int i = 0; i < LocalData->Notes.size(); i++) {
-        if (LocalData->Notes[i].Address == address) {
+        if (LogicFormatter::NormalizeAddress(LocalData->Notes[i].Address) == normAddr) {
             LocalData->Notes.removeAt(i);
             break;
         }
     }
 
     for (const auto& serverNote : _serverNotes) {
-        if (serverNote.Address == address) {
+        if (LogicFormatter::NormalizeAddress(serverNote.Address) == normAddr) {
             // Put it back in the active merged list so the UI receives the original
             LocalData->Notes.append(CodeNote{serverNote.User, serverNote.Address, serverNote.Note});
             std::sort(LocalData->Notes.begin(), LocalData->Notes.end(),

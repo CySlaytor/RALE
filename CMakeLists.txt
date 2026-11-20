@@ -18,7 +18,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Discover Qt dependencies
-find_package(Qt6 COMPONENTS Core Widgets Concurrent Svg Network REQUIRED)
+find_package(Qt6 COMPONENTS Core Widgets Svg Network REQUIRED)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -76,7 +76,6 @@ if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE 
         Qt6::Core 
         Qt6::Widgets 
-        Qt6::Concurrent
         Qt6::Svg
         Qt6::Network
     )
@@ -128,7 +127,6 @@ else()
     target_link_libraries(${PROJECT_NAME} PRIVATE 
         Qt6::Core 
         Qt6::Widgets 
-        Qt6::Concurrent
         Qt6::Svg
         Qt6::Network
     )

@@ -7,6 +7,45 @@
 
 namespace RALE {
 
+namespace {
+
+QList<std::shared_ptr<NoteNode>> ResolveNoteRedirects(QList<std::shared_ptr<NoteNode>> workingNodes,
+                                                      const QMap<QString, QList<std::shared_ptr<NoteNode>>>& notesLookup) {
+    static const QRegularExpression referRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
+    int redirects = 0;
+
+    while (redirects < 5 && !workingNodes.isEmpty()) {
+        std::shared_ptr<NoteNode> root = nullptr;
+        for (const auto& n : workingNodes) {
+            if (n->IndentLevel == -2) {
+                root = n;
+                break;
+            }
+        }
+        if (root == nullptr)
+            root = workingNodes.first();
+        QString content = root->Content;
+
+        if (content.contains("refer to", Qt::CaseInsensitive)) {
+            auto match = referRegex.match(content);
+            if (match.hasMatch()) {
+                QString targetAddr = match.captured(1);
+                QString normTarget = LogicFormatter::NormalizeAddress(targetAddr);
+                if (notesLookup.contains(normTarget)) {
+                    workingNodes = notesLookup.value(normTarget);
+                    redirects++;
+                    continue;
+                }
+            }
+        }
+        break;
+    }
+
+    return workingNodes;
+}
+
+} // namespace
+
 QString ConditionFormatter::FormatOperandDisplay(const Operand& op, bool showDecimal, bool showAliases,
                                                  const QMap<QString, QList<std::shared_ptr<NoteNode>>>* notesLookup,
                                                  const QList<RangeEntry>* rangeCache, const AchievementConditionGroup* group,
@@ -35,7 +74,6 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                                          const QList<RangeEntry>* rangeCache) {
     // Pre-compiled regex patterns to eliminate allocation churn in cell rendering
     static const QRegularExpression validHexRegex("^[0-9A-Fa-f]+$");
-    static const QRegularExpression referRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression tagRegex(R"(\[.*?\])");
     static const QRegularExpression bitSizeRegex(R"(^(Bit\d+|Lower4|Upper4))", QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression multiSpaceRegex(R"(\s{2,})");
@@ -84,27 +122,6 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
         return !parts.isEmpty() ? parts.first() : "";
     };
 
-    // Local fallback function to do a deep search if strict chain mapping breaks due to bad indentation
-    std::function<std::shared_ptr<NoteNode>(const QList<std::shared_ptr<NoteNode>>&, int64_t)> FindNodeByOffsetRecursive;
-    FindNodeByOffsetRecursive = [&FindNodeByOffsetRecursive, &ParseHex](const QList<std::shared_ptr<NoteNode>>& nodes,
-                                                                        int64_t target) -> std::shared_ptr<NoteNode> {
-        for (const auto& n : nodes) {
-            if (n->IndentLevel != -2 && n->IndentLevel != -1) {
-                int64_t nodeOff = ParseHex(n->Offset);
-                if (n->Offset.contains('-'))
-                    nodeOff = -nodeOff;
-
-                if (nodeOff != -1 && target >= nodeOff && target < nodeOff + n->Size)
-                    return n;
-            }
-
-            auto childMatch = FindNodeByOffsetRecursive(n->Children, target);
-            if (childMatch != nullptr)
-                return childMatch;
-        }
-        return nullptr;
-    };
-
     int64_t targetVal = ParseHex(address);
 
     // 1. Strict Pointer Chain Logic (Offsets)
@@ -149,42 +166,13 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
         }
 
         if (!chainStack.isEmpty()) {
-            bool wasPointerChain = !chainStack.isEmpty();
             auto baseNode = chainStack.takeFirst();
             QString normalizedBase = LogicFormatter::NormalizeAddress(baseNode.Value);
 
             if (notesLookup.contains(normalizedBase)) {
                 // Redirect Resolution Logic added here
                 // Check if the Base Note is a Redirect (refer to $0x...)
-                QList<std::shared_ptr<NoteNode>> workingNodes = notesLookup.value(normalizedBase);
-                int redirects = 0;
-
-                while (redirects < 5 && !workingNodes.isEmpty()) {
-                    std::shared_ptr<NoteNode> root = nullptr;
-                    for (const auto& n : workingNodes) {
-                        if (n->IndentLevel == -2) {
-                            root = n;
-                            break;
-                        }
-                    }
-                    if (root == nullptr)
-                        root = workingNodes.first();
-                    QString content = root->Content;
-
-                    if (content.contains("refer to", Qt::CaseInsensitive)) {
-                        auto match = referRegex.match(content);
-                        if (match.hasMatch()) {
-                            QString targetAddr = match.captured(1);
-                            QString normTarget = LogicFormatter::NormalizeAddress(targetAddr);
-                            if (notesLookup.contains(normTarget)) {
-                                workingNodes = notesLookup.value(normTarget);
-                                redirects++;
-                                continue;
-                            }
-                        }
-                    }
-                    break;
-                }
+                QList<std::shared_ptr<NoteNode>> workingNodes = ResolveNoteRedirects(notesLookup.value(normalizedBase), notesLookup);
 
                 QList<std::shared_ptr<NoteNode>> currentLevelNodes;
                 for (const auto& n : workingNodes) {
@@ -236,13 +224,6 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                     }
                 }
 
-                // CRITICAL FIX: Only fallback to flat searching if we were NOT in a pointer chain.
-                // Flat searching a broken array of structs will result in returning the first element
-                // found in the file, causing a false alias to persist.
-                if (finalMatchNode == nullptr && targetVal != -1 && !wasPointerChain) {
-                    finalMatchNode = FindNodeByOffsetRecursive(workingNodes, targetVal);
-                }
-
                 if (finalMatchNode != nullptr) {
                     QString desc = finalMatchNode->Description;
                     desc.remove(tagRegex);
@@ -271,8 +252,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                 }
 
                 // If we were in a pointer chain and failed to find the node, abort and show Hex.
-                if (wasPointerChain && finalMatchNode == nullptr)
-                    return "";
+                return "";
             }
         }
     }
@@ -280,35 +260,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
     // 2. Direct Lookup & Static Array Element Resolution
     if (notesLookup.contains(address)) {
         // Redirect Resolution Logic added here too
-        QList<std::shared_ptr<NoteNode>> workingNodes = notesLookup.value(address);
-        int redirects = 0;
-
-        while (redirects < 5 && !workingNodes.isEmpty()) {
-            std::shared_ptr<NoteNode> root = nullptr;
-            for (const auto& n : workingNodes) {
-                if (n->IndentLevel == -2) {
-                    root = n;
-                    break;
-                }
-            }
-            if (root == nullptr)
-                root = workingNodes.first();
-            QString content = root->Content;
-
-            if (content.contains("refer to", Qt::CaseInsensitive)) {
-                auto match = referRegex.match(content);
-                if (match.hasMatch()) {
-                    QString targetAddr = match.captured(1);
-                    QString normTarget = LogicFormatter::NormalizeAddress(targetAddr);
-                    if (notesLookup.contains(normTarget)) {
-                        workingNodes = notesLookup.value(normTarget);
-                        redirects++;
-                        continue;
-                    }
-                }
-            }
-            break;
-        }
+        QList<std::shared_ptr<NoteNode>> workingNodes = ResolveNoteRedirects(notesLookup.value(address), notesLookup);
 
         if (!workingNodes.isEmpty()) {
             std::shared_ptr<NoteNode> main = nullptr;
@@ -511,36 +463,7 @@ std::shared_ptr<NoteNode> ConditionFormatter::GetEffectiveNote(const QMap<QStrin
     if (!notesLookup.contains(addrStr))
         return nullptr;
 
-    QList<std::shared_ptr<NoteNode>> workingNodes = notesLookup.value(addrStr);
-    int redirects = 0;
-    static const QRegularExpression referRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
-
-    while (redirects < 5 && !workingNodes.isEmpty()) {
-        std::shared_ptr<NoteNode> root = nullptr;
-        for (const auto& n : workingNodes) {
-            if (n->IndentLevel == -2) {
-                root = n;
-                break;
-            }
-        }
-        if (root == nullptr)
-            root = workingNodes.first();
-        QString content = root->Content;
-
-        if (content.contains("refer to", Qt::CaseInsensitive)) {
-            auto match = referRegex.match(content);
-            if (match.hasMatch()) {
-                QString targetAddr = match.captured(1);
-                QString normTarget = LogicFormatter::NormalizeAddress(targetAddr);
-                if (notesLookup.contains(normTarget)) {
-                    workingNodes = notesLookup.value(normTarget);
-                    redirects++;
-                    continue;
-                }
-            }
-        }
-        break;
-    }
+    QList<std::shared_ptr<NoteNode>> workingNodes = ResolveNoteRedirects(notesLookup.value(addrStr), notesLookup);
 
     for (const auto& n : workingNodes) {
         if (n->IndentLevel == -2)

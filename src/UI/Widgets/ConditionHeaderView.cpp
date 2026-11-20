@@ -1,6 +1,7 @@
 #include "ConditionHeaderView.h"
 
 #include "../Models/ConditionTableModel.h"
+#include "../Styles/ThemeManager.h"
 
 #include <QPaintEvent>
 #include <QPainter>
@@ -31,7 +32,7 @@ void ConditionHeaderView::paintEvent(QPaintEvent* event) {
     // Blend the empty space below the last row into the table workspace background
     if (lastY < viewport()->height()) {
         QPainter painter(viewport());
-        bool isDark = (palette().window().color().red() < 128);
+        bool isDark = (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark);
         QColor workspaceColor = isDark ? QColor(32, 32, 34) : QColor(140, 140, 140);
         painter.fillRect(QRect(0, lastY, viewport()->width(), viewport()->height() - lastY), workspaceColor);
     }
@@ -44,7 +45,7 @@ void ConditionHeaderView::paintSection(QPainter* painter, const QRect& rect, int
         isCurrentRow = (_tableView->selectionModel()->currentIndex().row() == logicalIndex);
     }
 
-    bool isDark = (palette().window().color().red() < 128);
+    bool isDark = (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark);
     QColor borderColor = isDark ? QColor(46, 46, 50) : QColor(112, 112, 112);
 
     // Active row header highlights with soft blue (#cce4f7) just like WinForms DataGridView; inactive rows are neutral #f0f0f0

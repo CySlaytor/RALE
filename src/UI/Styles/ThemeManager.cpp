@@ -1,11 +1,9 @@
 #include "ThemeManager.h"
 
 #include <QAbstractItemView>
-#include <QCursor>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QListView>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
@@ -13,85 +11,12 @@
 #include <QStyleOptionButton>
 #include <QStyleOptionViewItem>
 #include <QTextStream>
-#include <QUrl>
 #include <QtSvg/QSvgRenderer>
 
 namespace RALE {
 
 ThemeManager::Theme ThemeManager::_currentTheme = ThemeManager::Theme::Light;
 QHash<QString, QIcon> ThemeManager::_iconCache;
-
-// Event filter to prevent scrollbar layout thrashing during opening animation
-class ComboBoxScrollbarFilter : public QObject {
-  public:
-    explicit ComboBoxScrollbarFilter(QComboBox* cb) : QObject(cb), _cb(cb) {}
-
-  protected:
-    bool eventFilter(QObject* obj, QEvent* event) override {
-        if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::KeyPress) {
-            if (_cb != nullptr && _cb->view() != nullptr) {
-                bool needsScroll = _cb->count() > _cb->maxVisibleItems();
-                _cb->view()->setVerticalScrollBarPolicy(needsScroll ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
-            }
-        }
-        return QObject::eventFilter(obj, event);
-    }
-
-  private:
-    QComboBox* _cb = nullptr;
-};
-
-RaComboBoxDelegate::RaComboBoxDelegate(QObject* parent) : QStyledItemDelegate(parent) {}
-
-void RaComboBoxDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const {
-    QStyleOptionViewItem opt = option;
-    initStyleOption(&opt, index);
-
-    // Suppress dashed focus rect
-    opt.state &= ~QStyle::State_HasFocus;
-
-    bool isDark = (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark);
-
-    // Determine single active highlight cleanly without multi-item conflict
-    bool isHighlighted = false;
-    const auto* view = qobject_cast<const QAbstractItemView*>(opt.widget);
-    if (view != nullptr && view->viewport() != nullptr) {
-        QPoint pos = view->viewport()->mapFromGlobal(QCursor::pos());
-        if (view->viewport()->rect().contains(pos)) {
-            QModelIndex hoveredIndex = view->indexAt(pos);
-            int activeRow = hoveredIndex.isValid() ? hoveredIndex.row() : view->currentIndex().row();
-            isHighlighted = (index.row() == activeRow);
-        } else {
-            isHighlighted = (index.row() == view->currentIndex().row());
-        }
-    } else {
-        isHighlighted = ((opt.state & QStyle::State_Selected) != 0);
-    }
-
-    painter->save();
-    if (isHighlighted) {
-        // Windows Forms highlight blue #0078D7 (#007acc in dark mode)
-        QColor selBg = isDark ? QColor(0, 120, 215) : QColor(0, 120, 215);
-        painter->fillRect(opt.rect, selBg);
-        painter->setPen(Qt::white);
-    } else {
-        QColor normBg = isDark ? QColor(32, 32, 34) : QColor(255, 255, 255);
-        QColor normFg = isDark ? QColor(240, 240, 240) : QColor(0, 0, 0);
-        painter->fillRect(opt.rect, normBg);
-        painter->setPen(normFg);
-    }
-
-    painter->setFont(opt.font);
-    QRect textRect = opt.rect.adjusted(3, 0, -3, 0);
-    painter->drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, opt.text);
-    painter->restore();
-}
-
-QSize RaComboBoxDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const {
-    QSize s = QStyledItemDelegate::sizeHint(option, index);
-    s.setHeight(17); // 17px per item matches Windows Forms combobox dropdown line height
-    return s;
-}
 
 void ThemeManager::SetupComboBox(QComboBox* cb, int maxVisibleItems) {
     if (cb == nullptr)
@@ -123,11 +48,7 @@ QIcon ThemeManager::getIcon(const QString& resourcePath, Theme theme) {
     QString accentColor;
 
     if (theme == Theme::Light) {
-        if (resourcePath.contains("find.svg", Qt::CaseInsensitive)) {
-            primaryColor = "#666666";
-        } else {
-            primaryColor = "#3a3a3a";
-        }
+        primaryColor = "#3a3a3a";
         accentColor = "#0056b3";
     } else {
         primaryColor = "#e0e0e0";
@@ -299,7 +220,7 @@ int RaStyle::styleHint(StyleHint hint, const QStyleOption* option, const QWidget
     // Always Windows drop-down list anchored below combobox, never popup menu centered over combobox
     if (hint == SH_ComboBox_Popup)
         return 0;
-    return ClassicDropdownStyle::styleHint(hint, option, widget, returnData);
+    return QProxyStyle::styleHint(hint, option, widget, returnData);
 }
 
 void ThemeManager::ApplyTheme(Theme theme) {

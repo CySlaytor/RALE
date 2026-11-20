@@ -60,18 +60,7 @@ QString UserFileSerializer::Serialize(const QString& gameTitle, const UserTextPa
         auto GetSeg = [&](const QString& key) -> QString {
             if (!segments.contains(key))
                 return "";
-            const auto& groups = segments[key];
-            QString segSb;
-            for (int i = 0; i < groups.size(); i++) {
-                if (i > 0)
-                    segSb += 'S';
-                for (int c = 0; c < groups[i].Conditions.size(); c++) {
-                    if (c > 0)
-                        segSb += '_';
-                    segSb += LogicFormatter::ConditionToString(groups[i].Conditions[c]);
-                }
-            }
-            return segSb;
+            return LogicFormatter::GroupsToString(segments[key]);
         };
 
         // APPLY ESCAPE TO TITLE AND DESCRIPTION. Convert boolean to 1/0 for integration compatibility.

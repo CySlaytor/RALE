@@ -1,6 +1,7 @@
 #include "LogicOptimizerDialog.h"
 
 #include "../../Common/AppSettings.h"
+#include "../Styles/ThemeManager.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -25,10 +26,6 @@ class OptimizerTableDelegate : public QStyledItemDelegate {
         if (index.column() == 0 && (event->type() == QEvent::MouseButtonRelease || event->type() == QEvent::MouseButtonDblClick)) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) {
-                int checkSize = 13;
-                QRect checkRect(option.rect.x() + (option.rect.width() - checkSize) / 2,
-                                option.rect.y() + (option.rect.height() - checkSize) / 2, checkSize, checkSize);
-
                 if (option.rect.contains(mouseEvent->pos())) {
                     Qt::CheckState current = static_cast<Qt::CheckState>(index.data(Qt::CheckStateRole).toInt());
                     Qt::CheckState next = (current == Qt::Checked) ? Qt::Unchecked : Qt::Checked;
@@ -45,7 +42,7 @@ class OptimizerTableDelegate : public QStyledItemDelegate {
         initStyleOption(&opt, index);
 
         bool isSelected = (opt.state & QStyle::State_Selected);
-        bool isDark = (opt.palette.window().color().red() < 128);
+        bool isDark = (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark);
 
         // 1. Draw Cell Background
         QColor baseColor = isDark ? QColor(26, 26, 28) : QColor(255, 255, 255);

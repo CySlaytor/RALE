@@ -3,11 +3,9 @@
 #include "../../Models/AssetModels.h"
 #include "../Styles/ThemeManager.h"
 
-#include <QDesktopServices>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QSet>
-#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -166,7 +164,8 @@ void CodeReviewWidget::ApplyFilter() {
         }
 
         if (!issue.WikiUrl.isEmpty()) {
-            item->setForeground(4, Qt::blue);
+            bool isDark = (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark);
+            item->setForeground(4, isDark ? QColor(88, 166, 255) : QColor(0, 102, 204));
             QFont f = item->font(4);
             f.setUnderline(true);
             item->setFont(4, f);

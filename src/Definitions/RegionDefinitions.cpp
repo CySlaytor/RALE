@@ -35,15 +35,4 @@ QString RegionDefinitions::DetectRegion(const QString& text) {
     return "Unknown";
 }
 
-// Checks if a text contains keywords for a specific region.
-bool RegionDefinitions::IsRegion(const QString& text, const QString& regionKey) {
-    if (!Regions.contains(regionKey))
-        return false;
-    for (const QString& keyword : Regions[regionKey]) {
-        if (text.contains(keyword, Qt::CaseInsensitive))
-            return true;
-    }
-    return false;
-}
-
 } // namespace RALE

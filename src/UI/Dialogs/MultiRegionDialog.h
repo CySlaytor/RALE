@@ -12,6 +12,8 @@
 #include <QTabWidget>
 #include <QTableWidget>
 
+#include <optional>
+
 namespace RALE {
 
 class MultiRegionDialog : public QDialog {
@@ -61,8 +63,7 @@ class MultiRegionDialog : public QDialog {
     void ScanForMappings(const QString& baseRegion);
     QList<AchievementCondition> ExtractLogicFromGrid(QTableWidget* grid);
     QTableWidget* GetActiveGrid();
-    AchievementCondition* ManualParseCondition(const QString& raw);
-    void ParseOperand(const QString& raw, Operand& op);
+    std::optional<AchievementCondition> ManualParseCondition(const QString& raw);
 };
 
 } // namespace RALE

@@ -1,6 +1,7 @@
 #include "TextDiffDialog.h"
 
 #include "../../Common/AppSettings.h"
+#include "../Styles/ThemeManager.h"
 
 #include <QHBoxLayout>
 #include <QRegularExpression>
@@ -101,7 +102,7 @@ void TextDiffDialog::InitializeUI() {
 }
 
 void TextDiffDialog::ApplyTheme() {
-    if (palette().window().color().red() < 128) {
+    if (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark) {
         QColor backColor(30, 30, 30);
         QColor foreColor(245, 245, 245);
         rtbLeft->setStyleSheet(QString("background-color: %1; color: %2; border: none;").arg(backColor.name(), foreColor.name()));
@@ -226,11 +227,11 @@ void TextDiffDialog::HighlightDifferences(const QStringList& leftLines, const QS
     QColor textRemove(255, 100, 100);
     QColor textAdd(100, 255, 100);
 
-    if (palette().window().color().red() > 200) {
+    if (ThemeManager::CurrentTheme() == ThemeManager::Theme::Light) {
         diffBack = QColor(255, 200, 200);
         addedBack = QColor(200, 255, 200);
-        textRemove = Qt::red;
-        textAdd = Qt::green;
+        textRemove = QColor(180, 0, 0);
+        textAdd = QColor(0, 128, 0);
     }
 
     rtbLeft->clear();

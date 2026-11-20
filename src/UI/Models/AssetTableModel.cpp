@@ -1,5 +1,7 @@
 #include "AssetTableModel.h"
 
+#include "../Styles/ThemeManager.h"
+
 #include <QColor>
 #include <QPainter>
 
@@ -128,7 +130,7 @@ void AssetTableDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     initStyleOption(&opt, index);
 
     bool isSelected = (opt.state & QStyle::State_Selected);
-    bool isDark = (opt.palette.window().color().red() < 128);
+    bool isDark = (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark);
 
     // 1. Explicit pure white cell in light mode, dark gray in dark mode
     QColor baseCellColor = isDark ? QColor(32, 32, 34) : QColor(255, 255, 255);

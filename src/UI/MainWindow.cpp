@@ -62,13 +62,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             return;
         _projectRepo.EnsureLocalDataExists();
 
+        EnsureAssetIsLocal();
+        UpdateAssetState(_selectedAsset);
+
         auto selectedRows = achievementGrid->selectionModel()->selectedRows();
         if (selectedRows.size() > 1)
             ApplyBulkEdit(_selectedAsset);
-        else {
-            EnsureAssetIsLocal();
-            UpdateAssetState(_selectedAsset);
-        }
 
         _isDirty = true;
         _assetModel.NotifyAssetChanged(_selectedAsset);
@@ -95,7 +94,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         _isDirty = true;
         _notesCacheDirty = true;
         ReloadDataView();
-        LoadSelectedAsset();
+        RefreshSelectedAssetAfterStoreChange();
     });
 
     connect(triggerEditor, &TriggerEditorWidget::AddFromCodeNoteRequested, this, [this]() {
@@ -148,6 +147,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // Code Note Editor actions
     connect(codeNoteEditor, &CodeNoteEditorWidget::ReloadRequested, this, &MainWindow::onReload);
     connect(codeNoteEditor, &CodeNoteEditorWidget::SaveRequested, this, &MainWindow::onSaveFile);
+    connect(codeNoteEditor, &CodeNoteEditorWidget::NoteDirtyStateChanged, this, [this]() {
+        if (!_isLoading)
+            _isDirty = true;
+    });
     connect(codeNoteEditor, &CodeNoteEditorWidget::BeforeBatchNotesChange, this, [this]() {
         _projectRepo.EnsureLocalDataExists();
         PushMainUndo();
@@ -629,16 +632,7 @@ void MainWindow::RestoreSplitterSizes() {
 }
 
 void MainWindow::ApplySettings() {
-    if (!AppSettings::LoadWindowGeometry("MainWindow", this)) {
-        if (AppSettings::Current.WindowWidth > 0 && AppSettings::Current.WindowHeight > 0)
-            resize(AppSettings::Current.WindowWidth, AppSettings::Current.WindowHeight);
-
-        if (AppSettings::Current.WindowX != -1 && AppSettings::Current.WindowY != -1)
-            move(AppSettings::Current.WindowX, AppSettings::Current.WindowY);
-
-        if (AppSettings::Current.IsMaximized)
-            setWindowState(Qt::WindowMaximized);
-    }
+    AppSettings::LoadWindowGeometry("MainWindow", this);
 
     triggerEditor->SetShowDecimal(AppSettings::Current.Trigger_ShowDecimal);
     triggerEditor->SetShowAliases(AppSettings::Current.Trigger_ShowAliases);
@@ -958,6 +952,44 @@ void MainWindow::LoadSelectedAsset() {
     UpdateSelectionUI();
 }
 
+void MainWindow::RefreshSelectedAssetAfterStoreChange() {
+    if (_selectedAsset == nullptr) {
+        LoadSelectedAsset();
+        return;
+    }
+
+    const int targetId = _selectedAsset->ID;
+    const bool isLeaderboard = _selectedAsset->isLeaderboard();
+    int row = _assetModel.FindRowByAssetId(targetId);
+    if (row != -1) {
+        achievementGrid->selectRow(row);
+        LoadSelectedAsset();
+        return;
+    }
+
+    std::shared_ptr<IAssetItem> updatedAsset = nullptr;
+    for (const auto& item : _projectRepo.GetMergedAssets(isLeaderboard)) {
+        if (item->ID == targetId) {
+            updatedAsset = item;
+            break;
+        }
+    }
+
+    if (updatedAsset != nullptr) {
+        _isLoading = true;
+        _selectedAsset = (updatedAsset->State == AssetState::Synced) ? updatedAsset->clone(false) : updatedAsset;
+        QString displayCat =
+            _selectedAsset->Category.isEmpty() ? "Core" : _selectedAsset->Category.left(1).toUpper() + _selectedAsset->Category.mid(1);
+        triggerEditor->BindAchievement(_selectedAsset, displayCat);
+        _isLoading = false;
+        UpdateSelectionUI();
+    } else {
+        _selectedAsset = nullptr;
+        triggerEditor->Clear();
+        UpdateSelectionUI();
+    }
+}
+
 void MainWindow::UpdateAssetState(const std::shared_ptr<IAssetItem>& item) {
     if (item == nullptr)
         return;
@@ -1211,7 +1243,7 @@ void MainWindow::UndoMain() {
     codeNoteEditor->SetNotes(_projectRepo.LocalData->Notes);
     triggerEditor->SetNotes(_projectRepo.LocalData->Notes);
     ReloadDataView();
-    LoadSelectedAsset();
+    RefreshSelectedAssetAfterStoreChange();
 }
 
 void MainWindow::RedoMain() {
@@ -1226,7 +1258,7 @@ void MainWindow::RedoMain() {
     codeNoteEditor->SetNotes(_projectRepo.LocalData->Notes);
     triggerEditor->SetNotes(_projectRepo.LocalData->Notes);
     ReloadDataView();
-    LoadSelectedAsset();
+    RefreshSelectedAssetAfterStoreChange();
 }
 
 void MainWindow::onUndo() {
@@ -1385,9 +1417,11 @@ void MainWindow::onNewAsset() {
     if (_projectRepo.LocalData != nullptr) {
         QList<int> localIds;
         for (const auto& a : _projectRepo.LocalData->Achievements)
-            localIds.append(a->ID);
+            if (!IsServerAssetId(a->ID, false))
+                localIds.append(a->ID);
         for (const auto& l : _projectRepo.LocalData->Leaderboards)
-            localIds.append(l->ID);
+            if (!IsServerAssetId(l->ID, true))
+                localIds.append(l->ID);
 
         if (!localIds.isEmpty()) {
             int maxId = *std::max_element(localIds.begin(), localIds.end());
@@ -1442,9 +1476,11 @@ void MainWindow::onDuplicateAsset() {
     if (_projectRepo.LocalData != nullptr) {
         QList<int> localIds;
         for (const auto& a : _projectRepo.LocalData->Achievements)
-            localIds.append(a->ID);
+            if (!IsServerAssetId(a->ID, false))
+                localIds.append(a->ID);
         for (const auto& l : _projectRepo.LocalData->Leaderboards)
-            localIds.append(l->ID);
+            if (!IsServerAssetId(l->ID, true))
+                localIds.append(l->ID);
 
         if (!localIds.isEmpty()) {
             int maxId = *std::max_element(localIds.begin(), localIds.end());
@@ -1509,10 +1545,14 @@ void MainWindow::onDeleteAsset() {
         return;
 
     PushMainUndo();
+    bool deletedSelected = false;
 
     for (const auto& idx : selectedRows) {
         auto item = _assetModel.GetAsset(idx.row());
         if (item != nullptr && item->State == AssetState::Local) {
+            if (_selectedAsset != nullptr && _selectedAsset->ID == item->ID && _selectedAsset->isLeaderboard() == item->isLeaderboard())
+                deletedSelected = true;
+
             if (!item->isLeaderboard()) {
                 for (int i = _projectRepo.LocalData->Achievements.size() - 1; i >= 0; --i) {
                     if (_projectRepo.LocalData->Achievements[i]->ID == item->ID)
@@ -1529,6 +1569,12 @@ void MainWindow::onDeleteAsset() {
 
     _isDirty = true;
     ReloadDataView();
+
+    if (deletedSelected) {
+        _selectedAsset = nullptr;
+        triggerEditor->Clear();
+        UpdateSelectionUI();
+    }
 }
 
 void MainWindow::onResetAsset() {
@@ -1557,7 +1603,7 @@ void MainWindow::onResetAsset() {
 
     _isDirty = true;
     ReloadDataView();
-    LoadSelectedAsset();
+    RefreshSelectedAssetAfterStoreChange();
 }
 
 void MainWindow::onMoveAssetUp() { MoveAsset(-1); }
@@ -1621,11 +1667,16 @@ void MainWindow::MoveAsset(int direction) {
     int currentId = 111000001;
 
     if (isLeaderboardView) {
-        // Preserve any local leaderboards not currently in the displayed filter
-        QList<std::shared_ptr<RaLeaderboard>> preserved;
+        // Preserve any local or modified leaderboards not currently in the displayed filter
+        QList<std::shared_ptr<RaLeaderboard>> preservedLocal;
+        QList<std::shared_ptr<RaLeaderboard>> preservedModified;
         for (const auto& l : _projectRepo.LocalData->Leaderboards) {
-            if (!displayedIds.contains(l->ID))
-                preserved.append(l);
+            if (!displayedIds.contains(l->ID)) {
+                if (IsServerAssetId(l->ID, true))
+                    preservedModified.append(l);
+                else
+                    preservedLocal.append(l);
+            }
         }
 
         _projectRepo.LocalData->Leaderboards.clear();
@@ -1635,16 +1686,24 @@ void MainWindow::MoveAsset(int direction) {
             item->ID = currentId++;
             _projectRepo.LocalData->Leaderboards.append(std::static_pointer_cast<RaLeaderboard>(item));
         }
-        for (auto& p : preserved) {
+        for (auto& p : preservedLocal) {
             p->ID = currentId++;
             _projectRepo.LocalData->Leaderboards.append(p);
         }
+        for (auto& p : preservedModified) {
+            _projectRepo.LocalData->Leaderboards.append(p);
+        }
     } else {
-        // Preserve any local achievements not currently in the displayed filter
-        QList<std::shared_ptr<RaAchievement>> preserved;
+        // Preserve any local or modified achievements not currently in the displayed filter
+        QList<std::shared_ptr<RaAchievement>> preservedLocal;
+        QList<std::shared_ptr<RaAchievement>> preservedModified;
         for (const auto& a : _projectRepo.LocalData->Achievements) {
-            if (!displayedIds.contains(a->ID))
-                preserved.append(a);
+            if (!displayedIds.contains(a->ID)) {
+                if (IsServerAssetId(a->ID, false))
+                    preservedModified.append(a);
+                else
+                    preservedLocal.append(a);
+            }
         }
 
         _projectRepo.LocalData->Achievements.clear();
@@ -1654,8 +1713,11 @@ void MainWindow::MoveAsset(int direction) {
             item->ID = currentId++;
             _projectRepo.LocalData->Achievements.append(std::static_pointer_cast<RaAchievement>(item));
         }
-        for (auto& p : preserved) {
+        for (auto& p : preservedLocal) {
             p->ID = currentId++;
+            _projectRepo.LocalData->Achievements.append(p);
+        }
+        for (auto& p : preservedModified) {
             _projectRepo.LocalData->Achievements.append(p);
         }
     }
@@ -1699,10 +1761,14 @@ void MainWindow::onRenumberLocalIDs() {
 
     PushMainUndo();
     int currentId = 111000001;
-    for (auto& ach : _projectRepo.LocalData->Achievements)
-        ach->ID = currentId++;
-    for (auto& lb : _projectRepo.LocalData->Leaderboards)
-        lb->ID = currentId++;
+    for (auto& ach : _projectRepo.LocalData->Achievements) {
+        if (!IsServerAssetId(ach->ID, false))
+            ach->ID = currentId++;
+    }
+    for (auto& lb : _projectRepo.LocalData->Leaderboards) {
+        if (!IsServerAssetId(lb->ID, true))
+            lb->ID = currentId++;
+    }
 
     _isDirty = true;
     ReloadDataView();
@@ -1751,8 +1817,6 @@ void MainWindow::onClearDataReset() {
         try {
             QString appPath = QCoreApplication::applicationDirPath();
             QFile::remove(QDir(appPath).filePath("settings.ini"));
-            QFile::remove(QDir(appPath).filePath("settings.json"));
-            QFile::remove(QDir(appPath).filePath("recent.json"));
 
             QDir(QDir(appPath).filePath("Cache")).removeRecursively();
             QDir(QDir(appPath).filePath("Metadata")).removeRecursively();
@@ -1799,6 +1863,8 @@ void MainWindow::onSaveFile() {
         if (fileName.endsWith("-Notes", Qt::CaseInsensitive))
             fileName.chop(6);
         if (fileName.endsWith("-User", Qt::CaseInsensitive))
+            fileName.chop(5);
+        if (fileName.endsWith("-Rich", Qt::CaseInsensitive))
             fileName.chop(5);
         savePath = QDir(dir).filePath(QString("%1-User.txt").arg(fileName));
     }
@@ -2042,7 +2108,7 @@ void MainWindow::onRevertRegion() {
     _isDirty = true;
     ReloadDataView();
     if (_selectedAsset != nullptr)
-        LoadSelectedAsset();
+        RefreshSelectedAssetAfterStoreChange();
     QMessageBox::information(this, "Revert Region", QString("Reverted %1 assets to %2.").arg(count).arg(targetRegion));
 }
 
@@ -2051,41 +2117,69 @@ void MainWindow::onLogicOptimizer() {
         return;
 
     QList<std::shared_ptr<IAssetItem>> assetsToOptimize;
+    QStringList originalLogics;
+    assetsToOptimize.reserve(_currentDisplayList.size());
+    originalLogics.reserve(_currentDisplayList.size());
+
     for (const auto& item : _currentDisplayList) {
-        if (item->State == AssetState::Synced) {
-            auto clone = item->clone(false);
-            clone->State = AssetState::Synced;
-            assetsToOptimize.append(clone);
-        } else {
-            assetsToOptimize.append(item);
-        }
+        auto clone = item->clone(false);
+        clone->State = item->State;
+        assetsToOptimize.append(clone);
+        originalLogics.append(item->Logic);
     }
 
     LogicOptimizerDialog form(assetsToOptimize, this);
     form.exec();
 
+    QList<std::shared_ptr<IAssetItem>> changedItems;
+    for (int i = 0; i < assetsToOptimize.size(); ++i) {
+        if (assetsToOptimize[i]->Logic != originalLogics[i]) {
+            changedItems.append(assetsToOptimize[i]);
+        }
+    }
+
+    if (changedItems.isEmpty())
+        return;
+
     _projectRepo.EnsureLocalDataExists();
-    bool anyChanges = false;
-    for (const auto& item : assetsToOptimize) {
-        if (item->State == AssetState::Modified) {
-            if (!IsAssetInLocalStore(item)) {
-                if (item->isLeaderboard())
-                    _projectRepo.LocalData->Leaderboards.append(std::static_pointer_cast<RaLeaderboard>(item));
-                else
-                    _projectRepo.LocalData->Achievements.append(std::static_pointer_cast<RaAchievement>(item));
-                anyChanges = true;
-            } else {
-                anyChanges = true;
+    PushMainUndo();
+
+    for (const auto& item : changedItems) {
+        if (item->isLeaderboard()) {
+            bool updatedExisting = false;
+            for (auto& existing : _projectRepo.LocalData->Leaderboards) {
+                if (existing->ID == item->ID) {
+                    existing->Logic = item->Logic;
+                    UpdateAssetState(existing);
+                    updatedExisting = true;
+                    break;
+                }
+            }
+            if (!updatedExisting) {
+                UpdateAssetState(item);
+                _projectRepo.LocalData->Leaderboards.append(std::static_pointer_cast<RaLeaderboard>(item));
+            }
+        } else {
+            bool updatedExisting = false;
+            for (auto& existing : _projectRepo.LocalData->Achievements) {
+                if (existing->ID == item->ID) {
+                    existing->Logic = item->Logic;
+                    UpdateAssetState(existing);
+                    updatedExisting = true;
+                    break;
+                }
+            }
+            if (!updatedExisting) {
+                UpdateAssetState(item);
+                _projectRepo.LocalData->Achievements.append(std::static_pointer_cast<RaAchievement>(item));
             }
         }
     }
 
-    if (anyChanges) {
-        _isDirty = true;
-        ReloadDataView();
-        if (_selectedAsset != nullptr)
-            SelectAssetInGrid(_selectedAsset);
-    }
+    _isDirty = true;
+    ReloadDataView();
+    if (_selectedAsset != nullptr)
+        RefreshSelectedAssetAfterStoreChange();
 }
 
 void MainWindow::onMultiRegionBatch(MultiRegionDialog* dialog) {
@@ -2183,7 +2277,7 @@ void MainWindow::onMultiRegionBatch(MultiRegionDialog* dialog) {
     QMessageBox::information(this, "Batch Complete", QString("Multi-Region logic applied to %1 assets.").arg(count));
     ReloadDataView();
     if (_selectedAsset != nullptr)
-        SelectAssetInGrid(_selectedAsset);
+        RefreshSelectedAssetAfterStoreChange();
 }
 
 void MainWindow::onBatchMultiplyNotes(BatchNoteMultiplierDialog* dialog) {
@@ -2216,6 +2310,23 @@ bool MainWindow::IsAssetInLocalStore(const std::shared_ptr<IAssetItem>& item) {
     for (const auto& a : _projectRepo.LocalData->Achievements)
         if (a->ID == item->ID)
             return true;
+    return false;
+}
+
+bool MainWindow::IsServerAssetId(int id, bool isLeaderboard) const {
+    if (_projectRepo.ServerData == nullptr)
+        return false;
+    for (const auto& s : _projectRepo.ServerData->Sets) {
+        if (isLeaderboard) {
+            for (const auto& lb : s.Leaderboards)
+                if (lb->ID == id)
+                    return true;
+        } else {
+            for (const auto& ach : s.Achievements)
+                if (ach->ID == id)
+                    return true;
+        }
+    }
     return false;
 }
 

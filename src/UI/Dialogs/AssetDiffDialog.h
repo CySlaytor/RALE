@@ -37,7 +37,7 @@ class AssetDiffDialog : public QDialog {
     void AlignDiffLists(QStringList& server, QStringList& local);
     void HighlightDifferences(const QStringList& serverLines, const QStringList& localLines);
     void RenderBox(QTextEdit* box, const QStringList& sourceLines, const QStringList& compareLines, const QColor& diffBack,
-                   const QColor& metaColor, bool isServer);
+                   const QColor& metaColor);
     void UpdateDiffStats(const QStringList& serverLines, const QStringList& localLines);
 };
 

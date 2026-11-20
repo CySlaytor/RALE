@@ -3,6 +3,7 @@
 #include "../../Common/AppSettings.h"
 #include "../../Definitions/RegionDefinitions.h"
 #include "../../Parsers/AchievementParser.h"
+#include "../../Utilities/LogicFormatter.h"
 #include "../Styles/ThemeManager.h"
 
 #include <QClipboard>
@@ -32,7 +33,7 @@ class MultiRegionTableDelegate : public QStyledItemDelegate {
         initStyleOption(&opt, index);
 
         bool isSelected = (opt.state & QStyle::State_Selected);
-        bool isDark = (opt.palette.window().color().red() < 128);
+        bool isDark = (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark);
 
         QColor baseColor = isDark ? QColor(26, 26, 28) : QColor(255, 255, 255);
         QColor bgColor = isSelected ? opt.palette.highlight().color() : baseColor;
@@ -262,12 +263,13 @@ void MultiRegionDialog::CreateRegionTab(const QString& regionName, bool isBase) 
 
 void MultiRegionDialog::ScanForMappings(const QString& baseRegion) {
     dgvMapping->setRowCount(0);
-    static const QRegularExpression regex(R"(refer to \$0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression regex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
 
     for (const auto& note : _allNotes) {
         auto match = regex.match(note.Note);
         if (match.hasMatch()) {
             QString targetAddrHex = match.captured(1);
+            QString normalizedTarget = LogicFormatter::NormalizeAddress(targetAddrHex);
             QString sourceAddrHex = note.Address;
             sourceAddrHex.remove("0x", Qt::CaseInsensitive);
 
@@ -275,7 +277,7 @@ void MultiRegionDialog::ScanForMappings(const QString& baseRegion) {
 
             const CodeNote* targetNote = nullptr;
             for (const auto& n : _allNotes) {
-                if (n.Address.endsWith(targetAddrHex, Qt::CaseInsensitive)) {
+                if (LogicFormatter::NormalizeAddress(n.Address) == normalizedTarget) {
                     targetNote = &n;
                     break;
                 }
@@ -366,7 +368,7 @@ QList<RegionConfig> MultiRegionDialog::GetConfiguredRegions() {
         QTableWidget* grid = _regionGrids.value(regionName, nullptr);
         if (grid == nullptr)
             continue;
-        bool isBase = !simpleMappings.contains(regionName);
+        bool isBase = false;
 
         for (int i = 0; i < tabControlRegions->count(); i++) {
             if (tabControlRegions->tabText(i).startsWith(regionName) && tabControlRegions->tabText(i).contains("(Base)")) {
@@ -444,10 +446,9 @@ void MultiRegionDialog::onPasteToGrid() {
             QString cleanPart = part.trimmed();
             if (cleanPart.isEmpty())
                 continue;
-            auto* c = ManualParseCondition(cleanPart);
-            if (c != nullptr) {
-                conds.append(*c);
-                delete c;
+            auto c = ManualParseCondition(cleanPart);
+            if (c.has_value()) {
+                conds.append(c.value());
             }
         }
     }
@@ -514,50 +515,17 @@ void MultiRegionDialog::onDeleteFromGrid() {
         grid->removeRow(r);
 }
 
-AchievementCondition* MultiRegionDialog::ManualParseCondition(const QString& raw) {
+std::optional<AchievementCondition> MultiRegionDialog::ManualParseCondition(const QString& raw) {
     static const QRegularExpression regex(R"(^([^=<>!]+)([=<>!]+)([^=<>!]+)$)");
     auto match = regex.match(raw);
     if (!match.hasMatch())
-        return nullptr;
+        return std::nullopt;
 
-    auto* cond = new AchievementCondition();
-    cond->Operator = match.captured(2);
-    ParseOperand(match.captured(1), cond->LeftOperand);
-    ParseOperand(match.captured(3), cond->RightOperand);
+    AchievementCondition cond;
+    cond.Operator = match.captured(2);
+    cond.LeftOperand = AchievementParser::ParseOperand(match.captured(1).trimmed());
+    cond.RightOperand = AchievementParser::ParseOperand(match.captured(3).trimmed());
     return cond;
-}
-
-void MultiRegionDialog::ParseOperand(const QString& raw, Operand& op) {
-    QString trimmed = raw.trimmed();
-    if (trimmed.startsWith("0x", Qt::CaseInsensitive)) {
-        QString body = trimmed.mid(2);
-        if (!body.isEmpty()) {
-            QChar typeChar = body[0].toUpper();
-            if (QString("HXW ").contains(typeChar) || typeChar.isDigit()) {
-                op.Type = "Mem";
-                if (typeChar == 'H') {
-                    op.Size = "8-bit";
-                    body = body.mid(1);
-                } else if (typeChar == ' ') {
-                    op.Size = "16-bit";
-                    body = body.mid(1);
-                } else if (typeChar == 'W') {
-                    op.Size = "24-bit";
-                    body = body.mid(1);
-                } else if (typeChar == 'X') {
-                    op.Size = "32-bit";
-                    body = body.mid(1);
-                } else {
-                    op.Size = "16-bit";
-                }
-                op.Value = "0x" + body;
-                return;
-            }
-        }
-    }
-    op.Type = "Value";
-    op.Size = "";
-    op.Value = trimmed;
 }
 
 void MultiRegionDialog::onBtnOK() { accept(); }

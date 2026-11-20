@@ -134,12 +134,29 @@ AchievementCondition AchievementParser::ParseCondition(const QString& conditionS
         std::sort(sortedArith.begin(), sortedArith.end(), [](const QString& a, const QString& b) { return a.length() > b.length(); });
 
         for (const QString& op : sortedArith) {
-            int idx = current.indexOf(op);
-            if (idx != -1) {
+            int searchFrom = 0;
+            while (true) {
+                int idx = current.indexOf(op, searchFrom);
+                if (idx == -1)
+                    break;
+                if (op == "-") {
+                    if (idx == 0) {
+                        searchFrom = idx + 1;
+                        continue;
+                    }
+                    QChar prev = current[idx - 1];
+                    if (prev == '*' || prev == '/' || prev == '%' || prev == '&' || prev == '^' || prev == '+' || prev == '-' ||
+                        (idx == 1 && prev.toLower() == 'f')) {
+                        searchFrom = idx + 1;
+                        continue;
+                    }
+                }
                 opStr = op;
                 opIndex = idx;
                 break;
             }
+            if (opIndex != -1)
+                break;
         }
     }
 

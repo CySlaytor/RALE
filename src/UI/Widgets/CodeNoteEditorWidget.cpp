@@ -3,15 +3,16 @@
 #include "../../Common/AppSettings.h"
 #include "../../Logic/CodeNoteLogic.h"
 #include "../../Parsers/PointerTreeParser.h"
+#include "../../Utilities/LogicFormatter.h"
 #include "../Dialogs/CloneStrideDialog.h"
 #include "../Styles/ThemeManager.h"
 
-#include <QClipboard>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 namespace RALE {
@@ -199,7 +200,7 @@ void CodeNoteEditorWidget::InitializeUI() {
     statusLayout->setSpacing(0);
 
     lblOffsetChain = new QLabel("Ready", panelStatus);
-    lblOffsetChain->setStyleSheet("color: #707070;");
+    lblOffsetChain->setObjectName("lblOffsetChain");
     statusLayout->addWidget(lblOffsetChain);
     statusLayout->addStretch();
 
@@ -254,12 +255,6 @@ void CodeNoteEditorWidget::SetIndentValues(bool value) { chkIndentValues->setChe
 bool CodeNoteEditorWidget::UnicodeTree() const { return chkUnicodeTree->isChecked(); }
 void CodeNoteEditorWidget::SetUnicodeTree(bool value) { chkUnicodeTree->setChecked(value); }
 
-QString CodeNoteEditorWidget::NoteIndentStyle() const { return chkUnicodeTree->isChecked() ? "Unicode Tree (├─)" : "Plusses (+)"; }
-
-void CodeNoteEditorWidget::SetNoteIndentStyle(const QString& style) {
-    chkUnicodeTree->setChecked(style.startsWith("Unicode Tree", Qt::CaseInsensitive));
-}
-
 void CodeNoteEditorWidget::SetConsoleId(int consoleId) {
     _consoleId = consoleId;
     if (_viewModel)
@@ -310,9 +305,10 @@ void CodeNoteEditorWidget::onBtnCloneStrideClicked() {
         bool wasUpdating = _isInternalUpdate;
         _isInternalUpdate = true;
 
+        const QString targetNorm = LogicFormatter::NormalizeAddress(_viewModel->CurrentBaseNote->Address);
         bool found = false;
         for (int i = 0; i < _filteredNotes.size(); i++) {
-            if (_filteredNotes[i].Address.compare(_viewModel->CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
+            if (LogicFormatter::NormalizeAddress(_filteredNotes[i].Address) == targetNorm) {
                 cmbNotes->setCurrentIndex(i);
                 found = true;
                 break;
@@ -322,7 +318,7 @@ void CodeNoteEditorWidget::onBtnCloneStrideClicked() {
             txtSearch->setText("");
             ApplyFilter(false);
             for (int i = 0; i < _filteredNotes.size(); i++) {
-                if (_filteredNotes[i].Address.compare(_viewModel->CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
+                if (LogicFormatter::NormalizeAddress(_filteredNotes[i].Address) == targetNorm) {
                     cmbNotes->setCurrentIndex(i);
                     break;
                 }
@@ -387,8 +383,9 @@ void CodeNoteEditorWidget::CommitChanges() {
     _viewModel->CommitEditState();
     // Synchronize local filtered notes to reflect committed content immediately
     if (_viewModel->CurrentBaseNote != nullptr) {
+        const QString targetNorm = LogicFormatter::NormalizeAddress(_viewModel->CurrentBaseNote->Address);
         for (auto& fn : _filteredNotes) {
-            if (fn.Address.compare(_viewModel->CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
+            if (LogicFormatter::NormalizeAddress(fn.Address) == targetNorm) {
                 fn.Note = _viewModel->CurrentBaseNote->Note;
                 break;
             }
@@ -402,18 +399,15 @@ void CodeNoteEditorWidget::SetNotes(const QList<CodeNote>& notes) {
     if (cmbNotes->currentIndex() >= 0 && cmbNotes->currentIndex() < _filteredNotes.size())
         previousAddress = _filteredNotes[cmbNotes->currentIndex()].Address;
 
-    _viewModel->LoadNotes(notes);
-
-    cmbNotes->clear();
     txtNoteBody->clear();
     _viewModel->ClearEditState();
-
-    ApplyFilter(false);
+    _viewModel->LoadNotes(notes);
 
     bool selectionRestored = false;
     if (!previousAddress.isEmpty()) {
+        const QString prevNorm = LogicFormatter::NormalizeAddress(previousAddress);
         for (int i = 0; i < _filteredNotes.size(); i++) {
-            if (_filteredNotes[i].Address == previousAddress) {
+            if (LogicFormatter::NormalizeAddress(_filteredNotes[i].Address) == prevNorm) {
                 cmbNotes->setCurrentIndex(i);
                 _viewModel->SelectBaseNote(_filteredNotes[i]);
                 selectionRestored = true;
@@ -442,13 +436,16 @@ void CodeNoteEditorWidget::ApplyFilter(bool autoSelectFirst) {
         }
     }
 
-    cmbNotes->clear();
-    for (const auto& n : _filteredNotes) {
-        QStringList lines = n.Note.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts);
-        QString firstLine = lines.isEmpty() ? QString() : lines.first().trimmed();
-        if (firstLine.length() > 50)
-            firstLine = firstLine.left(47) + "...";
-        cmbNotes->addItem(QString("%1 | %2").arg(n.Address, firstLine));
+    {
+        QSignalBlocker blocker(cmbNotes);
+        cmbNotes->clear();
+        for (const auto& n : _filteredNotes) {
+            QStringList lines = n.Note.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts);
+            QString firstLine = lines.isEmpty() ? QString() : lines.first().trimmed();
+            if (firstLine.length() > 50)
+                firstLine = firstLine.left(47) + "...";
+            cmbNotes->addItem(QString("%1 | %2").arg(n.Address, firstLine));
+        }
     }
 
     if (autoSelectFirst && !_filteredNotes.isEmpty()) {
@@ -477,8 +474,9 @@ void CodeNoteEditorWidget::onVmNoteContentChanged() {
     btnCloneStride->setEnabled(true);
 
     // Keep cached filtered notes synchronized with latest ViewModel content
+    const QString targetNorm = LogicFormatter::NormalizeAddress(_viewModel->CurrentBaseNote->Address);
     for (auto& fn : _filteredNotes) {
-        if (fn.Address.compare(_viewModel->CurrentBaseNote->Address, Qt::CaseInsensitive) == 0) {
+        if (LogicFormatter::NormalizeAddress(fn.Address) == targetNorm) {
             fn.Note = _viewModel->CurrentBaseNote->Note;
             break;
         }
@@ -532,9 +530,15 @@ void CodeNoteEditorWidget::RefreshVariableTreeDisplay() {
         finalList.append(n);
     }
 
+    QString currentAddr = _viewModel->CurrentBaseNote != nullptr
+                              ? LogicFormatter::NormalizeAddress(_viewModel->CurrentBaseNote->Address)
+                              : QString();
+
     int prevIdx = cmbVariables->currentIndex();
-    quintptr prevPtr =
-        (prevIdx >= 0 && prevIdx < cmbVariables->count()) ? cmbVariables->itemData(prevIdx, Qt::UserRole).value<quintptr>() : 0;
+    QString prevKey = (!currentAddr.isEmpty() && currentAddr == _lastVariableTreeAddress && prevIdx >= 0 && prevIdx < cmbVariables->count())
+                          ? cmbVariables->itemData(prevIdx, Qt::UserRole + 1).toString()
+                          : QString();
+    _lastVariableTreeAddress = currentAddr;
 
     cmbVariables->clear();
     int newSelectIdx = -1;
@@ -547,8 +551,10 @@ void CodeNoteEditorWidget::RefreshVariableTreeDisplay() {
             text = pad + text;
         }
         quintptr nodePtr = reinterpret_cast<quintptr>(node.get());
+        QString nodeKey = QString("%1|%2|%3").arg(node->IndentLevel).arg(node->Offset, node->Description);
         cmbVariables->addItem(text, QVariant::fromValue(nodePtr));
-        if (prevPtr != 0 && nodePtr == prevPtr)
+        cmbVariables->setItemData(cmbVariables->count() - 1, nodeKey, Qt::UserRole + 1);
+        if (!prevKey.isEmpty() && nodeKey == prevKey)
             newSelectIdx = i;
     }
 
@@ -626,12 +632,7 @@ void CodeNoteEditorWidget::onVariableIndexChanged(int index) {
     quintptr targetPtr = cmbVariables->itemData(index, Qt::UserRole).value<quintptr>();
     for (const auto& node : _viewModel->CurrentParsedNodes) {
         if (reinterpret_cast<quintptr>(node.get()) == targetPtr) {
-            if (node->IndentLevel == -2) {
-                _viewModel->ClearEditState();
-                _viewModel->RequestNodeSelection(node);
-            } else {
-                _viewModel->RequestNodeSelection(node);
-            }
+            _viewModel->RequestNodeSelection(node);
             break;
         }
     }
@@ -644,6 +645,7 @@ void CodeNoteEditorWidget::onNoteBodyTextChanged() {
     _viewModel->UpdateBufferedText(txtNoteBody->toPlainText());
     _hasUnsavedChanges = true;
     UpdateStatusDisplay(nullptr);
+    emit NoteDirtyStateChanged();
 }
 
 void CodeNoteEditorWidget::UpdateStatusDisplay(const QString* overrideMsg) {
@@ -681,9 +683,10 @@ void CodeNoteEditorWidget::HighlightAddress(const QString& address) {
         bool wasUpdating = _isInternalUpdate;
         _isInternalUpdate = true;
 
+        const QString targetNorm = LogicFormatter::NormalizeAddress(_viewModel->CurrentBaseNote->Address);
         bool found = false;
         for (int i = 0; i < _filteredNotes.size(); i++) {
-            if (_filteredNotes[i].Address == _viewModel->CurrentBaseNote->Address) {
+            if (LogicFormatter::NormalizeAddress(_filteredNotes[i].Address) == targetNorm) {
                 cmbNotes->setCurrentIndex(i);
                 found = true;
                 break;
@@ -693,7 +696,7 @@ void CodeNoteEditorWidget::HighlightAddress(const QString& address) {
             txtSearch->setText("");
             ApplyFilter(false);
             for (int i = 0; i < _filteredNotes.size(); i++) {
-                if (_filteredNotes[i].Address == _viewModel->CurrentBaseNote->Address) {
+                if (LogicFormatter::NormalizeAddress(_filteredNotes[i].Address) == targetNorm) {
                     cmbNotes->setCurrentIndex(i);
                     break;
                 }
@@ -709,9 +712,10 @@ void CodeNoteEditorWidget::HighlightVariable(const QList<int64_t>& offsets) {
         bool wasUpdating = _isInternalUpdate;
         _isInternalUpdate = true;
 
+        const QString targetNorm = LogicFormatter::NormalizeAddress(_viewModel->CurrentBaseNote->Address);
         bool found = false;
         for (int i = 0; i < _filteredNotes.size(); i++) {
-            if (_filteredNotes[i].Address == _viewModel->CurrentBaseNote->Address) {
+            if (LogicFormatter::NormalizeAddress(_filteredNotes[i].Address) == targetNorm) {
                 cmbNotes->setCurrentIndex(i);
                 found = true;
                 break;
@@ -721,7 +725,7 @@ void CodeNoteEditorWidget::HighlightVariable(const QList<int64_t>& offsets) {
             txtSearch->setText("");
             ApplyFilter(false);
             for (int i = 0; i < _filteredNotes.size(); i++) {
-                if (_filteredNotes[i].Address == _viewModel->CurrentBaseNote->Address) {
+                if (LogicFormatter::NormalizeAddress(_filteredNotes[i].Address) == targetNorm) {
                     cmbNotes->setCurrentIndex(i);
                     break;
                 }

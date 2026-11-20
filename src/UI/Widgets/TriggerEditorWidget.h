@@ -45,7 +45,6 @@ class TriggerEditorWidget : public QWidget {
     bool CollapseChains() const;
     void SetCollapseChains(bool value);
 
-    QString GetTriggerText() const;
     void SetTriggerText(const QString& value);
 
     bool CanUndo() const { return _viewModel.CanUndo(); }
@@ -78,7 +77,6 @@ class TriggerEditorWidget : public QWidget {
   signals:
     void TriggerTextChanged();
     void AchievementDataChanged();
-    void StatusUpdateRequested(const QString& msg);
     void AssetResetRequested();
     void AddFromCodeNoteRequested();
     void AddressSelected(const QString& addr);

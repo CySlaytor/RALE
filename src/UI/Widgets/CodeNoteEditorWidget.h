@@ -32,9 +32,6 @@ class CodeNoteEditorWidget : public QWidget {
     bool UnicodeTree() const;
     void SetUnicodeTree(bool value);
 
-    QString NoteIndentStyle() const;
-    void SetNoteIndentStyle(const QString& style);
-
     void SetConsoleId(int consoleId);
 
     void SetNotes(const QList<CodeNote>& notes);
@@ -60,6 +57,7 @@ class CodeNoteEditorWidget : public QWidget {
     void ReloadRequested();
     void SaveRequested();
     void NoteUpdated();
+    void NoteDirtyStateChanged();
     void BeforeBatchNotesChange();
     void BatchNotesApplied();
     void NoteResetRequested(const QString& address);
@@ -107,6 +105,7 @@ class CodeNoteEditorWidget : public QWidget {
 
     std::unique_ptr<CodeNoteViewModel> _viewModel;
     QList<CodeNote> _filteredNotes;
+    QString _lastVariableTreeAddress;
     int _consoleId = 0;
     bool _isInternalUpdate = false;
     bool _isRefreshingVariables = false;

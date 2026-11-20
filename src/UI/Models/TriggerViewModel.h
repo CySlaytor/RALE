@@ -88,6 +88,8 @@ class TriggerViewModel : public QObject {
     void HistoryChanged();  // Fired when undo stack changes
 
   private:
+    QMap<QString, QMap<int, GeneratorDefinition>> _segmentGeneratorRules;
+
     // Helper to update state from text directly (e.g. paste or undo)
     void SetStateFromLogic(const QString& logic);
     void RestoreState(const TriggerEditorState& state);

@@ -2,6 +2,7 @@
 
 #include "../../Common/AppSettings.h"
 #include "../../Parsers/AchievementParser.h"
+#include "../Styles/ThemeManager.h"
 
 #include <QHBoxLayout>
 #include <QScrollBar>
@@ -232,17 +233,17 @@ void AssetDiffDialog::HighlightDifferences(const QStringList& serverLines, const
     QColor removedBack(255, 200, 200);
     QColor metaColor = Qt::gray;
 
-    if (palette().window().color().red() < 128) {
+    if (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark) {
         addedBack = QColor(0, 50, 0);
         removedBack = QColor(50, 0, 0);
     }
 
-    RenderBox(rtbServer, serverLines, localLines, removedBack, metaColor, true);
-    RenderBox(rtbLocal, localLines, serverLines, addedBack, metaColor, false);
+    RenderBox(rtbServer, serverLines, localLines, removedBack, metaColor);
+    RenderBox(rtbLocal, localLines, serverLines, addedBack, metaColor);
 }
 
 void AssetDiffDialog::RenderBox(QTextEdit* box, const QStringList& sourceLines, const QStringList& compareLines, const QColor& diffBack,
-                                const QColor& metaColor, bool /*isServer*/) {
+                                const QColor& metaColor) {
     box->clear();
     QTextCursor cursor(box->textCursor());
 

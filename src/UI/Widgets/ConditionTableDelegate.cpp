@@ -19,7 +19,7 @@ void ConditionTableDelegate::paint(QPainter* painter, const QStyleOptionViewItem
 
     bool isSelected = (opt.state & QStyle::State_Selected);
     bool isColId = (index.column() == ConditionTableModel::ColID);
-    bool isDark = (opt.palette.window().color().red() < 128);
+    bool isDark = (ThemeManager::CurrentTheme() == ThemeManager::Theme::Dark);
 
     // Determine cell background color
     QColor bgColor;

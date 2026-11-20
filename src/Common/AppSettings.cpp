@@ -4,8 +4,6 @@
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QScreen>
 #include <QSettings>
 #include <QWidget>
@@ -25,76 +23,8 @@ QString AppSettings::GetLayoutPath() {
     return QDir(folder).filePath("layout.ini");
 }
 
-void AppSettings::MigrateFromJsonIfPresent(const QString& jsonPath) {
-    if (!QFile::exists(jsonPath))
-        return;
-
-    try {
-        QFile file(jsonPath);
-        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            QByteArray json = file.readAll();
-            file.close();
-            auto doc = QJsonDocument::fromJson(json);
-            if (doc.isObject()) {
-                auto obj = doc.object();
-                Current.ShowLogicReviewer = obj.value("ShowLogicReviewer").toBool(Current.ShowLogicReviewer);
-                Current.Theme = obj.value("Theme").toString(Current.Theme);
-                Current.WindowX = obj.value("WindowX").toInt(Current.WindowX);
-                Current.WindowY = obj.value("WindowY").toInt(Current.WindowY);
-                Current.WindowWidth = obj.value("WindowWidth").toInt(Current.WindowWidth);
-                Current.WindowHeight = obj.value("WindowHeight").toInt(Current.WindowHeight);
-                Current.IsMaximized = obj.value("IsMaximized").toBool(Current.IsMaximized);
-
-                Current.MainSplitterDistance = obj.value("MainSplitterDistance").toInt(Current.MainSplitterDistance);
-                Current.EditorSplitterDistance = obj.value("EditorSplitterDistance").toInt(Current.EditorSplitterDistance);
-                Current.VerticalSplitterDistance = obj.value("VerticalSplitterDistance").toInt(Current.VerticalSplitterDistance);
-
-                Current.LastAssetTypeIndex = obj.value("LastAssetTypeIndex").toInt(Current.LastAssetTypeIndex);
-                Current.LastCategoryIndex = obj.value("LastCategoryIndex").toInt(Current.LastCategoryIndex);
-                Current.LastSourceIndex = obj.value("LastSourceIndex").toInt(Current.LastSourceIndex);
-
-                Current.Trigger_ShowDecimal = obj.value("Trigger_ShowDecimal").toBool(Current.Trigger_ShowDecimal);
-                Current.Trigger_ShowAliases = obj.value("Trigger_ShowAliases").toBool(Current.Trigger_ShowAliases);
-                Current.Trigger_CollapseChains = obj.value("Trigger_CollapseChains").toBool(Current.Trigger_CollapseChains);
-
-                Current.Notes_ShowLeafsOnly = obj.value("Notes_ShowLeafsOnly").toBool(Current.Notes_ShowLeafsOnly);
-                Current.Notes_IndentValues = obj.value("Notes_IndentValues").toBool(Current.Notes_IndentValues);
-                Current.NoteIndentStyle = obj.value("NoteIndentStyle").toString(Current.NoteIndentStyle);
-
-                Current.CodeNotePrefix = obj.value("CodeNotePrefix").toString(Current.CodeNotePrefix);
-                Current.CodeNoteSuffix = obj.value("CodeNoteSuffix").toString(Current.CodeNoteSuffix);
-                Current.CodeNoteAlignSuffixes = obj.value("CodeNoteAlignSuffixes").toBool(Current.CodeNoteAlignSuffixes);
-                Current.CodeNoteSuffixOnLastLineOnly =
-                    obj.value("CodeNoteSuffixOnLastLineOnly").toBool(Current.CodeNoteSuffixOnLastLineOnly);
-                Current.CodeNoteAutoPopulatePointers =
-                    obj.value("CodeNoteAutoPopulatePointers").toBool(Current.CodeNoteAutoPopulatePointers);
-
-                if (obj.contains("CodeNoteUnicodeTree"))
-                    Current.CodeNoteUnicodeTree = obj.value("CodeNoteUnicodeTree").toBool(Current.CodeNoteUnicodeTree);
-                else if (obj.contains("NoteIndentStyle"))
-                    Current.CodeNoteUnicodeTree = obj.value("NoteIndentStyle").toString().startsWith("Unicode Tree", Qt::CaseInsensitive);
-
-                if (obj.contains("CodeNoteIndentDescriptions"))
-                    Current.CodeNoteIndentDescriptions = obj.value("CodeNoteIndentDescriptions").toBool(Current.CodeNoteIndentDescriptions);
-                else if (obj.contains("Notes_IndentValues"))
-                    Current.CodeNoteIndentDescriptions = obj.value("Notes_IndentValues").toBool(Current.CodeNoteIndentDescriptions);
-            }
-        }
-        Save();
-        QFile::remove(jsonPath);
-    } catch (...) {
-    }
-}
-
 void AppSettings::Load() {
     QString iniPath = GetSettingsPath();
-    QString legacyJsonPath = QDir(QCoreApplication::applicationDirPath()).filePath("settings.json");
-
-    if (!QFile::exists(iniPath) && QFile::exists(legacyJsonPath)) {
-        MigrateFromJsonIfPresent(legacyJsonPath);
-        return;
-    }
-
     if (!QFile::exists(iniPath)) {
         return;
     }
@@ -112,11 +42,6 @@ void AppSettings::Load() {
         ini.endGroup();
 
         ini.beginGroup("MainWindow");
-        Current.WindowX = ini.value("WindowX", Current.WindowX).toInt();
-        Current.WindowY = ini.value("WindowY", Current.WindowY).toInt();
-        Current.WindowWidth = ini.value("WindowWidth", Current.WindowWidth).toInt();
-        Current.WindowHeight = ini.value("WindowHeight", Current.WindowHeight).toInt();
-        Current.IsMaximized = ini.value("IsMaximized", Current.IsMaximized).toBool();
         Current.MainSplitterDistance = ini.value("MainSplitterDistance", Current.MainSplitterDistance).toInt();
         Current.EditorSplitterDistance = ini.value("EditorSplitterDistance", Current.EditorSplitterDistance).toInt();
         Current.CodeNoteSplitterDistance = ini.value("CodeNoteSplitterDistance", Current.CodeNoteSplitterDistance).toInt();
@@ -133,8 +58,6 @@ void AppSettings::Load() {
 
         ini.beginGroup("CodeNotes");
         Current.Notes_ShowLeafsOnly = ini.value("ShowLeafsOnly", Current.Notes_ShowLeafsOnly).toBool();
-        Current.Notes_IndentValues = ini.value("IndentValues", Current.Notes_IndentValues).toBool();
-        Current.NoteIndentStyle = ini.value("NoteIndentStyle", Current.NoteIndentStyle).toString();
         Current.CodeNotePrefix = ini.value("Prefix", Current.CodeNotePrefix).toString();
         Current.CodeNoteSuffix = ini.value("Suffix", Current.CodeNoteSuffix).toString();
         Current.CodeNoteAlignSuffixes = ini.value("AlignSuffixes", Current.CodeNoteAlignSuffixes).toBool();
@@ -153,14 +76,6 @@ void AppSettings::Load() {
         Current.BatchMultiply_StartNum = ini.value("BatchMultiply_StartNum", Current.BatchMultiply_StartNum).toInt();
         Current.BatchMultiply_Search = ini.value("BatchMultiply_Search", Current.BatchMultiply_Search).toString();
         Current.BatchMultiply_Replace = ini.value("BatchMultiply_Replace", Current.BatchMultiply_Replace).toString();
-
-        Current.NoteMultiply_Copies = ini.value("NoteMultiply_Copies", Current.NoteMultiply_Copies).toInt();
-        Current.NoteMultiply_Stride = ini.value("NoteMultiply_Stride", Current.NoteMultiply_Stride).toString();
-        Current.NoteMultiply_StartNum = ini.value("NoteMultiply_StartNum", Current.NoteMultiply_StartNum).toInt();
-        Current.NoteMultiply_NamingIdx = ini.value("NoteMultiply_NamingIdx", Current.NoteMultiply_NamingIdx).toInt();
-        Current.NoteMultiply_Search = ini.value("NoteMultiply_Search", Current.NoteMultiply_Search).toString();
-        Current.NoteMultiply_Replace = ini.value("NoteMultiply_Replace", Current.NoteMultiply_Replace).toString();
-        Current.NoteMultiply_TargetIdx = ini.value("NoteMultiply_TargetIdx", Current.NoteMultiply_TargetIdx).toInt();
 
         Current.Generator_Copies = ini.value("Generator_Copies", Current.Generator_Copies).toString();
         Current.Generator_Stride = ini.value("Generator_Stride", Current.Generator_Stride).toString();
@@ -184,11 +99,6 @@ void AppSettings::Save() {
         ini.endGroup();
 
         ini.beginGroup("MainWindow");
-        ini.remove("WindowX");
-        ini.remove("WindowY");
-        ini.remove("WindowWidth");
-        ini.remove("WindowHeight");
-        ini.remove("IsMaximized");
         ini.setValue("MainSplitterDistance", Current.MainSplitterDistance);
         ini.setValue("EditorSplitterDistance", Current.EditorSplitterDistance);
         ini.setValue("CodeNoteSplitterDistance", Current.CodeNoteSplitterDistance);
@@ -204,8 +114,6 @@ void AppSettings::Save() {
 
         ini.beginGroup("CodeNotes");
         ini.setValue("ShowLeafsOnly", Current.Notes_ShowLeafsOnly);
-        ini.setValue("IndentValues", Current.Notes_IndentValues);
-        ini.setValue("NoteIndentStyle", Current.NoteIndentStyle);
         ini.setValue("Prefix", Current.CodeNotePrefix);
         ini.setValue("Suffix", Current.CodeNoteSuffix);
         ini.setValue("AlignSuffixes", Current.CodeNoteAlignSuffixes);
@@ -224,14 +132,6 @@ void AppSettings::Save() {
         ini.setValue("BatchMultiply_StartNum", Current.BatchMultiply_StartNum);
         ini.setValue("BatchMultiply_Search", Current.BatchMultiply_Search);
         ini.setValue("BatchMultiply_Replace", Current.BatchMultiply_Replace);
-
-        ini.setValue("NoteMultiply_Copies", Current.NoteMultiply_Copies);
-        ini.setValue("NoteMultiply_Stride", Current.NoteMultiply_Stride);
-        ini.setValue("NoteMultiply_StartNum", Current.NoteMultiply_StartNum);
-        ini.setValue("NoteMultiply_NamingIdx", Current.NoteMultiply_NamingIdx);
-        ini.setValue("NoteMultiply_Search", Current.NoteMultiply_Search);
-        ini.setValue("NoteMultiply_Replace", Current.NoteMultiply_Replace);
-        ini.setValue("NoteMultiply_TargetIdx", Current.NoteMultiply_TargetIdx);
 
         ini.setValue("Generator_Copies", Current.Generator_Copies);
         ini.setValue("Generator_Stride", Current.Generator_Stride);
@@ -308,29 +208,16 @@ void AppSettings::SaveDialogGeometry(const QString& dialogName, const QPoint& po
 
 bool AppSettings::LoadDialogGeometry(const QString& dialogName, QPoint& pos, QSize& size) {
     try {
-        QString val;
         QString layoutPath = GetLayoutPath();
-        if (QFile::exists(layoutPath)) {
-            QSettings layoutIni(layoutPath, QSettings::IniFormat);
-            layoutIni.beginGroup("DialogPositions");
-            if (layoutIni.contains(dialogName))
-                val = layoutIni.value(dialogName).toString();
-            layoutIni.endGroup();
-        }
+        if (!QFile::exists(layoutPath))
+            return false;
 
-        // One-time fallback to legacy settings.ini DialogPositions if not yet in layout.ini
-        if (val.isEmpty()) {
-            QString iniPath = GetSettingsPath();
-            if (!QFile::exists(iniPath))
-                return false;
-
-            QSettings ini(iniPath, QSettings::IniFormat);
-            ini.beginGroup("DialogPositions");
-            if (!ini.contains(dialogName))
-                return false;
-            val = ini.value(dialogName).toString();
-            ini.endGroup();
-        }
+        QSettings layoutIni(layoutPath, QSettings::IniFormat);
+        layoutIni.beginGroup("DialogPositions");
+        if (!layoutIni.contains(dialogName))
+            return false;
+        QString val = layoutIni.value(dialogName).toString();
+        layoutIni.endGroup();
 
         if (val.startsWith("@ByteArray"))
             return false;

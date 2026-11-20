@@ -22,6 +22,7 @@
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QStyle>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -140,9 +141,9 @@ void TriggerEditorWidget::InitializeUI() {
     row1->setSpacing(6);
 
     pbBadge = new QLabel(panelHeader);
+    pbBadge->setObjectName("pbBadge");
     pbBadge->setFixedSize(64, 64);
     pbBadge->setScaledContents(true);
-    pbBadge->setStyleSheet("border: 1px solid #adadad; background-color: #e0e0e0;");
     row1->addWidget(pbBadge);
 
     lvLeaderboardComponents = new QListWidget(panelHeader);
@@ -208,11 +209,11 @@ void TriggerEditorWidget::InitializeUI() {
     row2->addWidget(chkLowerIsBetter);
 
     lblAuthor = new QLabel("Author: Unknown", panelHeader);
-    lblAuthor->setStyleSheet("color: #707070;");
+    lblAuthor->setObjectName("lblAuthor");
     row2->addWidget(lblAuthor);
 
     lblAssetState = new QLabel("Core", panelHeader);
-    lblAssetState->setStyleSheet("font-style: italic; color: #707070;");
+    lblAssetState->setObjectName("lblAssetState");
     row2->addWidget(lblAssetState);
 
     row2->addStretch();
@@ -578,11 +579,6 @@ void TriggerEditorWidget::SetShowAliases(bool value) { chkAliasMode->setChecked(
 bool TriggerEditorWidget::CollapseChains() const { return _collapseChains; }
 void TriggerEditorWidget::SetCollapseChains(bool value) { chkCollapseChains->setChecked(value); }
 
-QString TriggerEditorWidget::GetTriggerText() const {
-    const_cast<TriggerEditorWidget*>(this)->CommitActiveEditor();
-    return _viewModel.BoundAsset != nullptr ? _viewModel.BoundAsset->Logic : "";
-}
-
 void TriggerEditorWidget::SetTriggerText(const QString& value) {
     if (_viewModel.BoundAsset != nullptr && _viewModel.BoundAsset->Logic != value) {
         _viewModel.BoundAsset->Logic = value;
@@ -593,7 +589,6 @@ void TriggerEditorWidget::SetTriggerText(const QString& value) {
 void TriggerEditorWidget::SetStatus(const QString& msg) {
     if (lblEditorStatus != nullptr)
         lblEditorStatus->setText(msg);
-    emit StatusUpdateRequested(msg);
 }
 
 void TriggerEditorWidget::SetNotes(const QList<CodeNote>& notes) {
@@ -700,11 +695,13 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
 
         if (asset->State == AssetState::Local) {
             lblAssetState->setText("Local");
-            lblAssetState->setStyleSheet("color: #2e8b57; font-style: italic;");
+            lblAssetState->setProperty("assetState", "local");
         } else {
             lblAssetState->setText(setType);
-            lblAssetState->setStyleSheet("color: #707070; font-style: italic;");
+            lblAssetState->setProperty("assetState", "server");
         }
+        lblAssetState->style()->unpolish(lblAssetState);
+        lblAssetState->style()->polish(lblAssetState);
 
         btnReset->setVisible(asset->State != AssetState::Local);
     }
@@ -2361,7 +2358,6 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
     rootItems.reserve(128);
     int autoStride = 0;
     int detectedCopies = 1;
-    QMap<int64_t, int> sizeCounts;
 
     std::shared_ptr<GeneratorConfigDialog::GeneratorItemViewModel> activeChainParent = nullptr;
     std::shared_ptr<NoteNode> activeNoteNode = nullptr;
@@ -2416,8 +2412,6 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
 
                     if (autoStride == 0 && root->Size > 1)
                         autoStride = static_cast<int>(root->Size);
-                    if (root->Size > 1)
-                        sizeCounts[root->Size]++;
 
                     auto syntheticContext = std::make_shared<NoteNode>();
                     for (const auto& n : nodes) {
@@ -2445,8 +2439,6 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
 
                             if (autoStride == 0 && match.Node->Size > 1)
                                 autoStride = static_cast<int>(match.Node->Size);
-                            if (match.Node->Size > 1)
-                                sizeCounts[match.Node->Size]++;
                             break;
                         }
                     }

@@ -35,7 +35,6 @@ class RaLogicSyntax {
     static QString GetPlatformPointerTemplate(int consoleId, const QString& noteHeader = "");
     static QString GetPlatformPointerPrefix(int consoleId);
     static QString GetPlatformPointerMask(int consoleId);
-    static bool IsPointerOrientedConsole(int consoleId);
 };
 
 } // namespace RALE

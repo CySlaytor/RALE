@@ -14,13 +14,6 @@ class UserSettings {
     bool ShowLogicReviewer = false;
     QString Theme = "Light"; // "Light" or "Dark"
 
-    // Window Geometry
-    int WindowX = -1;
-    int WindowY = -1;
-    int WindowWidth = 1200;
-    int WindowHeight = 700;
-    bool IsMaximized = false;
-
     // Layout (Splitters)
     int MainSplitterDistance = 260;
     int EditorSplitterDistance = 600;
@@ -41,8 +34,6 @@ class UserSettings {
 
     // Code Note Editor State
     bool Notes_ShowLeafsOnly = false;
-    bool Notes_IndentValues = true;
-    QString NoteIndentStyle = "Unicode Tree (├─)";
 
     // Code Note Formatting Options (Ported from Pointer Finder 2.0)
     QString CodeNotePrefix = "+";
@@ -62,14 +53,6 @@ class UserSettings {
     int BatchMultiply_StartNum = 2;
     QString BatchMultiply_Search = "";
     QString BatchMultiply_Replace = "";
-
-    int NoteMultiply_Copies = 1;
-    QString NoteMultiply_Stride = "0x0";
-    int NoteMultiply_StartNum = 2;
-    int NoteMultiply_NamingIdx = 1;
-    QString NoteMultiply_Search = "";
-    QString NoteMultiply_Replace = "";
-    int NoteMultiply_TargetIdx = 0;
 
     QString Generator_Copies = "1";
     QString Generator_Stride = "0x0";
@@ -93,9 +76,6 @@ class AppSettings {
 
     static QString GetSettingsPath();
     static QString GetLayoutPath();
-
-  private:
-    static void MigrateFromJsonIfPresent(const QString& jsonPath);
 };
 
 } // namespace RALE

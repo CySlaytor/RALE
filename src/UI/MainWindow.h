@@ -170,6 +170,7 @@ class MainWindow : public QMainWindow {
     void UpdateSelectionUI();
     void SelectAssetInGrid(const std::shared_ptr<IAssetItem>& asset);
     void RunGlobalValidation();
+    void RefreshSelectedAssetAfterStoreChange();
 
     void EnsureAssetIsLocal(const std::shared_ptr<IAssetItem>& asset);
     void EnsureAssetIsLocal();
@@ -177,6 +178,7 @@ class MainWindow : public QMainWindow {
     void ApplyBulkEdit(const std::shared_ptr<IAssetItem>& sourceTemplate);
     void MoveAsset(int direction);
     bool IsAssetInLocalStore(const std::shared_ptr<IAssetItem>& item);
+    bool IsServerAssetId(int id, bool isLeaderboard) const;
 };
 
 } // namespace RALE

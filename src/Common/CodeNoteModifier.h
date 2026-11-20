@@ -20,8 +20,6 @@ class CodeNoteModifier {
         IndentStyle Indentation = IndentStyle::Plus;
         SeparatorStyle Separator = SeparatorStyle::Pipe; // Changed from Space
 
-        QString GetIndentString(int depth) const;
-        QString GetBodyIndentString(int depth) const;
         QString GetSeparatorString() const;
     };
 
@@ -30,7 +28,7 @@ class CodeNoteModifier {
 
     static QString DeleteNodeFamily(const QString& baseNoteText, const std::shared_ptr<NoteNode>& node);
     static QString UpdateRealNode(const QString& baseNoteText, const std::shared_ptr<NoteNode>& node, const QString& newContent,
-                                  const NoteStyle& globalStyle, const QString& indentStylePref, bool indentDescriptions);
+                                  const NoteStyle& globalStyle);
 
     static QString InjectNoteContent(const QString& baseNoteText, const QList<int64_t>& chainOffsets, const QString& newContent,
                                      const NoteStyle& globalStyle, const QString& indentStylePref, bool indentDescriptions);

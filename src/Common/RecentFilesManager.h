@@ -26,8 +26,6 @@ class RecentFilesManager {
 
     // Save to JSON in Metadata folder to store Title + Path structure
     QString GetFilePathJson() const;
-    // Legacy support
-    QString GetFilePathTxt() const;
 };
 
 } // namespace RALE

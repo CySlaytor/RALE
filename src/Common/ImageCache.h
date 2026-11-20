@@ -37,6 +37,7 @@ class ImageCache {
     static QMap<QString, QPixmap> _memoryCache;
     static QMap<QString, QList<CallbackEntry>> _pendingCallbacks;
     static std::unique_ptr<QNetworkAccessManager> _networkManager;
+    static int _cacheGeneration;
 };
 
 } // namespace RALE

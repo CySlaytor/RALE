@@ -18,9 +18,6 @@ class PointerTreeParser : public IPointerTreeParser {
     std::tuple<QString, QString, QString> GeneratePointerLogic(const CodeNote& baseNote, const std::shared_ptr<NoteNode>& selectedNode,
                                                                int consoleId = 0) override;
 
-    // Reverse-engineers the chain of offsets from a specific node up to the root.
-    QList<int64_t> GetOffsetsFromNode(const std::shared_ptr<NoteNode>& node) override;
-
   private:
     // Parses data size from tags in the description (e.g., [16-bit] or [32 bytes] or [30x16 bytes]).
     int64_t ParseSizeFromDescription(const QString& desc, bool* foundTag = nullptr);

@@ -48,24 +48,6 @@ const QMap<QString, QChar> RaLogicSyntax::ReverseFloatSizeMap = {{"Float", 'F'},
 const QMap<QChar, QString> RaLogicSyntax::FloatSizeMap = {{'F', "Float"},       {'B', "Float BE"}, {'H', "Double32"},
                                                           {'I', "Double32 BE"}, {'M', "MBF32"},    {'L', "MBF32 LE"}};
 
-bool RaLogicSyntax::IsPointerOrientedConsole(int consoleId) {
-    switch (consoleId) {
-    case 2:  // N64
-    case 5:  // GBA
-    case 12: // PlayStation (PSX)
-    case 16: // GameCube
-    case 18: // Nintendo DS
-    case 19: // Wii
-    case 21: // PlayStation 2
-    case 40: // Dreamcast
-    case 41: // PlayStation Portable (PSP)
-    case 78: // Nintendo DSi
-        return true;
-    default:
-        return false;
-    }
-}
-
 QString RaLogicSyntax::GetPlatformPointerTemplate(int consoleId, const QString& noteHeader) {
     // If the header already explicitly declares a pointer structure tag, preserve it verbatim
     if (!noteHeader.isEmpty()) {

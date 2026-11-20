@@ -25,6 +25,7 @@ void TriggerViewModel::LoadAsset(std::shared_ptr<IAssetItem> asset) {
     BoundAsset = asset;
     _history.Clear();
     GeneratorRules.clear();
+    _segmentGeneratorRules.clear();
 
     // Select Strategy based on Asset Type
     if (asset != nullptr && asset->isLeaderboard())
@@ -44,7 +45,9 @@ void TriggerViewModel::LoadAsset(std::shared_ptr<IAssetItem> asset) {
 
 void TriggerViewModel::SelectSegment(const QString& segmentName) {
     if (_allSegments.contains(segmentName)) {
+        _segmentGeneratorRules[ActiveSegmentName] = GeneratorRules;
         ActiveSegmentName = segmentName;
+        GeneratorRules = _segmentGeneratorRules.value(ActiveSegmentName);
         // No logic change event needed here usually, the UI just repaints
     }
 }
@@ -54,6 +57,7 @@ void TriggerViewModel::UpdateLogic(bool pushUndo) {
     if (BoundAsset == nullptr)
         return;
 
+    _segmentGeneratorRules[ActiveSegmentName] = GeneratorRules;
     auto& activeGroups = GetActiveGroups();
 
     // 0. Cleanup Array Generation State
@@ -136,6 +140,7 @@ void TriggerViewModel::Redo() {
 void TriggerViewModel::RestoreState(const TriggerEditorState& state) {
     SetStateFromLogic(state.LogicString);
     GeneratorRules = state.Clone().GeneratorRules; // Restore rules
+    _segmentGeneratorRules[ActiveSegmentName] = GeneratorRules;
     if (BoundAsset != nullptr)
         BoundAsset->Logic = state.LogicString;
     emit LogicChanged();
@@ -165,8 +170,15 @@ void TriggerViewModel::RemoveGroup(int index) {
 
     PushUndoState();
 
-    if (GeneratorRules.contains(index))
-        GeneratorRules.remove(index);
+    QMap<int, GeneratorDefinition> shiftedRules;
+    for (auto it = GeneratorRules.cbegin(); it != GeneratorRules.cend(); ++it) {
+        if (it.key() < index)
+            shiftedRules.insert(it.key(), it.value());
+        else if (it.key() > index)
+            shiftedRules.insert(it.key() - 1, it.value());
+    }
+    GeneratorRules = shiftedRules;
+
     groups.removeAt(index);
 
     // Renumber Alts

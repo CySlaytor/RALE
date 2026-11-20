@@ -28,18 +28,7 @@ QString AchievementStrategy::BuildLogic(const QMap<QString, QList<AchievementCon
     const auto& groups = segments.value("Core");
 
     // Rebuild string using 'S' separator
-    QString sb;
-    for (int i = 0; i < groups.size(); i++) {
-        if (i > 0)
-            sb += 'S';
-        const auto& group = groups[i];
-        for (int c = 0; c < group.Conditions.size(); c++) {
-            if (c > 0)
-                sb += '_';
-            sb += LogicFormatter::ConditionToString(group.Conditions[c]);
-        }
-    }
-    return sb;
+    return LogicFormatter::GroupsToString(groups);
 }
 
 QMap<QString, QList<AchievementConditionGroup>> LeaderboardStrategy::ParseLogic(const QString& logic) const {
@@ -106,27 +95,10 @@ QString LeaderboardStrategy::BuildLogic(const QMap<QString, QList<AchievementCon
     QString sb;
 
     // Helper to build a segment string
-    auto BuildSegment = [](const QList<AchievementConditionGroup>& groups) -> QString {
-        if (groups.isEmpty())
-            return "";
-        QString segSb;
-        for (int i = 0; i < groups.size(); i++) {
-            if (i > 0)
-                segSb += 'S';
-            const auto& group = groups[i];
-            for (int c = 0; c < group.Conditions.size(); c++) {
-                if (c > 0)
-                    segSb += '_';
-                segSb += LogicFormatter::ConditionToString(group.Conditions[c]);
-            }
-        }
-        return segSb;
-    };
-
-    sb += "STA:" + BuildSegment(segments.value("Start")) + "::";
-    sb += "CAN:" + BuildSegment(segments.value("Cancel")) + "::";
-    sb += "SUB:" + BuildSegment(segments.value("Submit")) + "::";
-    sb += "VAL:" + BuildSegment(segments.value("Value"));
+    sb += "STA:" + LogicFormatter::GroupsToString(segments.value("Start")) + "::";
+    sb += "CAN:" + LogicFormatter::GroupsToString(segments.value("Cancel")) + "::";
+    sb += "SUB:" + LogicFormatter::GroupsToString(segments.value("Submit")) + "::";
+    sb += "VAL:" + LogicFormatter::GroupsToString(segments.value("Value"));
 
     return sb;
 }

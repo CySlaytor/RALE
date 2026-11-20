@@ -47,7 +47,6 @@ class LogicOptimizerDialog : public QDialog {
     void InitializeUI();
     void loadPositionSettings();
     void savePositionSettings();
-    void ApplyTheme();
     void PopulateGrid();
     void UpdateRowForAsset(const std::shared_ptr<IAssetItem>& asset);
     void UpdateSelectAllButtonState();

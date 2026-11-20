@@ -15,9 +15,6 @@ class RegionDefinitions {
     // Detects the region from a given text string (e.g. Code Note) based on keywords.
     // Returns "Unknown" if no match is found.
     static QString DetectRegion(const QString& text);
-
-    // Checks if a text contains keywords for a specific region.
-    static bool IsRegion(const QString& text, const QString& regionKey);
 };
 
 } // namespace RALE

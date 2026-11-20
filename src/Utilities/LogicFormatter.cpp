@@ -39,6 +39,21 @@ QString LogicFormatter::ConditionToString(const AchievementCondition& cond) {
     return sb;
 }
 
+QString LogicFormatter::GroupsToString(const QList<AchievementConditionGroup>& groups) {
+    QString sb;
+    for (int i = 0; i < groups.size(); i++) {
+        if (i > 0)
+            sb += 'S';
+        const auto& group = groups[i];
+        for (int c = 0; c < group.Conditions.size(); c++) {
+            if (c > 0)
+                sb += '_';
+            sb += ConditionToString(group.Conditions[c]);
+        }
+    }
+    return sb;
+}
+
 QString LogicFormatter::OperandToString(const Operand& op) {
     if (op.Type.isEmpty())
         return "";
@@ -98,9 +113,9 @@ QString LogicFormatter::OperandToString(const Operand& op) {
             cleanVal = cleanVal.mid(2);
 
         bool ok = false;
-        int64_t v = cleanVal.toLongLong(&ok, 16);
+        uint64_t uv = cleanVal.toULongLong(&ok, 16);
         if (ok)
-            return QString::number(v);
+            return QString::number(static_cast<int64_t>(uv));
 
         return op.Value;
     } else {
@@ -117,7 +132,8 @@ QString LogicFormatter::FormatDisplayValue(const Operand& operand, bool showDeci
     QString cleanHex = operand.Value;
     cleanHex.remove("0x", Qt::CaseInsensitive);
     bool ok = false;
-    int64_t val = cleanHex.toLongLong(&ok, 16);
+    uint64_t uval = cleanHex.toULongLong(&ok, 16);
+    int64_t val = static_cast<int64_t>(uval);
 
     if (ok) {
         if (operand.Type == "Value") {
@@ -195,14 +211,14 @@ QString LogicFormatter::ParseAndFormatValue(const QString& input, const QString&
         if (hexInput.contains('-'))
             return input;
         bool ok = false;
-        val = hexInput.toLongLong(&ok, 16);
+        val = static_cast<int64_t>(hexInput.toULongLong(&ok, 16));
         if (!ok)
             return input;
         padding = 8;
     } else if (operandType == "Value") {
         if (input.startsWith("0x", Qt::CaseInsensitive)) {
             bool ok = false;
-            val = input.mid(2).toLongLong(&ok, 16);
+            val = static_cast<int64_t>(input.mid(2).toULongLong(&ok, 16));
             if (!ok)
                 return input;
         } else {
@@ -211,10 +227,8 @@ QString LogicFormatter::ParseAndFormatValue(const QString& input, const QString&
             if (!ok) {
                 // Fallback: Try parsing as Hex without 0x prefix (e.g. "ffffffff")
                 // This fixes inputs that look like floats ("f...") from breaking RA parsing
-                val = input.toLongLong(&ok, 16);
-                if (ok) {
-                    // Success parsing as hex
-                } else {
+                val = static_cast<int64_t>(input.toULongLong(&ok, 16));
+                if (!ok) {
                     return input;
                 }
             }

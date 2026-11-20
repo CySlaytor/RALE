@@ -10,24 +10,9 @@
 #include <QPropertyAnimation>
 #include <QProxyStyle>
 #include <QString>
-#include <QStyledItemDelegate>
 #include <QWidget>
 
 namespace RALE {
-
-// Forces classic Win32 dropdown positioning below the QComboBox across the entire app
-class ClassicDropdownStyle : public QProxyStyle {
-  public:
-    explicit ClassicDropdownStyle(QStyle* baseStyle = nullptr) : QProxyStyle(baseStyle) {}
-
-    int styleHint(StyleHint hint, const QStyleOption* option = nullptr, const QWidget* widget = nullptr,
-                  QStyleHintReturn* returnData = nullptr) const override {
-        if (hint == QStyle::SH_ComboBox_Popup) {
-            return 0; // 0 = false: drop down directly below the combobox
-        }
-        return QProxyStyle::styleHint(hint, option, widget, returnData);
-    }
-};
 
 class GlobalComboBoxConfigurator : public QObject {
   public:
@@ -135,25 +120,15 @@ class TooltipAnimationFilter : public QObject {
 };
 
 // Custom proxy style ensuring vector checkboxes and clean combobox arrows across all platforms
-class RaStyle : public ClassicDropdownStyle {
+class RaStyle : public QProxyStyle {
   public:
-    using ClassicDropdownStyle::ClassicDropdownStyle;
+    using QProxyStyle::QProxyStyle;
 
     void drawPrimitive(PrimitiveElement element, const QStyleOption* option, QPainter* painter,
                        const QWidget* widget = nullptr) const override;
     QRect subElementRect(SubElement element, const QStyleOption* option, const QWidget* widget = nullptr) const override;
     int styleHint(StyleHint hint, const QStyleOption* option = nullptr, const QWidget* widget = nullptr,
                   QStyleHintReturn* returnData = nullptr) const override;
-};
-
-// Delegate ensuring 1:1 Windows Forms blue highlight (#0078D7) for current/hovered dropdown items
-class RaComboBoxDelegate : public QStyledItemDelegate {
-    Q_OBJECT
-  public:
-    explicit RaComboBoxDelegate(QObject* parent = nullptr);
-
-    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
-    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
 };
 
 class ThemeManager {

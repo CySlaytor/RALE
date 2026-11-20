@@ -2,6 +2,7 @@
 
 #include "../Models/LogicModels.h"
 
+#include <QList>
 #include <QString>
 
 namespace RALE {
@@ -9,6 +10,7 @@ namespace RALE {
 class LogicFormatter {
   public:
     static QString ConditionToString(const AchievementCondition& cond);
+    static QString GroupsToString(const QList<AchievementConditionGroup>& groups);
     static QString OperandToString(const Operand& op);
     static QString FormatDisplayValue(const Operand& operand, bool showDecimal, const QString& sizeReference = "");
     static QString ParseAndFormatValue(const QString& input, const QString& operandType, const QString& size);

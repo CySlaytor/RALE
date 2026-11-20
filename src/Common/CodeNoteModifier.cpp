@@ -6,36 +6,6 @@
 
 namespace RALE {
 
-QString CodeNoteModifier::NoteStyle::GetIndentString(int depth) const {
-    if (depth <= 1)
-        return "";
-
-    if (Indentation == IndentStyle::Unicode) {
-        if (depth == 2)
-            return QString::fromUtf8("├─");
-        QString sb;
-        for (int i = 0; i < depth - 2; i++)
-            sb += QString::fromUtf8("│ ");
-        sb += QString::fromUtf8("├─");
-        return sb;
-    }
-
-    if (Indentation == IndentStyle::Plus)
-        return QString(depth - 1, '+');
-
-    return QString(depth - 1, '.');
-}
-
-QString CodeNoteModifier::NoteStyle::GetBodyIndentString(int depth) const {
-    if (depth <= 1)
-        return "";
-
-    if (Indentation == IndentStyle::Unicode)
-        return QString((depth - 1) * 2, ' ');
-
-    return QString(depth - 1, '.');
-}
-
 QString CodeNoteModifier::NoteStyle::GetSeparatorString() const {
     switch (Separator) {
     case SeparatorStyle::Pipe:
@@ -271,7 +241,7 @@ QString CodeNoteModifier::DeleteNodeFamily(const QString& baseNoteText, const st
 }
 
 QString CodeNoteModifier::UpdateRealNode(const QString& baseNoteText, const std::shared_ptr<NoteNode>& node, const QString& newContent,
-                                         const NoteStyle& globalStyle, const QString& /*indentStylePref*/, bool /*indentDescriptions*/) {
+                                         const NoteStyle& globalStyle) {
     QString normalized = baseNoteText;
     normalized.replace("\r\n", "\n").replace('\r', '\n');
     QStringList lines = normalized.split('\n');

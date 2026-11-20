@@ -48,7 +48,7 @@ UserTextParser::UserData UserTextParser::ParseUserFile(const QString& filepath) 
         lines.append(in.readLine());
     file.close();
 
-    static const QRegularExpression noteRegex(R"raw(^N0:\s*(0x[0-9A-Fa-f]+)\s*:\s*"(.+)"\s*$)raw",
+    static const QRegularExpression noteRegex(R"raw(^N0:\s*(0x[0-9A-Fa-f]+)\s*:\s*"(.*)"\s*$)raw",
                                               QRegularExpression::CaseInsensitiveOption);
 
     for (const QString& line : lines) {

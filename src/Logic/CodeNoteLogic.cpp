@@ -90,7 +90,9 @@ QList<std::shared_ptr<CodeNoteLogic::CodeNoteNode>> CodeNoteLogic::ParseLinesToT
     bool hasEncounteredOffset = false;
 
     // Support standard offset jumps (+0x, -0x) as well as array element offsets (|0x, |+0x, |-0x)
-    static const QRegularExpression offsetSearch(R"((?:\|[\+\-]?|[\+\-])0x[0-9a-fA-F]+)", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression offsetSearch(
+        QString::fromUtf8(R"(^(?:[.\+\s\x{2500}-\x{257F}]*)((?:\|[\+\-]?|[\+\-])0x[0-9a-fA-F]+))"),
+        QRegularExpression::CaseInsensitiveOption);
 
     for (const auto& line : lines) {
         QString trimmedLine = line.trimmed();
@@ -112,7 +114,7 @@ QList<std::shared_ptr<CodeNoteLogic::CodeNoteNode>> CodeNoteLogic::ParseLinesToT
 
         if (isOffsetLine) {
             hasEncounteredOffset = true;
-            int offsetPos = offsetMatch.capturedStart();
+            int offsetPos = offsetMatch.capturedStart(1);
             QString prefix = untrimmedLine.left(offsetPos);
 
             bool hasBoxChar = false;
@@ -212,7 +214,7 @@ QList<std::shared_ptr<CodeNoteLogic::CodeNoteNode>> CodeNoteLogic::MergeTree(con
             if (hexPart.startsWith("0x", Qt::CaseInsensitive)) {
                 hexPart = hexPart.mid(2);
             }
-            bool ok;
+            bool ok = false;
             qlonglong offsetVal = hexPart.toLongLong(&ok, 16);
             QString key = QString("%1%20x%3").arg(pipePrefix).arg(sign).arg(QString("%1").arg(offsetVal, 2, 16, QChar('0')).toLower());
 
@@ -277,19 +279,25 @@ QList<std::shared_ptr<CodeNoteLogic::CodeNoteNode>> CodeNoteLogic::MergeTree(con
 
 // Helper method to sort nodes intelligently.
 QList<std::shared_ptr<CodeNoteLogic::CodeNoteNode>> CodeNoteLogic::SortNodes(QList<std::shared_ptr<CodeNoteNode>>& nodes) {
-    static const QRegularExpression offsetRegex(R"(^(?:\|[\+\-]?|[\+\-])0x([0-9a-fA-F]+))", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression offsetRegex(R"(^\|?([\+\-]?)0x([0-9a-fA-F]+))", QRegularExpression::CaseInsensitiveOption);
 
     std::sort(nodes.begin(), nodes.end(), [](const std::shared_ptr<CodeNoteNode>& a, const std::shared_ptr<CodeNoteNode>& b) {
-        bool aIsOffset = offsetRegex.match(a->Content).hasMatch();
-        bool bIsOffset = offsetRegex.match(b->Content).hasMatch();
+        auto matchA = offsetRegex.match(a->Content);
+        auto matchB = offsetRegex.match(b->Content);
+        bool aIsOffset = matchA.hasMatch();
+        bool bIsOffset = matchB.hasMatch();
 
         if (aIsOffset != bIsOffset) {
             return !aIsOffset;
         }
 
         if (aIsOffset) {
-            qlonglong aVal = offsetRegex.match(a->Content).captured(1).toLongLong(nullptr, 16);
-            qlonglong bVal = offsetRegex.match(b->Content).captured(1).toLongLong(nullptr, 16);
+            qlonglong aVal = matchA.captured(2).toLongLong(nullptr, 16);
+            if (matchA.captured(1) == "-")
+                aVal = -aVal;
+            qlonglong bVal = matchB.captured(2).toLongLong(nullptr, 16);
+            if (matchB.captured(1) == "-")
+                bVal = -bVal;
             return aVal < bVal;
         }
 

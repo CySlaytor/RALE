@@ -347,28 +347,32 @@ PointerTreeParser::GeneratePointerLogic(const CodeNote& baseNote, const std::sha
             return ok ? v : 0;
         };
 
+        auto FormatHex8 = [](int64_t val) -> QString {
+            return QString("%1").arg(static_cast<quint32>(val), 8, 16, QChar('0'));
+        };
+
         if (isStaticRootArray && !lineage.isEmpty()) {
             // Static Root Array: Top element offset represents direct memory addition in RAM
             bool okBase = false;
             int64_t baseNum = baseAddrStr.toLongLong(&okBase, 16);
             int64_t elemOffset = ParseHexClean(lineage.first()->Offset);
-            int64_t directAddr = baseNum + elemOffset;
+            int64_t directAddr = (okBase ? baseNum : 0) + elemOffset;
 
             if (lineage.size() == 1) {
                 // Direct memory read without indirection
-                sb.append(QString("0x%1").arg(directAddr, 8, 16, QChar('0')));
+                sb.append("0x" + FormatHex8(directAddr));
             } else {
                 // Pointer dereference starting from array element
-                QString directHex = QString("%1").arg(directAddr, 8, 16, QChar('0'));
+                QString directHex = FormatHex8(directAddr);
                 sb.append(QString("I:0x%1%2%3").arg(prefixStr, directHex, maskStr));
 
                 for (int i = 1; i < lineage.size() - 1; ++i) {
                     int64_t offVal = ParseHexClean(lineage[i]->Offset);
-                    sb.append(QString("_I:0x%1%2%3").arg(prefixStr, QString("%1").arg(offVal, 8, 16, QChar('0')), maskStr));
+                    sb.append(QString("_I:0x%1%2%3").arg(prefixStr, FormatHex8(offVal), maskStr));
                 }
 
                 int64_t lastOff = ParseHexClean(lineage.last()->Offset);
-                sb.append(QString("_0x%1").arg(lastOff, 8, 16, QChar('0')));
+                sb.append(QString("_0x%1").arg(FormatHex8(lastOff)));
             }
         } else {
             // Standard Pointer Chain
@@ -376,12 +380,12 @@ PointerTreeParser::GeneratePointerLogic(const CodeNote& baseNote, const std::sha
 
             for (int i = 0; i < lineage.size() - 1; ++i) {
                 int64_t offVal = ParseHexClean(lineage[i]->Offset);
-                sb.append(QString("_I:0x%1%2%3").arg(prefixStr, QString("%1").arg(offVal, 8, 16, QChar('0')), maskStr));
+                sb.append(QString("_I:0x%1%2%3").arg(prefixStr, FormatHex8(offVal), maskStr));
             }
 
             if (!lineage.isEmpty()) {
                 int64_t lastOff = ParseHexClean(lineage.last()->Offset);
-                sb.append(QString("_0x%1").arg(lastOff, 8, 16, QChar('0')));
+                sb.append(QString("_0x%1").arg(FormatHex8(lastOff)));
             }
         }
     } else {
@@ -409,31 +413,6 @@ PointerTreeParser::GeneratePointerLogic(const CodeNote& baseNote, const std::sha
     }
 
     return std::make_tuple(sb, type, size);
-}
-
-// Reverse-engineers the chain of offsets from a specific node up to the root.
-QList<int64_t> PointerTreeParser::GetOffsetsFromNode(const std::shared_ptr<NoteNode>& node) {
-    QList<int64_t> nodeChain;
-    NoteNode* current = node.get();
-    while (current != nullptr && current->IndentLevel != -1) {
-        QString raw = current->Offset;
-        while (raw.startsWith('|') || raw.startsWith('+'))
-            raw = raw.mid(1);
-        QString clean = raw;
-        clean.remove("0x", Qt::CaseInsensitive);
-
-        bool ok = false;
-        int64_t val = clean.toLongLong(&ok, 16);
-        if (ok) {
-            if (current->Offset.contains('-'))
-                val = -val;
-            nodeChain.prepend(val);
-        } else
-            return {}; // Invalid chain
-
-        current = current->Parent;
-    }
-    return nodeChain;
 }
 
 } // namespace RALE

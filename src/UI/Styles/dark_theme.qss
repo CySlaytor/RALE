@@ -118,6 +118,25 @@ QTreeWidget::item, QListWidget::item {
     color: #8a8a8a;
 }
 
+#lblOffsetChain, #lblAuthor {
+    color: #a0a0a0;
+}
+
+#lblAssetState {
+    color: #a0a0a0;
+    font-style: italic;
+}
+
+#lblAssetState[assetState="local"] {
+    color: #3fb950;
+    font-style: italic;
+}
+
+#pbBadge {
+    border: 1px solid #38383c;
+    background-color: #2a2a2e;
+}
+
 QLabel#strideHexLabel {
     color: #58a6ff;
     font-weight: bold;

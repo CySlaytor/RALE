@@ -411,9 +411,6 @@ void ConditionTableModel::ApplyConditionLogicRules(AchievementCondition& cond) {
     else if (RaLogicSyntax::MemoryTypes.contains(cond.RightOperand.Type) && cond.RightOperand.Size.isEmpty())
         cond.RightOperand.Size = "32-bit";
 
-    if (cond.RightOperand.Type == "Value")
-        cond.RightOperand.Size = "";
-
     if (RaLogicSyntax::StrictComparisonFlags.contains(cond.Flag)) {
         if (!RaLogicSyntax::ComparisonOperators.contains(cond.Operator) || cond.Operator.isEmpty()) {
             cond.Operator = "=";
