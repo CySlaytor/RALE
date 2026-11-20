@@ -4,9 +4,10 @@
 ![Framework](https://img.shields.io/badge/Framework-Qt6-green)
 ![Platform](https://img.shields.io/badge/Platform-Windows-lightgray)
 
-A native C++ achievement logic authoring, code note management, and quality-assurance utility built with Qt6, designed for RetroAchievements developers and code review workflows.
+A native C++ achievement logic authoring, code note management, and quality-assurance utility built with Qt6, designed for RetroAchievements developers and code review workflows. Originally developed in C# as **RALogicEditor**, the project has been rebranded as **RALE** and rebuilt using the **C++17 / Qt 6** framework with a renewed architecture and interface.
 
-Originally developed in C# as **RALogicEditor**, the project has been rebranded as **RALE** and rebuilt using the **C++17 / Qt 6** framework with a renewed architecture and interface.
+<img width="1348" height="762" alt="attach" src="https://github.com/user-attachments/assets/66f58b4b-1977-4a55-858c-a00fcb8f2e41" />
+
 
 ---
 
