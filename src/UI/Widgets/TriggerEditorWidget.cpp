@@ -68,6 +68,44 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget* parent) : QWidget(parent), _vi
         RunValidation();
     });
 
+    connect(&_viewModel, &TriggerViewModel::AssetMetadataRestored, this, [this](const TriggerEditorState& state) {
+        bool wasChanging = _isProgrammaticallyChanging;
+        _isProgrammaticallyChanging = true;
+        txtTitle->setText(state.Title);
+        txtDescription->setText(state.Description);
+        _titleBeforeEdit = state.Title;
+        _descBeforeEdit = state.Description;
+
+        if (_viewModel.BoundAsset != nullptr && !_viewModel.BoundAsset->isLeaderboard()) {
+            cmbPoints->setCurrentText(QString::number(state.Points));
+            QString displayType = "";
+            if (state.Type == "progression")
+                displayType = "Progression";
+            else if (state.Type == "win_condition")
+                displayType = "Win";
+            else if (state.Type == "missable")
+                displayType = "Missable";
+
+            int idx = cmbType->findText(displayType);
+            if (idx != -1)
+                cmbType->setCurrentIndex(idx);
+            else
+                cmbType->setCurrentText(displayType);
+        } else if (_viewModel.BoundAsset != nullptr && _viewModel.BoundAsset->isLeaderboard()) {
+            int fIdx = cmbFormat->findData(state.Format);
+            if (fIdx != -1)
+                cmbFormat->setCurrentIndex(fIdx);
+            chkLowerIsBetter->setChecked(state.LowerIsBetter);
+        }
+
+        if (groupsList->count() > 0 && state.ActiveGroupIndex >= 0 && state.ActiveGroupIndex < groupsList->count()) {
+            groupsList->setCurrentRow(state.ActiveGroupIndex);
+        }
+
+        _isProgrammaticallyChanging = wasChanging;
+        emit AchievementDataChanged();
+    });
+
     connect(&_viewModel, &TriggerViewModel::SegmentsChanged, this, [this]() {
         lvLeaderboardComponents->clear();
         QStringList segments = _viewModel.AssetStrategy->GetSegmentNames();
@@ -102,9 +140,14 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget* parent) : QWidget(parent), _vi
 
     connect(&_viewModel, &TriggerViewModel::HistoryChanged, this, &TriggerEditorWidget::HistoryChanged);
 
+    connect(&_conditionModel, &ConditionTableModel::BeforeConditionDataChanged, this, [this]() {
+        int activeGroup = groupsList ? groupsList->currentRow() : 0;
+        _viewModel.PushUndoState(activeGroup);
+    });
+
     // Asynchronously dispatch logic update and validation to prevent beginResetModel from executing inside active setData
     connect(&_conditionModel, &ConditionTableModel::ConditionDataChanged, this,
-            [this]() { QMetaObject::invokeMethod(this, [this]() { _viewModel.UpdateLogic(true); }, Qt::QueuedConnection); });
+            [this]() { QMetaObject::invokeMethod(this, [this]() { _viewModel.UpdateLogic(false); }, Qt::QueuedConnection); });
 }
 
 QIcon TriggerEditorWidget::getThemeIcon(const QString& resourcePath) const {
@@ -162,11 +205,13 @@ void TriggerEditorWidget::InitializeUI() {
     titleFont.setBold(true);
     txtTitle->setFont(titleFont);
     connect(txtTitle, &QLineEdit::textChanged, this, &TriggerEditorWidget::onTitleChanged);
+    connect(txtTitle, &QLineEdit::editingFinished, this, &TriggerEditorWidget::onTitleEditingFinished);
     titleDescCol->addWidget(txtTitle);
 
     txtDescription = new QLineEdit(panelHeader);
     txtDescription->setFixedHeight(23);
     connect(txtDescription, &QLineEdit::textChanged, this, &TriggerEditorWidget::onDescriptionChanged);
+    connect(txtDescription, &QLineEdit::editingFinished, this, &TriggerEditorWidget::onDescriptionEditingFinished);
     titleDescCol->addWidget(txtDescription);
 
     // Row 2: Controls & Details
@@ -683,6 +728,8 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
 
     txtTitle->setText(asset != nullptr ? asset->Title : "");
     txtDescription->setText(asset != nullptr ? asset->Description : "");
+    _titleBeforeEdit = asset != nullptr ? asset->Title : "";
+    _descBeforeEdit = asset != nullptr ? asset->Description : "";
 
     if (asset != nullptr) {
         if (!asset->isLeaderboard()) {
@@ -822,6 +869,8 @@ void TriggerEditorWidget::Clear() {
     _viewModel.LoadAsset(std::make_shared<RaAchievement>());
     txtTitle->clear();
     txtDescription->clear();
+    _titleBeforeEdit.clear();
+    _descBeforeEdit.clear();
     cmbPoints->setCurrentIndex(-1);
     cmbType->setCurrentIndex(-1);
     cmbFormat->setCurrentIndex(-1);
@@ -854,10 +903,13 @@ void TriggerEditorWidget::Clear() {
 }
 
 void TriggerEditorWidget::Undo() {
+    CommitActiveEditor();
     _viewModel.Undo();
     SetStatus("Undone.");
 }
+
 void TriggerEditorWidget::Redo() {
+    CommitActiveEditor();
     _viewModel.Redo();
     SetStatus("Redone.");
 }
@@ -1015,11 +1067,35 @@ void TriggerEditorWidget::onTitleChanged(const QString& text) {
     emit AchievementDataChanged();
 }
 
+void TriggerEditorWidget::onTitleEditingFinished() {
+    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
+        return;
+    if (txtTitle->text() == _titleBeforeEdit)
+        return;
+
+    TriggerEditorState preState = _viewModel.CaptureCurrentState(groupsList ? groupsList->currentRow() : 0);
+    preState.Title = _titleBeforeEdit;
+    _viewModel.PushExplicitState(preState);
+    _titleBeforeEdit = txtTitle->text();
+}
+
 void TriggerEditorWidget::onDescriptionChanged(const QString& text) {
     if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
         return;
     _viewModel.BoundAsset->Description = text;
     emit AchievementDataChanged();
+}
+
+void TriggerEditorWidget::onDescriptionEditingFinished() {
+    if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
+        return;
+    if (txtDescription->text() == _descBeforeEdit)
+        return;
+
+    TriggerEditorState preState = _viewModel.CaptureCurrentState(groupsList ? groupsList->currentRow() : 0);
+    preState.Description = _descBeforeEdit;
+    _viewModel.PushExplicitState(preState);
+    _descBeforeEdit = txtDescription->text();
 }
 
 void TriggerEditorWidget::onPointsChanged() {
@@ -1029,7 +1105,8 @@ void TriggerEditorWidget::onPointsChanged() {
         auto& ach = static_cast<RaAchievement&>(*_viewModel.BoundAsset);
         bool ok = false;
         int p = cmbPoints->currentText().toInt(&ok);
-        if (ok) {
+        if (ok && ach.Points != p) {
+            _viewModel.PushUndoState(groupsList ? groupsList->currentRow() : 0);
             ach.Points = p;
             emit AchievementDataChanged();
         }
@@ -1042,15 +1119,21 @@ void TriggerEditorWidget::onTypeChanged(int /*index*/) {
     if (!_viewModel.BoundAsset->isLeaderboard()) {
         auto& ach = static_cast<RaAchievement&>(*_viewModel.BoundAsset);
         QString t = cmbType->currentText();
+        QString newType = "";
         if (t == "Progression")
-            ach.Type = "progression";
+            newType = "progression";
         else if (t == "Win")
-            ach.Type = "win_condition";
+            newType = "win_condition";
         else if (t == "Missable")
-            ach.Type = "missable";
+            newType = "missable";
         else
-            ach.Type = "";
-        emit AchievementDataChanged();
+            newType = "";
+
+        if (ach.Type != newType) {
+            _viewModel.PushUndoState(groupsList ? groupsList->currentRow() : 0);
+            ach.Type = newType;
+            emit AchievementDataChanged();
+        }
     }
 }
 
@@ -1059,8 +1142,12 @@ void TriggerEditorWidget::onFormatChanged(int /*index*/) {
         return;
     if (_viewModel.BoundAsset->isLeaderboard()) {
         auto& lb = static_cast<RaLeaderboard&>(*_viewModel.BoundAsset);
-        lb.Format = cmbFormat->currentData().toString();
-        emit AchievementDataChanged();
+        QString newFormat = cmbFormat->currentData().toString();
+        if (lb.Format != newFormat) {
+            _viewModel.PushUndoState(groupsList ? groupsList->currentRow() : 0);
+            lb.Format = newFormat;
+            emit AchievementDataChanged();
+        }
     }
 }
 
@@ -1069,8 +1156,11 @@ void TriggerEditorWidget::onLowerIsBetterChanged(bool checked) {
         return;
     if (_viewModel.BoundAsset->isLeaderboard()) {
         auto& lb = static_cast<RaLeaderboard&>(*_viewModel.BoundAsset);
-        lb.LowerIsBetter = checked;
-        emit AchievementDataChanged();
+        if (lb.LowerIsBetter != checked) {
+            _viewModel.PushUndoState(groupsList ? groupsList->currentRow() : 0);
+            lb.LowerIsBetter = checked;
+            emit AchievementDataChanged();
+        }
     }
 }
 
@@ -1415,7 +1505,7 @@ void TriggerEditorWidget::AddCondition() {
     if (row < 0 || row >= groups.size())
         return;
 
-    _viewModel.PushUndoState();
+    _viewModel.PushUndoState(row);
     auto& group = groups[row];
 
     AchievementCondition newCond;
@@ -1479,7 +1569,7 @@ void TriggerEditorWidget::DuplicateSelected() {
     if (selectedIndices.isEmpty())
         return;
 
-    _viewModel.PushUndoState();
+    _viewModel.PushUndoState(row);
     auto& group = groups[row];
 
     int insertIdx = group.Conditions.size();
@@ -1546,7 +1636,7 @@ void TriggerEditorWidget::DeleteSelected() {
     if (toDelete.isEmpty())
         return;
 
-    _viewModel.PushUndoState();
+    _viewModel.PushUndoState(row);
     auto& group = groups[row];
 
     int firstDeleteModelIdx = toDelete.first();
@@ -1654,7 +1744,7 @@ void TriggerEditorWidget::MoveSelected(int direction) {
     if (direction > 0 && selectedUnitIndices.last() >= units.size() - 1)
         return;
 
-    _viewModel.PushUndoState();
+    _viewModel.PushUndoState(row);
 
     if (direction < 0) {
         for (int idx : selectedUnitIndices)
@@ -2044,7 +2134,7 @@ void TriggerEditorWidget::PasteLogic(const QString& logicToPaste) {
     if (row < 0 || row >= groups.size())
         return;
 
-    _viewModel.PushUndoState();
+    _viewModel.PushUndoState(row);
     auto& group = groups[row];
 
     int insertIdx = group.Conditions.size();
@@ -2134,9 +2224,13 @@ void TriggerEditorWidget::ParseAndApplySmartPaste(const QString& raw) {
     }
 
     if (parts.size() >= 3) {
+        _viewModel.PushUndoState(groupsList ? groupsList->currentRow() : 0);
+
         SetTriggerText(parts[0]);
         txtTitle->setText(parts[1]);
         txtDescription->setText(parts[2]);
+        _titleBeforeEdit = parts[1];
+        _descBeforeEdit = parts[2];
 
         if (parts.size() > 5 && !parts[5].isEmpty()) {
             QString t = parts[5].toLower();
@@ -2233,7 +2327,8 @@ void TriggerEditorWidget::AddConditionFromNote(const QString& logicString, const
     if (logicString.isEmpty())
         return;
 
-    _viewModel.PushUndoState();
+    int gRow = groupsList->currentRow();
+    _viewModel.PushUndoState(gRow);
     auto parsed = AchievementParser::ParseAchievementTrigger(logicString, 'S', false);
 
     if (!parsed.isEmpty() && !parsed[0].Conditions.isEmpty()) {
@@ -2255,7 +2350,6 @@ void TriggerEditorWidget::AddConditionFromNote(const QString& logicString, const
             lastCond.RightOperand = Operand{"Value", "", type.compare("Float", Qt::CaseInsensitive) == 0 ? "0.0" : "0"};
         }
 
-        int gRow = groupsList->currentRow();
         auto& groups = _viewModel.GetActiveGroups();
         if (gRow >= 0 && gRow < groups.size()) {
             auto& group = groups[gRow];
@@ -2563,7 +2657,7 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
     GeneratorConfigDialog form(rootItems, autoStride, hasExistingDef ? &existingDef : nullptr, &preSelectedAddresses, this);
 
     if (form.exec() == QDialog::Accepted) {
-        _viewModel.PushUndoState();
+        _viewModel.PushUndoState(groupIndex);
 
         if (!form.IsArray && groupIndex < _viewModel.GetActiveGroups().size() - 1) {
             auto result = QMessageBox::warning(
@@ -2637,7 +2731,7 @@ void TriggerEditorWidget::ApplySmartPadding(QList<std::shared_ptr<GeneratorConfi
 void TriggerEditorWidget::onCommitGeneratorClicked() {
     int row = groupsList->currentRow();
     if (_viewModel.GeneratorRules.contains(row)) {
-        _viewModel.PushUndoState();
+        _viewModel.PushUndoState(row);
         _viewModel.GeneratorRules.remove(row);
         if (!_viewModel.AssetStrategy->isLeaderboard()) {
             auto& groups = _viewModel.GetActiveGroups();

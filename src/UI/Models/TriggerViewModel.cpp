@@ -86,10 +86,9 @@ void TriggerViewModel::UpdateLogic(bool pushUndo) {
 
     // 3. Push Undo State if requested
     if (pushUndo && newLogic != BoundAsset->Logic) {
-        TriggerEditorState state;
+        TriggerEditorState state = CaptureCurrentState();
         state.LogicString = BoundAsset->Logic;
-        state.GeneratorRules = GeneratorRules;
-        _history.PushState(state.Clone());
+        _history.PushState(state);
     }
 
     // 4. Update Asset
@@ -111,39 +110,114 @@ void TriggerViewModel::SetStateFromLogic(const QString& logic) {
 
 #pragma region History
 
-void TriggerViewModel::PushUndoState() {
+TriggerEditorState TriggerViewModel::CaptureCurrentState(int activeGroupIndex) const {
     TriggerEditorState state;
-    state.LogicString = AssetStrategy->BuildLogic(_allSegments);
+    state.Segments = _allSegments;
+    state.ActiveSegmentName = ActiveSegmentName;
+    state.ActiveGroupIndex = activeGroupIndex;
+    state.SegmentGeneratorRules = _segmentGeneratorRules;
     state.GeneratorRules = GeneratorRules;
-    _history.PushState(state.Clone());
+    state.SegmentGeneratorRules[ActiveSegmentName] = GeneratorRules;
+
+    if (AssetStrategy != nullptr)
+        state.LogicString = AssetStrategy->BuildLogic(_allSegments);
+    else if (BoundAsset != nullptr)
+        state.LogicString = BoundAsset->Logic;
+
+    if (BoundAsset != nullptr) {
+        state.Title = BoundAsset->Title;
+        state.Description = BoundAsset->Description;
+        if (!BoundAsset->isLeaderboard()) {
+            const auto* ach = dynamic_cast<const RaAchievement*>(BoundAsset.get());
+            if (ach != nullptr) {
+                state.Points = ach->Points;
+                state.Type = ach->Type;
+            }
+        } else {
+            const auto* lb = dynamic_cast<const RaLeaderboard*>(BoundAsset.get());
+            if (lb != nullptr) {
+                state.Format = lb->Format;
+                state.LowerIsBetter = lb->LowerIsBetter;
+            }
+        }
+    }
+    return state;
+}
+
+void TriggerViewModel::PushExplicitState(const TriggerEditorState& state) {
+    _history.PushState(state);
+}
+
+void TriggerViewModel::PushUndoState(int activeGroupIndex) {
+    _segmentGeneratorRules[ActiveSegmentName] = GeneratorRules;
+    TriggerEditorState state = CaptureCurrentState(activeGroupIndex);
+    _history.PushState(state);
 }
 
 void TriggerViewModel::Undo() {
-    // Create current state wrapper
-    TriggerEditorState current;
-    current.LogicString = AssetStrategy->BuildLogic(_allSegments);
-    current.GeneratorRules = GeneratorRules;
+    if (!_history.CanUndo())
+        return;
 
+    _segmentGeneratorRules[ActiveSegmentName] = GeneratorRules;
+    TriggerEditorState current = CaptureCurrentState();
+
+    _history.IsUndoingRedoing = true;
     TriggerEditorState previous = _history.Undo(current);
     RestoreState(previous);
+    _history.IsUndoingRedoing = false;
+
+    emit HistoryChanged();
 }
 
 void TriggerViewModel::Redo() {
-    TriggerEditorState current;
-    current.LogicString = AssetStrategy->BuildLogic(_allSegments);
-    current.GeneratorRules = GeneratorRules;
+    if (!_history.CanRedo())
+        return;
 
+    _segmentGeneratorRules[ActiveSegmentName] = GeneratorRules;
+    TriggerEditorState current = CaptureCurrentState();
+
+    _history.IsUndoingRedoing = true;
     TriggerEditorState next = _history.Redo(current);
     RestoreState(next);
+    _history.IsUndoingRedoing = false;
+
+    emit HistoryChanged();
 }
 
 void TriggerViewModel::RestoreState(const TriggerEditorState& state) {
-    SetStateFromLogic(state.LogicString);
-    GeneratorRules = state.Clone().GeneratorRules; // Restore rules
-    _segmentGeneratorRules[ActiveSegmentName] = GeneratorRules;
-    if (BoundAsset != nullptr)
+    if (!state.Segments.isEmpty()) {
+        _allSegments = state.Segments;
+    } else {
+        SetStateFromLogic(state.LogicString);
+    }
+
+    _segmentGeneratorRules = state.SegmentGeneratorRules;
+    ActiveSegmentName = state.ActiveSegmentName;
+    if (_segmentGeneratorRules.contains(ActiveSegmentName))
+        GeneratorRules = _segmentGeneratorRules.value(ActiveSegmentName);
+    else
+        GeneratorRules = state.GeneratorRules;
+
+    if (BoundAsset != nullptr) {
         BoundAsset->Logic = state.LogicString;
+        BoundAsset->Title = state.Title;
+        BoundAsset->Description = state.Description;
+        if (!BoundAsset->isLeaderboard()) {
+            auto* ach = dynamic_cast<RaAchievement*>(BoundAsset.get());
+            if (ach != nullptr) {
+                ach->Points = state.Points;
+                ach->Type = state.Type;
+            }
+        } else {
+            auto* lb = dynamic_cast<RaLeaderboard*>(BoundAsset.get());
+            if (lb != nullptr) {
+                lb->Format = state.Format;
+                lb->LowerIsBetter = state.LowerIsBetter;
+            }
+        }
+    }
     emit LogicChanged();
+    emit AssetMetadataRestored(state);
 }
 
 #pragma endregion
@@ -168,7 +242,7 @@ void TriggerViewModel::RemoveGroup(int index) {
     if (index < 0 || index >= groups.size())
         return;
 
-    PushUndoState();
+    PushUndoState(index);
 
     QMap<int, GeneratorDefinition> shiftedRules;
     for (auto it = GeneratorRules.cbegin(); it != GeneratorRules.cend(); ++it) {

@@ -23,10 +23,12 @@
 #include <QLayout>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QShowEvent>
 #include <QStatusBar>
+#include <QTextEdit>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -67,6 +69,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         if (_isLoading || _selectedAsset == nullptr)
             return;
         _projectRepo.EnsureLocalDataExists();
+        if (!_currentAssetDirty) {
+            PushMainUndo();
+            _currentAssetDirty = true;
+        }
         EnsureAssetIsLocal();
         UpdateAssetState(_selectedAsset);
         _isDirty = true;
@@ -79,6 +85,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             return;
         _projectRepo.EnsureLocalDataExists();
 
+        if (!_currentAssetDirty) {
+            PushMainUndo();
+            _currentAssetDirty = true;
+        }
         EnsureAssetIsLocal();
         UpdateAssetState(_selectedAsset);
 
@@ -272,6 +282,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // Undo/Redo State Listeners
     _mainHistory.HistoryChanged = [this]() { UpdateUndoRedoState(); };
     connect(triggerEditor, &TriggerEditorWidget::HistoryChanged, this, &MainWindow::UpdateUndoRedoState);
+    connect(codeNoteEditor, &CodeNoteEditorWidget::HistoryChanged, this, &MainWindow::UpdateUndoRedoState);
     connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget*) { UpdateUndoRedoState(); });
 
     // Update Checker
@@ -364,6 +375,7 @@ void MainWindow::InitializeUI() {
     filterRow2->addWidget(lblSearch);
     txtAssetSearch = new QLineEdit(panelGridTop);
     txtAssetSearch->setFixedHeight(23);
+    connect(txtAssetSearch, &QLineEdit::textChanged, this, &MainWindow::onSearchTextChanged);
     filterRow2->addWidget(txtAssetSearch, 1);
     topGridVBox->addLayout(filterRow2);
 
@@ -481,7 +493,6 @@ void MainWindow::InitializeFilters() {
     });
     connect(cmbSource, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onFilterChanged);
     connect(cmbCategory, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onFilterChanged);
-    connect(txtAssetSearch, &QLineEdit::textChanged, this, &MainWindow::onSearchTextChanged);
 }
 
 void MainWindow::InitializeMainMenu() {
@@ -903,11 +914,11 @@ void MainWindow::UpdateUndoRedoState() {
     bool isNoteContext = focus && (focus == codeNoteEditor || codeNoteEditor->isAncestorOf(focus));
 
     if (isTriggerContext) {
-        actUndo->setEnabled(triggerEditor->CanUndo());
-        actRedo->setEnabled(triggerEditor->CanRedo());
+        actUndo->setEnabled(triggerEditor->CanUndo() || _mainHistory.CanUndo());
+        actRedo->setEnabled(triggerEditor->CanRedo() || _mainHistory.CanRedo());
     } else if (isNoteContext) {
-        actUndo->setEnabled(codeNoteEditor->CanUndo());
-        actRedo->setEnabled(codeNoteEditor->CanRedo());
+        actUndo->setEnabled(codeNoteEditor->CanUndo() || _mainHistory.CanUndo());
+        actRedo->setEnabled(codeNoteEditor->CanRedo() || _mainHistory.CanRedo());
     } else {
         actUndo->setEnabled(_mainHistory.CanUndo());
         actRedo->setEnabled(_mainHistory.CanRedo());
@@ -967,6 +978,7 @@ void MainWindow::LoadFiles(const QString& primaryPath) {
 
         _currentFilePath = primaryPath;
         _selectedAsset = nullptr;
+        _currentAssetDirty = false;
         _currentDisplayList.clear();
         _mainHistory.Clear();
         // Drop the old model/selection before loading; otherwise ReloadDataView can
@@ -1105,6 +1117,7 @@ void MainWindow::LoadSelectedAsset() {
         auto asset = _assetModel.GetAsset(rowIdx);
         if (asset != nullptr) {
             _isLoading = true;
+            _currentAssetDirty = false;
             if (asset->State == AssetState::Synced) {
                 auto clone = asset->clone(false);
                 _selectedAsset = clone;
@@ -1162,6 +1175,7 @@ void MainWindow::RefreshSelectedAssetAfterStoreChange() {
 
     if (updatedAsset != nullptr) {
         _isLoading = true;
+        _currentAssetDirty = false;
         _selectedAsset = (updatedAsset->State == AssetState::Synced) ? updatedAsset->clone(false) : updatedAsset;
         QString displayCat =
             _selectedAsset->Category.isEmpty() ? "Core" : _selectedAsset->Category.left(1).toUpper() + _selectedAsset->Category.mid(1);
@@ -1171,6 +1185,7 @@ void MainWindow::RefreshSelectedAssetAfterStoreChange() {
         UpdateTriggerActionButtons();
     } else {
         _selectedAsset = nullptr;
+        _currentAssetDirty = false;
         triggerEditor->Clear();
         UpdateSelectionUI();
         UpdateTriggerActionButtons();
@@ -1442,6 +1457,7 @@ void MainWindow::UndoMain() {
     _projectRepo.LocalData->Notes = previousState.Notes;
     _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
     _notesCacheDirty = true;
+    _currentAssetDirty = false;
     // Reload the note editors too; otherwise the next note selection emits
     // NoteUpdated and writes the pre-undo note list straight back into LocalData.
     codeNoteEditor->SetNotes(_projectRepo.LocalData->Notes);
@@ -1460,6 +1476,7 @@ void MainWindow::RedoMain() {
     _projectRepo.LocalData->Notes = nextState.Notes;
     _isDirty = _rpDirty || _projectRepo.HasUnsavedChanges();
     _notesCacheDirty = true;
+    _currentAssetDirty = false;
     codeNoteEditor->SetNotes(_projectRepo.LocalData->Notes);
     triggerEditor->SetNotes(_projectRepo.LocalData->Notes);
     ReloadDataView();
@@ -1469,28 +1486,80 @@ void MainWindow::RedoMain() {
 
 void MainWindow::onUndo() {
     QWidget* focus = QApplication::focusWidget();
+    if (focus != nullptr) {
+        if (auto* le = qobject_cast<QLineEdit*>(focus)) {
+            if (le->isUndoAvailable()) {
+                le->undo();
+                return;
+            }
+        } else if (auto* te = qobject_cast<QPlainTextEdit*>(focus)) {
+            if (te->document()->isUndoAvailable()) {
+                te->undo();
+                return;
+            }
+        } else if (auto* qte = qobject_cast<QTextEdit*>(focus)) {
+            if (qte->document()->isUndoAvailable()) {
+                qte->undo();
+                return;
+            }
+        }
+    }
+
     bool isTriggerContext = focus && (focus == triggerEditor || triggerEditor->isAncestorOf(focus));
     bool isNoteContext = focus && (focus == codeNoteEditor || codeNoteEditor->isAncestorOf(focus));
 
-    if (isTriggerContext)
-        triggerEditor->Undo();
-    else if (isNoteContext)
-        codeNoteEditor->Undo();
-    else
+    if (isTriggerContext) {
+        if (triggerEditor->CanUndo())
+            triggerEditor->Undo();
+        else
+            UndoMain();
+    } else if (isNoteContext) {
+        if (codeNoteEditor->CanUndo())
+            codeNoteEditor->Undo();
+        else
+            UndoMain();
+    } else {
         UndoMain();
+    }
 }
 
 void MainWindow::onRedo() {
     QWidget* focus = QApplication::focusWidget();
+    if (focus != nullptr) {
+        if (auto* le = qobject_cast<QLineEdit*>(focus)) {
+            if (le->isRedoAvailable()) {
+                le->redo();
+                return;
+            }
+        } else if (auto* te = qobject_cast<QPlainTextEdit*>(focus)) {
+            if (te->document()->isRedoAvailable()) {
+                te->redo();
+                return;
+            }
+        } else if (auto* qte = qobject_cast<QTextEdit*>(focus)) {
+            if (qte->document()->isRedoAvailable()) {
+                qte->redo();
+                return;
+            }
+        }
+    }
+
     bool isTriggerContext = focus && (focus == triggerEditor || triggerEditor->isAncestorOf(focus));
     bool isNoteContext = focus && (focus == codeNoteEditor || codeNoteEditor->isAncestorOf(focus));
 
-    if (isTriggerContext)
-        triggerEditor->Redo();
-    else if (isNoteContext)
-        codeNoteEditor->Redo();
-    else
+    if (isTriggerContext) {
+        if (triggerEditor->CanRedo())
+            triggerEditor->Redo();
+        else
+            RedoMain();
+    } else if (isNoteContext) {
+        if (codeNoteEditor->CanRedo())
+            codeNoteEditor->Redo();
+        else
+            RedoMain();
+    } else {
         RedoMain();
+    }
 }
 
 void MainWindow::onReload() {
@@ -1778,6 +1847,7 @@ void MainWindow::onDeleteAsset() {
 
     if (deletedSelected) {
         _selectedAsset = nullptr;
+        _currentAssetDirty = false;
         triggerEditor->Clear();
         UpdateSelectionUI();
         UpdateTriggerActionButtons();
@@ -2204,6 +2274,7 @@ void MainWindow::onSaveFile() {
 
         _rpDirty = false;
         _isDirty = false;
+        _currentAssetDirty = false;
         UpdateSelectionUI();
         UpdateTriggerActionButtons();
 

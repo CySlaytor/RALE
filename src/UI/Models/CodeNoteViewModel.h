@@ -106,6 +106,7 @@ class CodeNoteViewModel : public QObject {
     void NoteContentChanged();
     void EditStateChanged(); // Changed from VirtualStateChanged to reflect unified editing
     void SelectionRequested(std::shared_ptr<NoteNode> node);
+    void HistoryChanged();
 
   private:
     QStack<QString> _undoStack;

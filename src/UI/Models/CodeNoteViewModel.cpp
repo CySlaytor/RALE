@@ -40,12 +40,17 @@ void CodeNoteViewModel::PushUndoState() {
         if (_undoStack.isEmpty() || _undoStack.top() != CurrentBaseNote->Note) {
             _undoStack.push(CurrentBaseNote->Note);
             _redoStack.clear();
+            emit HistoryChanged();
         }
     }
 }
 
 void CodeNoteViewModel::Undo() {
     if (CurrentBaseNote != nullptr && !_undoStack.isEmpty()) {
+        if (EditState.IsDirty) {
+            CommitEditState();
+        }
+
         _redoStack.push(CurrentBaseNote->Note);
         QString previous = _undoStack.pop();
 
@@ -64,6 +69,7 @@ void CodeNoteViewModel::Undo() {
         // Clear active buffer so UI refreshes cleanly
         ClearEditState();
         emit NoteContentChanged();
+        emit HistoryChanged();
     }
 }
 
@@ -86,6 +92,7 @@ void CodeNoteViewModel::Redo() {
 
         ClearEditState();
         emit NoteContentChanged();
+        emit HistoryChanged();
     }
 }
 
@@ -248,6 +255,7 @@ void CodeNoteViewModel::SelectBaseNote(const CodeNote& note) {
     CurrentBaseNote = std::make_shared<CodeNote>(note);
     _undoStack.clear(); // Reset undo stack on new note selection
     _redoStack.clear();
+    emit HistoryChanged();
 
     ClearEditState();
 

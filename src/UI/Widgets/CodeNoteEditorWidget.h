@@ -46,8 +46,8 @@ class CodeNoteEditorWidget : public QWidget {
 
     const QList<CodeNote>& GetAllNotes() const { return _viewModel->GetAllNotes(); }
 
-    bool CanUndo() const { return _viewModel->CanUndo(); }
-    bool CanRedo() const { return _viewModel->CanRedo(); }
+    bool CanUndo() const;
+    bool CanRedo() const;
     void Undo();
     void Redo();
 
@@ -63,6 +63,7 @@ class CodeNoteEditorWidget : public QWidget {
     void BatchNotesApplied();
     void NoteResetRequested(const QString& address);
     void NoteRevertRequested(const QString& address);
+    void HistoryChanged();
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;

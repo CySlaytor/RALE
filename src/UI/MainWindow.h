@@ -103,6 +103,7 @@ class MainWindow : public QMainWindow {
     bool _isLoading = false;
     bool _isDirty = false;
     bool _rpDirty = false;
+    bool _currentAssetDirty = false;
     bool _isFirstShow = true;
     bool _splittersRestored = false;
     bool _updateCheckCanceled = false;

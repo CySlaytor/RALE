@@ -94,7 +94,9 @@ class TriggerEditorWidget : public QWidget {
 
   private slots:
     void onTitleChanged(const QString& text);
+    void onTitleEditingFinished();
     void onDescriptionChanged(const QString& text);
+    void onDescriptionEditingFinished();
     void onPointsChanged();
     void onTypeChanged(int index);
     void onFormatChanged(int index);
@@ -141,6 +143,8 @@ class TriggerEditorWidget : public QWidget {
     bool _showAliases = false;
     bool _collapseChains = false;
     QString _preserveSegmentSelection = "";
+    QString _titleBeforeEdit = "";
+    QString _descBeforeEdit = "";
 
     QList<ValidationIssue> _currentIssues;
     QMap<QString, QList<std::shared_ptr<NoteNode>>> _notesLookup;

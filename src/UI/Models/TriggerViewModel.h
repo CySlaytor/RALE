@@ -69,7 +69,9 @@ class TriggerViewModel : public QObject {
     void UpdateLogic(bool pushUndo = true);
 
     // History
-    void PushUndoState();
+    TriggerEditorState CaptureCurrentState(int activeGroupIndex = 0) const;
+    void PushExplicitState(const TriggerEditorState& state);
+    void PushUndoState(int activeGroupIndex = 0);
     void Undo();
     void Redo();
 
@@ -86,6 +88,7 @@ class TriggerViewModel : public QObject {
     void LogicChanged();
     void SegmentsChanged(); // Fired when loading new asset
     void HistoryChanged();  // Fired when undo stack changes
+    void AssetMetadataRestored(const TriggerEditorState& state);
 
   private:
     QMap<QString, QMap<int, GeneratorDefinition>> _segmentGeneratorRules;

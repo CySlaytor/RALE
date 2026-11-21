@@ -432,6 +432,8 @@ bool ConditionTableModel::setData(const QModelIndex& index, const QVariant& valu
     if (!index.isValid() || _group == nullptr || role != Qt::EditRole || _readOnly)
         return false;
 
+    emit BeforeConditionDataChanged();
+
     int modelIdx = _visualToModelMap[index.row()];
     auto& cond = _group->Conditions[modelIdx];
     QString str = value.toString();
@@ -508,6 +510,8 @@ bool ConditionTableModel::setData(const QModelIndex& index, const QVariant& valu
 void ConditionTableModel::BulkUpdateConditions(const QList<int>& visualRows, int column, const QString& value) {
     if (_group == nullptr || visualRows.isEmpty() || _readOnly)
         return;
+
+    emit BeforeConditionDataChanged();
 
     for (int vRow : visualRows) {
         if (vRow < 0 || vRow >= _visualToModelMap.size())

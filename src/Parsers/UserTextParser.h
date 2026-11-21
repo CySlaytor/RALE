@@ -19,6 +19,12 @@ class UserTextParser {
         QList<std::shared_ptr<RaLeaderboard>> Leaderboards;
         QList<CodeNote> Notes;
 
+        UserData() = default;
+        UserData(const UserData& other);
+        UserData& operator=(const UserData& other);
+        UserData(UserData&&) noexcept = default;
+        UserData& operator=(UserData&&) noexcept = default;
+
         bool operator==(const UserData& other) const;
         bool operator!=(const UserData& other) const { return !(*this == other); }
     };

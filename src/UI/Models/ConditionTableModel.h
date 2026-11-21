@@ -55,6 +55,7 @@ class ConditionTableModel : public QAbstractTableModel {
     void BulkUpdateConditions(const QList<int>& visualRows, int column, const QString& value);
 
   signals:
+    void BeforeConditionDataChanged();
     void ConditionDataChanged();
 
   private:

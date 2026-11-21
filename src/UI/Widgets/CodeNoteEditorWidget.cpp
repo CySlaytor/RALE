@@ -37,6 +37,7 @@ CodeNoteEditorWidget::CodeNoteEditorWidget(QWidget* parent) : QWidget(parent) {
     connect(_viewModel.get(), &CodeNoteViewModel::EditStateChanged, this, &CodeNoteEditorWidget::onVmEditStateChanged);
     connect(_viewModel.get(), &CodeNoteViewModel::SelectionRequested, this, &CodeNoteEditorWidget::onVmSelectionRequested);
     connect(_viewModel.get(), &CodeNoteViewModel::NoteContentChanged, this, &CodeNoteEditorWidget::NoteUpdated);
+    connect(_viewModel.get(), &CodeNoteViewModel::HistoryChanged, this, &CodeNoteEditorWidget::HistoryChanged);
 
     connect(chkShowLeafsOnly, &QCheckBox::toggled, this, &CodeNoteEditorWidget::RefreshVariableTreeDisplay);
 
@@ -139,6 +140,8 @@ void CodeNoteEditorWidget::InitializeUI() {
     txtNoteBody->setFont(QFont("Consolas", 10));
     txtNoteBody->installEventFilter(this);
     connect(txtNoteBody, &QPlainTextEdit::textChanged, this, &CodeNoteEditorWidget::onNoteBodyTextChanged);
+    connect(txtNoteBody->document(), &QTextDocument::undoAvailable, this, [this](bool) { emit HistoryChanged(); });
+    connect(txtNoteBody->document(), &QTextDocument::redoAvailable, this, [this](bool) { emit HistoryChanged(); });
 
     cmsNoteContext = new QMenu(this);
     auto* actCut = cmsNoteContext->addAction(getThemeIcon(":/icons/cut.svg"), "Cut", this, &CodeNoteEditorWidget::onCutClicked);
@@ -236,9 +239,7 @@ void CodeNoteEditorWidget::InitializeUI() {
 bool CodeNoteEditorWidget::eventFilter(QObject* watched, QEvent* event) {
     if (watched == txtNoteBody) {
         if (event->type() == QEvent::FocusIn) {
-            if (!txtNoteBody->isReadOnly()) {
-                _viewModel->PushUndoState();
-            }
+            // Keep FocusIn lightweight
         } else if (event->type() == QEvent::KeyPress) {
             auto* ke = static_cast<QKeyEvent*>(event);
             if (ke->modifiers() == Qt::ControlModifier && ke->key() == Qt::Key_Z) {
@@ -254,23 +255,49 @@ bool CodeNoteEditorWidget::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
 }
 
+bool CodeNoteEditorWidget::CanUndo() const {
+    if (txtNoteBody && txtNoteBody->document()->isUndoAvailable())
+        return true;
+    return _viewModel && _viewModel->CanUndo();
+}
+
+bool CodeNoteEditorWidget::CanRedo() const {
+    if (txtNoteBody && txtNoteBody->document()->isRedoAvailable())
+        return true;
+    return _viewModel && _viewModel->CanRedo();
+}
+
 void CodeNoteEditorWidget::Undo() {
+    if (txtNoteBody && txtNoteBody->hasFocus() && txtNoteBody->document()->isUndoAvailable()) {
+        txtNoteBody->undo();
+        emit HistoryChanged();
+        return;
+    }
+
     if (_viewModel->CanUndo()) {
         _viewModel->Undo();
         _hasUnsavedChanges = true;
         QString msg = "Undone.";
         UpdateStatusDisplay(&msg);
         UpdateActionButtons();
+        emit HistoryChanged();
     }
 }
 
 void CodeNoteEditorWidget::Redo() {
+    if (txtNoteBody && txtNoteBody->hasFocus() && txtNoteBody->document()->isRedoAvailable()) {
+        txtNoteBody->redo();
+        emit HistoryChanged();
+        return;
+    }
+
     if (_viewModel->CanRedo()) {
         _viewModel->Redo();
         _hasUnsavedChanges = true;
         QString msg = "Redone.";
         UpdateStatusDisplay(&msg);
         UpdateActionButtons();
+        emit HistoryChanged();
     }
 }
 
@@ -385,6 +412,7 @@ void CodeNoteEditorWidget::onBtnCloneStrideClicked() {
 
     emit NoteUpdated();
     emit BatchNotesApplied();
+    emit HistoryChanged();
 }
 
 void CodeNoteEditorWidget::onBtnRevertClicked() {
@@ -452,6 +480,7 @@ void CodeNoteEditorWidget::onBtnFixHierarchyClicked() {
         QString msg = "Hierarchy fixed.";
         UpdateStatusDisplay(&msg);
         UpdateActionButtons();
+        emit HistoryChanged();
     }
 }
 
@@ -501,6 +530,7 @@ void CodeNoteEditorWidget::SetNotes(const QList<CodeNote>& notes) {
     UpdateStatusDisplay(nullptr);
     UpdateActionButtons();
     _isInternalUpdate = false;
+    emit HistoryChanged();
 }
 
 void CodeNoteEditorWidget::ApplyFilter(bool autoSelectFirst) {

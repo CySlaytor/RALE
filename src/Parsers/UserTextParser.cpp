@@ -6,6 +6,27 @@
 
 namespace RALE {
 
+UserTextParser::UserData::UserData(const UserData& other) {
+    for (const auto& a : other.Achievements)
+        Achievements.append(a ? a->cloneAchievement(false) : nullptr);
+    for (const auto& l : other.Leaderboards)
+        Leaderboards.append(l ? l->cloneLeaderboard(false) : nullptr);
+    Notes = other.Notes;
+}
+
+UserTextParser::UserData& UserTextParser::UserData::operator=(const UserData& other) {
+    if (this != &other) {
+        Achievements.clear();
+        for (const auto& a : other.Achievements)
+            Achievements.append(a ? a->cloneAchievement(false) : nullptr);
+        Leaderboards.clear();
+        for (const auto& l : other.Leaderboards)
+            Leaderboards.append(l ? l->cloneLeaderboard(false) : nullptr);
+        Notes = other.Notes;
+    }
+    return *this;
+}
+
 bool UserTextParser::UserData::operator==(const UserData& other) const {
     if (Notes != other.Notes)
         return false;
