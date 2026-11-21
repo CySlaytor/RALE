@@ -20,9 +20,10 @@ QString CodeNoteModifier::NoteStyle::GetSeparatorString() const {
 }
 
 bool CodeNoteModifier::IsNodeBoundary(const QString& line) {
-    // Updated to support standard (+0x, -0x) and array (|0x, |+0x, |-0x) boundaries
+    // Updated to support standard (+0x, -0x) and array (|0x, |+0x, |-0x, |++0x) boundaries
     static const QRegularExpression regex(
-        QString::fromUtf8(R"(^([.\+\s\x{2500}-\x{257F}]*)(\|[\+\-]?|[\+\-]?)(0x[0-9A-Fa-f]+)\s*([|=:])?\s*(.*)$)"),
+        QString::fromUtf8(
+            R"(^([.\+\s\x{2500}-\x{257F}]*(?:\|\++(?=[\+\-]0x))?)(\|[\+\-]?|[\+\-]?)(0x[0-9A-Fa-f]+)\s*([|=:])?\s*(.*)$)"),
         QRegularExpression::CaseInsensitiveOption);
 
     auto match = regex.match(line);
@@ -44,8 +45,9 @@ bool CodeNoteModifier::IsNodeBoundary(const QString& line) {
 }
 
 QString CodeNoteModifier::ExtractExactPrefix(const QString& line) {
-    static const QRegularExpression regex(QString::fromUtf8(R"(^([.\+\s\x{2500}-\x{257F}]*)(\|[\+\-]?|[\+\-]?)(0x[0-9A-Fa-f]+))"),
-                                          QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression regex(
+        QString::fromUtf8(R"(^([.\+\s\x{2500}-\x{257F}]*(?:\|\++(?=[\+\-]0x))?)(\|[\+\-]?|[\+\-]?)(0x[0-9A-Fa-f]+))"),
+        QRegularExpression::CaseInsensitiveOption);
 
     auto match = regex.match(line);
     if (match.hasMatch()) {
@@ -202,7 +204,16 @@ QString CodeNoteModifier::DeleteNodeFamily(const QString& baseNoteText, const st
     if (node->RawLineIndex >= lines.size() || node->RawLineIndex < 0)
         return baseNoteText;
 
-    QString targetPrefix = ExtractExactPrefix(lines[node->RawLineIndex]);
+    auto EffectiveDepth = [](const QString& line) {
+        QString pfx = ExtractExactPrefix(line);
+        int depth = pfx.length();
+        QString rest = line.mid(depth);
+        if (rest.startsWith("|+") || rest.startsWith("|-"))
+            depth += 1;
+        return depth;
+    };
+
+    int targetDepth = EffectiveDepth(lines[node->RawLineIndex]);
 
     int removeCount = 1;
     int idx = node->RawLineIndex + 1;
@@ -216,8 +227,8 @@ QString CodeNoteModifier::DeleteNodeFamily(const QString& baseNoteText, const st
         }
 
         if (IsNodeBoundary(line)) {
-            QString currentPrefix = ExtractExactPrefix(line);
-            if (currentPrefix.length() <= targetPrefix.length()) {
+            int currentDepth = EffectiveDepth(line);
+            if (currentDepth <= targetDepth) {
                 break;
             }
         }
@@ -283,7 +294,8 @@ QString CodeNoteModifier::UpdateRealNode(const QString& baseNoteText, const std:
         offsetHex = offsetHex.mid(1);
     if (!offsetHex.startsWith("0x", Qt::CaseInsensitive))
         offsetHex = "0x" + offsetHex;
-    QString sign = isArrayElem ? "|" : (node->Offset.startsWith('-') ? "-" : "+");
+    QString sign = node->IsArrayChild ? (node->Offset.startsWith("|-") ? "|-" : "|+")
+                                      : (isArrayElem ? "|" : (node->Offset.startsWith('-') ? "-" : "+"));
 
     QString sep = style.GetSeparatorString();
 

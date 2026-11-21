@@ -16,6 +16,7 @@ class NoteNode {
 
     // Size in bytes covered by this note (default 1)
     int64_t Size = 1;
+    int64_t ArrayStride = 0;
 
     int RawLineIndex = 0;
     int IndentLevel = 0;
@@ -24,8 +25,12 @@ class NoteNode {
     QList<std::shared_ptr<NoteNode>> Children;
 
     // Array structure tracking ported from Pointer Finder 2.0
-    bool IsArrayElement = false; // True for root/indexed array elements: |0x00
-    bool IsArrayChild = false;   // True for child fields inside array elements: |+0x04
+    bool IsArrayElement = false;      // True for root/indexed array elements: |0x00
+    bool IsArrayChild = false;        // True for child fields inside array elements: |+0x04
+    bool IsInlineArray = false;       // True for embedded arrays at current address: [8000x4 bytes] [Array]
+    bool IsPointerArray = false;      // True for pointers to arrays: [30x16 bytes] Pointer to ...
+    bool IsTemplateInherited = false; // True when cloned from an array template onto a sibling pointer
+    std::weak_ptr<NoteNode> TemplateSource;
 
     QString ToString() const {
         // Formatting happens in the ListControl's Format event,

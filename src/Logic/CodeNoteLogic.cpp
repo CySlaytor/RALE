@@ -49,10 +49,95 @@ QString CodeNoteLogic::FixHierarchy(const QString& inputText, bool useUnicodeTre
     if (indentPrefix.isEmpty())
         indentPrefix = "+";
 
+    headerComment = FormatHeaderComment(headerComment, ptrTemplate);
+
     // 3. Rebuild the text from the cleaned tree structure
     return RebuildTextFromTree(mergedTree, 0, useUnicodeTree, indentDescriptions, headerComment, {}, 0, delimiter, autoPopulate,
                                ptrTemplate, indentPrefix)
         .trimmed();
+}
+
+QString CodeNoteLogic::FormatPointerDescription(const QString& desc, const QString& platformPointerType) {
+    QString name = desc.trimmed();
+    if (name.isEmpty() || name.compare("Pointer", Qt::CaseInsensitive) == 0) {
+        return platformPointerType.isEmpty() ? "[32-bit] Pointer" : platformPointerType;
+    }
+
+    static const QRegularExpression bytesTagRx(R"(\[[^\]]*\bbytes?\b[^\]]*\])", QRegularExpression::CaseInsensitiveOption);
+    if (name.startsWith("[") || bytesTagRx.match(name).hasMatch()) {
+        return name;
+    }
+
+    QString ptrType = platformPointerType.isEmpty() ? "[32-bit] Pointer" : platformPointerType;
+    if (name.startsWith("Pointer to ", Qt::CaseInsensitive)) {
+        QString tag = ptrType;
+        int bracketEnd = tag.indexOf(']');
+        if (bracketEnd != -1) {
+            tag = tag.left(bracketEnd + 1);
+        } else {
+            int spaceIdx = tag.indexOf(' ');
+            if (spaceIdx != -1) {
+                tag = tag.left(spaceIdx);
+            }
+        }
+        return QString("%1 %2").arg(tag, name);
+    }
+
+    return QString("%1 to %2").arg(ptrType, name);
+}
+
+QString CodeNoteLogic::FormatHeaderComment(const QString& headerComment, const QString& platformPointerType) {
+    if (headerComment.trimmed().isEmpty())
+        return headerComment;
+
+    QStringList lines = headerComment.split('\n');
+    if (lines.isEmpty())
+        return headerComment;
+
+    QString firstLine = lines[0].trimmed();
+    static const QRegularExpression headerRegex(R"(^\s*\[([^\]]+)\]\s*(.*)$)");
+    auto match = headerRegex.match(firstLine);
+
+    if (match.hasMatch()) {
+        QString bracketContent = match.captured(1).trimmed();
+        QString remainingText = match.captured(2).trimmed();
+
+        // If it's an array definition, preserve it as-is
+        if (bracketContent.contains("bytes", Qt::CaseInsensitive)) {
+            return headerComment;
+        }
+
+        // Only format as a pointer if the description actually represents a pointer declaration.
+        // Plain variables or bitfield headers (e.g. "[8-bit] Game Boot Up State") must remain as variables.
+        bool isPointerDeclaration = bracketContent.contains("pointer", Qt::CaseInsensitive) ||
+                                    remainingText.contains("pointer", Qt::CaseInsensitive) ||
+                                    remainingText.startsWith("to ", Qt::CaseInsensitive);
+
+        if (isPointerDeclaration) {
+            QString ptrType = platformPointerType.isEmpty() ? "[32-bit] Pointer" : platformPointerType;
+
+            // Strip redundant leading "Pointer" if remainingText starts with it
+            if (remainingText.startsWith("Pointer to ", Qt::CaseInsensitive)) {
+                remainingText = remainingText.mid(8).trimmed(); // leaves "to ..."
+            } else if (remainingText.compare("Pointer", Qt::CaseInsensitive) == 0) {
+                remainingText.clear();
+            } else if (remainingText.startsWith("Pointer ", Qt::CaseInsensitive)) {
+                remainingText = remainingText.mid(8).trimmed();
+            }
+
+            QString newFirstLine;
+            if (remainingText.isEmpty()) {
+                newFirstLine = ptrType;
+            } else {
+                newFirstLine = QString("%1 %2").arg(ptrType, remainingText);
+            }
+
+            lines[0] = newFirstLine;
+            return lines.join('\n');
+        }
+    }
+
+    return headerComment;
 }
 
 QChar CodeNoteLogic::DetectIndentStyle(const QStringList& lines) {
@@ -89,9 +174,9 @@ QList<std::shared_ptr<CodeNoteLogic::CodeNoteNode>> CodeNoteLogic::ParseLinesToT
     int lineIndex = 0;
     bool hasEncounteredOffset = false;
 
-    // Support standard offset jumps (+0x, -0x) as well as array element offsets (|0x, |+0x, |-0x)
+    // Support standard offset jumps (+0x, -0x) as well as array element offsets (|0x, |+0x, |-0x, |++0x)
     static const QRegularExpression offsetSearch(
-        QString::fromUtf8(R"(^(?:[.\+\s\x{2500}-\x{257F}]*)((?:\|[\+\-]?|[\+\-])0x[0-9a-fA-F]+))"),
+        QString::fromUtf8(R"(^(?:[.\+\s\x{2500}-\x{257F}]*(?:\|\++(?=[\+\-]0x))?)((?:\|[\+\-]?|[\+\-])0x[0-9a-fA-F]+))"),
         QRegularExpression::CaseInsensitiveOption);
 
     for (const auto& line : lines) {
@@ -312,7 +397,7 @@ QList<std::shared_ptr<CodeNoteLogic::CodeNoteNode>> CodeNoteLogic::SortNodes(QLi
 QString CodeNoteLogic::RebuildTextFromTree(const QList<std::shared_ptr<CodeNoteNode>>& nodes, int indentLevel, bool useUnicodeTree,
                                            bool indentDescriptions, const QString& headerComment, QList<bool> ancestorIsLast,
                                            int parentNestingLevel, const QString& delimiterSuffix, bool autoPopulateTemplate,
-                                           const QString& pointerTypeTemplate, const QString& indentPrefix) {
+                                           const QString& pointerTypeTemplate, const QString& indentPrefix, int ancestorPipeLevel) {
     QString sb = "";
 
     QString effectiveDelimiter = !delimiterSuffix.isEmpty() ? delimiterSuffix : AppSettings::Current.CodeNoteSuffix;
@@ -373,6 +458,7 @@ QString CodeNoteLogic::RebuildTextFromTree(const QList<std::shared_ptr<CodeNoteN
 
         QString prefix = "";
         int nextNestingLevel = 0;
+        int childPipeLevel = ancestorPipeLevel;
 
         if (useUnicodeTree) {
             if (isAttachedNote) {
@@ -406,9 +492,20 @@ QString CodeNoteLogic::RebuildTextFromTree(const QList<std::shared_ptr<CodeNoteN
                 }
             } else {
                 if (node->Content.startsWith('|')) {
-                    prefix = "";
+                    if (node->Content.startsWith("|+") || node->Content.startsWith("|-")) {
+                        prefix = (indentLevel > 1) ? QString(indentLevel - 1, indentChar) : "";
+                        childPipeLevel = (indentLevel > 1) ? (indentLevel - 1) : 0;
+                    } else {
+                        prefix = (indentLevel > 0) ? QString(indentLevel, indentChar) : "";
+                        childPipeLevel = indentLevel;
+                    }
+                } else if (ancestorPipeLevel >= 0) {
+                    int remainingPlusses = std::max(0, indentLevel - ancestorPipeLevel - 1);
+                    prefix = QString(ancestorPipeLevel, indentChar) + "|" + QString(remainingPlusses, indentChar);
+                    childPipeLevel = ancestorPipeLevel;
                 } else {
                     prefix = indentLevel > 0 ? QString(indentLevel, indentChar) : "";
+                    childPipeLevel = -1;
                 }
 
                 QString fullLine = prefix + node->Content;
@@ -430,9 +527,7 @@ QString CodeNoteLogic::RebuildTextFromTree(const QList<std::shared_ptr<CodeNoteN
                 QString desc = match.captured(3).trimmed();
 
                 if (hasPointerChildren && autoPopulateTemplate) {
-                    if (desc.isEmpty() || desc.compare("Pointer", Qt::CaseInsensitive) == 0) {
-                        desc = pointerTypeTemplate.isEmpty() ? "[32-bit] Pointer" : pointerTypeTemplate;
-                    }
+                    desc = FormatPointerDescription(desc, pointerTypeTemplate);
                 }
 
                 if (!desc.isEmpty()) {
@@ -466,7 +561,8 @@ QString CodeNoteLogic::RebuildTextFromTree(const QList<std::shared_ptr<CodeNoteN
                 nextAncestors.append(isLastChild);
             }
             sb.append(RebuildTextFromTree(node->Children, indentLevel + 1, useUnicodeTree, indentDescriptions, "", nextAncestors,
-                                          nextNestingLevel, effectiveDelimiter, autoPopulateTemplate, pointerTypeTemplate, indentPrefix));
+                                          nextNestingLevel, effectiveDelimiter, autoPopulateTemplate, pointerTypeTemplate, indentPrefix,
+                                          childPipeLevel));
         }
     }
     return sb;

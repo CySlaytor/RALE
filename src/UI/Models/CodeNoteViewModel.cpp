@@ -8,6 +8,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <functional>
 #include <tuple>
 
 namespace RALE {
@@ -406,15 +407,19 @@ void CodeNoteViewModel::CommitEditState() {
 
 std::shared_ptr<NoteNode> CodeNoteViewModel::FindNodeByOffsetString(const QString& offset) {
     QStack<std::shared_ptr<NoteNode>> stack;
-    for (const auto& n : CurrentParsedNodes)
-        stack.push(n);
+    for (const auto& n : CurrentParsedNodes) {
+        if (!n->IsTemplateInherited)
+            stack.push(n);
+    }
 
     while (!stack.isEmpty()) {
         auto n = stack.pop();
         if (n->Offset == offset)
             return n;
-        for (const auto& c : n->Children)
-            stack.push(c);
+        for (const auto& c : n->Children) {
+            if (!c->IsTemplateInherited)
+                stack.push(c);
+        }
     }
     return nullptr;
 }
@@ -618,6 +623,57 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
         return std::numeric_limits<int64_t>::min();
     };
 
+    std::function<std::shared_ptr<NoteNode>(const QList<std::shared_ptr<NoteNode>>&, int64_t, int64_t&)> findNodeStep =
+        [&](const QList<std::shared_ptr<NoteNode>>& levelNodes, int64_t targetOffset, int64_t& outStepRemainder) -> std::shared_ptr<NoteNode> {
+        outStepRemainder = 0;
+        // 1. Exact offset match on non-inline-array nodes
+        for (const auto& n : levelNodes) {
+            if (n == nullptr || n->IsInlineArray)
+                continue;
+            if (ParseOffsetString(n->Offset) == targetOffset)
+                return n;
+        }
+        // 2. Narrowest range match on non-inline-array nodes
+        std::shared_ptr<NoteNode> bestRange = nullptr;
+        int64_t bestStart = 0;
+        for (const auto& n : levelNodes) {
+            if (n == nullptr || n->IsInlineArray)
+                continue;
+            int64_t start = ParseOffsetString(n->Offset);
+            if (start != std::numeric_limits<int64_t>::min() && targetOffset >= start && targetOffset < start + n->Size) {
+                if (bestRange == nullptr || n->Size < bestRange->Size) {
+                    bestRange = n;
+                    bestStart = start;
+                }
+            }
+        }
+        if (bestRange != nullptr) {
+            outStepRemainder = targetOffset - bestStart;
+            return bestRange;
+        }
+        // 3. Inline array modulo-stride match
+        for (const auto& n : levelNodes) {
+            if (n == nullptr || !n->IsInlineArray || n->Size <= 0)
+                continue;
+            int64_t start = ParseOffsetString(n->Offset);
+            if (start != std::numeric_limits<int64_t>::min() && targetOffset >= start && targetOffset < start + n->Size) {
+                int64_t rel = targetOffset - start;
+                if (!n->Children.isEmpty()) {
+                    int64_t elemOff = (n->ArrayStride > 0) ? (rel % n->ArrayStride) : rel;
+                    int64_t childRem = 0;
+                    auto matchedChild = findNodeStep(n->Children, elemOff, childRem);
+                    if (matchedChild != nullptr) {
+                        outStepRemainder = childRem;
+                        return matchedChild;
+                    }
+                }
+                outStepRemainder = rel;
+                return n;
+            }
+        }
+        return nullptr;
+    };
+
     QList<std::shared_ptr<NoteNode>> rootNodes;
     for (const auto& n : nodes) {
         if (n->IndentLevel == 0 || (n->Parent != nullptr && n->Parent->IndentLevel == -1) || (n->Parent == nullptr && n->IndentLevel != -2))
@@ -629,23 +685,10 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
     if (offsets.size() <= 1)
         return;
 
-    std::shared_ptr<NoteNode> current = nullptr;
-    for (const auto& n : rootNodes) {
-        if (ParseOffsetString(n->Offset) == offsets[1]) {
-            current = n;
-            break;
-        }
-    }
-
-    if (current == nullptr) {
-        for (const auto& n : rootNodes) {
-            int64_t start = ParseOffsetString(n->Offset);
-            if (start != std::numeric_limits<int64_t>::min() && offsets[1] >= start && offsets[1] < start + n->Size) {
-                current = n;
-                finalRemainder = offsets[1] - start;
-                break;
-            }
-        }
+    int64_t firstRemainder = 0;
+    std::shared_ptr<NoteNode> current = findNodeStep(rootNodes, offsets[1], firstRemainder);
+    if (current != nullptr) {
+        finalRemainder = firstRemainder;
     }
 
     if (current != nullptr) {
@@ -655,28 +698,8 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
         // Continue matching even if we have a remainder (Array/Struct coverage logic)
         while (matchedDepth < offsets.size()) {
             int64_t nextOffset = offsets[matchedDepth];
-
-            // Try direct children or direct range match exactly at this specific level
-            std::shared_ptr<NoteNode> nextNode = nullptr;
-            for (const auto& n : current->Children) {
-                if (ParseOffsetString(n->Offset) == nextOffset) {
-                    nextNode = n;
-                    break;
-                }
-            }
-
             int64_t stepRemainder = 0;
-
-            if (nextNode == nullptr) {
-                for (const auto& n : current->Children) {
-                    int64_t start = ParseOffsetString(n->Offset);
-                    if (start != std::numeric_limits<int64_t>::min() && nextOffset >= start && nextOffset < start + n->Size) {
-                        nextNode = n;
-                        stepRemainder = nextOffset - start;
-                        break;
-                    }
-                }
-            }
+            std::shared_ptr<NoteNode> nextNode = findNodeStep(current->Children, nextOffset, stepRemainder);
 
             if (nextNode != nullptr) {
                 current = nextNode;
@@ -691,6 +714,12 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
     }
 
     if (bestMatchNode != nullptr && matchedDepth == offsets.size() && finalRemainder == 0) {
+        // Redirect inherited template matches to their real source node in the top-level template
+        if (bestMatchNode->IsTemplateInherited) {
+            if (auto src = bestMatchNode->TemplateSource.lock()) {
+                bestMatchNode = src;
+            }
+        }
         // Exact match found -> Real Node Editing Mode
         RequestNodeSelection(bestMatchNode);
         return;

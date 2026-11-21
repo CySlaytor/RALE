@@ -597,6 +597,9 @@ void CodeNoteEditorWidget::RefreshVariableTreeDisplay() {
     QString filter = txtSearch->text().trimmed();
 
     for (const auto& n : _viewModel->CurrentParsedNodes) {
+        if (n->IsTemplateInherited)
+            continue;
+
         if (!filter.isEmpty()) {
             bool match = n->Description.contains(filter, Qt::CaseInsensitive) || n->Offset.contains(filter, Qt::CaseInsensitive) ||
                          (n->IndentLevel == -2 && n->Content.contains(filter, Qt::CaseInsensitive));
@@ -605,7 +608,14 @@ void CodeNoteEditorWidget::RefreshVariableTreeDisplay() {
         }
 
         if (chkShowLeafsOnly->isChecked()) {
-            if (n->IndentLevel != -2 && (n->Children.size() > 0 || n->IndentLevel == -1))
+            bool hasRealChildren = false;
+            for (const auto& ch : n->Children) {
+                if (!ch->IsTemplateInherited) {
+                    hasRealChildren = true;
+                    break;
+                }
+            }
+            if (n->IndentLevel != -2 && (hasRealChildren || n->IndentLevel == -1))
                 continue;
         }
 

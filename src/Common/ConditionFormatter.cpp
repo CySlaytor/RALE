@@ -9,6 +9,94 @@ namespace RALE {
 
 namespace {
 
+int64_t ParseOffsetHex(const QString& s) {
+    static const QRegularExpression validHexRegex("^[0-9A-Fa-f]+$");
+    if (s.trimmed().isEmpty())
+        return -1;
+    QString clean = s;
+    clean.remove('|');
+    clean = clean.trimmed();
+    bool isNeg = clean.startsWith('-');
+    if (isNeg || clean.startsWith('+'))
+        clean = clean.mid(1).trimmed();
+    if (clean.startsWith("0x", Qt::CaseInsensitive))
+        clean = clean.mid(2).trimmed();
+    if (!validHexRegex.match(clean).hasMatch())
+        return -1;
+    bool ok = false;
+    int64_t v = clean.toLongLong(&ok, 16);
+    if (!ok)
+        return -1;
+    return isNeg ? -v : v;
+}
+
+// Prioritizes exact non-inline-array matches and narrow enclosing ranges before checking
+// inline [NxM bytes] arrays via modulo element stride.
+std::shared_ptr<NoteNode> FindBestMatchingNode(const QList<std::shared_ptr<NoteNode>>& levelNodes, int64_t offset,
+                                               bool allowInlineArrayFallback, int64_t* outMatchedNodeOff = nullptr) {
+    if (offset == -1)
+        return nullptr;
+
+    // 1. Exact offset match on non-inline-array nodes
+    for (const auto& node : levelNodes) {
+        if (node == nullptr || node->IsInlineArray)
+            continue;
+        int64_t nodeOff = ParseOffsetHex(node->Offset);
+        if (nodeOff != -1 && offset == nodeOff) {
+            if (outMatchedNodeOff != nullptr)
+                *outMatchedNodeOff = nodeOff;
+            return node;
+        }
+    }
+
+    // 2. Range match on non-inline-array nodes (smallest enclosing span)
+    std::shared_ptr<NoteNode> bestRangeNode = nullptr;
+    int64_t bestRangeOff = 0;
+    for (const auto& node : levelNodes) {
+        if (node == nullptr || node->IsInlineArray)
+            continue;
+        int64_t nodeOff = ParseOffsetHex(node->Offset);
+        if (nodeOff != -1 && offset >= nodeOff && offset < nodeOff + node->Size) {
+            if (bestRangeNode == nullptr || node->Size < bestRangeNode->Size) {
+                bestRangeNode = node;
+                bestRangeOff = nodeOff;
+            }
+        }
+    }
+    if (bestRangeNode != nullptr) {
+        if (outMatchedNodeOff != nullptr)
+            *outMatchedNodeOff = bestRangeOff;
+        return bestRangeNode;
+    }
+
+    // 3. Inline array container match: resolve element offset modulo ArrayStride into array template children
+    for (const auto& node : levelNodes) {
+        if (node == nullptr || !node->IsInlineArray || node->Size <= 0)
+            continue;
+        int64_t nodeOff = ParseOffsetHex(node->Offset);
+        if (nodeOff != -1 && offset >= nodeOff && offset < nodeOff + node->Size) {
+            int64_t rel = offset - nodeOff;
+            if (!node->Children.isEmpty()) {
+                int64_t elemOff = (node->ArrayStride > 0) ? (rel % node->ArrayStride) : rel;
+                int64_t childNodeOff = 0;
+                auto matchedChild = FindBestMatchingNode(node->Children, elemOff, allowInlineArrayFallback, &childNodeOff);
+                if (matchedChild != nullptr) {
+                    if (outMatchedNodeOff != nullptr)
+                        *outMatchedNodeOff = nodeOff + (rel - elemOff) + childNodeOff;
+                    return matchedChild;
+                }
+            }
+            if (allowInlineArrayFallback) {
+                if (outMatchedNodeOff != nullptr)
+                    *outMatchedNodeOff = nodeOff;
+                return node;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 QList<std::shared_ptr<NoteNode>> ResolveNoteRedirects(QList<std::shared_ptr<NoteNode>> workingNodes,
                                                       const QMap<QString, QList<std::shared_ptr<NoteNode>>>& notesLookup) {
     static const QRegularExpression referRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
@@ -190,18 +278,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                         break;
                     }
 
-                    std::shared_ptr<NoteNode> match = nullptr;
-                    for (const auto& node : currentLevelNodes) {
-                        int64_t nodeOff = ParseHex(node->Offset);
-                        if (node->Offset.contains('-'))
-                            nodeOff = -nodeOff;
-
-                        if (offset >= nodeOff && offset < nodeOff + node->Size) {
-                            match = node;
-                            break;
-                        }
-                    }
-
+                    auto match = FindBestMatchingNode(currentLevelNodes, offset, false);
                     if (match != nullptr)
                         currentLevelNodes = match->Children;
                     else {
@@ -211,17 +288,9 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                 }
 
                 std::shared_ptr<NoteNode> finalMatchNode = nullptr;
+                int64_t finalMatchedOff = 0;
                 if (chainValid && targetVal != -1) {
-                    for (const auto& node : currentLevelNodes) {
-                        int64_t nodeOff = ParseHex(node->Offset);
-                        if (node->Offset.contains('-'))
-                            nodeOff = -nodeOff;
-
-                        if (targetVal >= nodeOff && targetVal < nodeOff + node->Size) {
-                            finalMatchNode = node;
-                            break;
-                        }
-                    }
+                    finalMatchNode = FindBestMatchingNode(currentLevelNodes, targetVal, true, &finalMatchedOff);
                 }
 
                 if (finalMatchNode != nullptr) {
@@ -239,10 +308,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                         }
                     }
 
-                    int64_t nodeOff = ParseHex(finalMatchNode->Offset);
-                    if (finalMatchNode->Offset.contains('-'))
-                        nodeOff = -nodeOff;
-                    int64_t delta = targetVal - nodeOff;
+                    int64_t delta = targetVal - finalMatchedOff;
                     if (delta > 0) {
                         QString suffix = QString(" +0x%1").arg(QString::number(delta, 16).toUpper());
                         if (!desc.endsWith(suffix, Qt::CaseInsensitive))
@@ -322,6 +388,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
         if (bestMatch != nullptr) {
             int64_t relOffset = targetVal - bestMatch->Start;
             std::shared_ptr<NoteNode> specificMatch = nullptr;
+            int64_t matchedOff = 0;
 
             // For range matches, the target is usually an offset within the struct.
             // We can try to find the specific offset node first, before falling back to the struct root!
@@ -336,16 +403,13 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                         topLevelChildren.append(child);
                 }
 
-                for (const auto& child : topLevelChildren) {
-                    if (child->IsArrayChild)
-                        continue;
-                    int64_t childOff = ParseHex(child->Offset);
-                    if (child->Offset.contains('-'))
-                        childOff = -childOff;
-
-                    if (childOff != -1 && relOffset >= childOff && relOffset < childOff + child->Size) {
-                        specificMatch = child;
-                        break;
+                specificMatch = FindBestMatchingNode(topLevelChildren, relOffset, true, &matchedOff);
+                if (specificMatch == nullptr && bestMatch->Node->ArrayStride > 0) {
+                    int64_t elemRel = relOffset % bestMatch->Node->ArrayStride;
+                    int64_t elemOff = 0;
+                    specificMatch = FindBestMatchingNode(topLevelChildren, elemRel, true, &elemOff);
+                    if (specificMatch != nullptr) {
+                        matchedOff = (relOffset - elemRel) + elemOff;
                     }
                 }
             }
@@ -380,11 +444,8 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
 
             desc.replace(multiSpaceRegex, " ");
 
-            int64_t nodeOff = ParseHex(activeNode->Offset);
-            if (activeNode->Offset.contains('-'))
-                nodeOff = -nodeOff;
             // If it was the root struct match, use the Start address. Otherwise use the specific node offset.
-            int64_t baseForDelta = (specificMatch != nullptr && nodeOff != -1) ? (bestMatch->Start + nodeOff) : bestMatch->Start;
+            int64_t baseForDelta = (specificMatch != nullptr) ? (bestMatch->Start + matchedOff) : bestMatch->Start;
 
             int64_t delta = targetVal - baseForDelta;
             if (delta > 0) {
@@ -433,21 +494,28 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
 
                 if (arrSize > 0 && targetVal < baseAddr + arrSize) {
                     int64_t targetOffset = targetVal - baseAddr;
+                    QList<std::shared_ptr<NoteNode>> topLevelChildren;
                     for (const auto& n : nodes) {
-                        if (n->IndentLevel == -2 || n->IndentLevel == -1 || n->IsArrayChild)
-                            continue;
-                        int64_t offVal = ParseHex(n->Offset);
-                        if (n->Offset.contains('-'))
-                            offVal = -offVal;
-                        if (offVal != -1 && targetOffset >= offVal && targetOffset < offVal + n->Size) {
-                            QString d = n->Description;
-                            d.remove(tagRegex);
-                            d = d.trimmed();
-                            int64_t delta = targetOffset - offVal;
-                            if (delta > 0)
-                                d += QString(" +0x%1").arg(QString::number(delta, 16).toUpper());
-                            return d;
-                        }
+                        if (n->IndentLevel != -2 && n->IndentLevel != -1 && (n->Parent == nullptr || n->Parent->IndentLevel == -1))
+                            topLevelChildren.append(n);
+                    }
+                    int64_t matchedOff = 0;
+                    auto matchedNode = FindBestMatchingNode(topLevelChildren, targetOffset, true, &matchedOff);
+                    if (matchedNode == nullptr && root->ArrayStride > 0) {
+                        int64_t elemRel = targetOffset % root->ArrayStride;
+                        int64_t elemOff = 0;
+                        matchedNode = FindBestMatchingNode(topLevelChildren, elemRel, true, &elemOff);
+                        if (matchedNode != nullptr)
+                            matchedOff = (targetOffset - elemRel) + elemOff;
+                    }
+                    if (matchedNode != nullptr) {
+                        QString d = matchedNode->Description;
+                        d.remove(tagRegex);
+                        d = d.trimmed();
+                        int64_t delta = targetOffset - matchedOff;
+                        if (delta > 0)
+                            d += QString(" +0x%1").arg(QString::number(delta, 16).toUpper());
+                        return d;
                     }
                 }
             }

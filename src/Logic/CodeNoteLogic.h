@@ -29,13 +29,16 @@ class CodeNoteLogic {
     };
 
     static QChar DetectIndentStyle(const QStringList& lines);
+    static QString FormatPointerDescription(const QString& desc, const QString& platformPointerType);
+    static QString FormatHeaderComment(const QString& headerComment, const QString& platformPointerType);
     static QList<std::shared_ptr<CodeNoteNode>> ParseLinesToTree(const QStringList& lines, QString& outHeaderComment);
     static QList<std::shared_ptr<CodeNoteNode>> MergeTree(const QList<std::shared_ptr<CodeNoteNode>>& nodes);
     static QList<std::shared_ptr<CodeNoteNode>> SortNodes(QList<std::shared_ptr<CodeNoteNode>>& nodes);
     static QString RebuildTextFromTree(const QList<std::shared_ptr<CodeNoteNode>>& nodes, int indentLevel, bool useUnicodeTree,
                                        bool indentDescriptions, const QString& headerComment = "", QList<bool> ancestorIsLast = {},
                                        int parentNestingLevel = 0, const QString& delimiterSuffix = "", bool autoPopulateTemplate = false,
-                                       const QString& pointerTypeTemplate = "", const QString& indentPrefix = "");
+                                       const QString& pointerTypeTemplate = "", const QString& indentPrefix = "",
+                                       int ancestorPipeLevel = -1);
 };
 
 } // namespace RALE

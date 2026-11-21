@@ -20,10 +20,17 @@ class PointerTreeParser : public IPointerTreeParser {
 
   private:
     // Parses data size from tags in the description (e.g., [16-bit] or [32 bytes] or [30x16 bytes]).
-    int64_t ParseSizeFromDescription(const QString& desc, bool* foundTag = nullptr);
+    int64_t ParseSizeFromDescription(const QString& desc, bool* foundTag = nullptr, int64_t* outStride = nullptr,
+                                     bool* outHasArrayTag = nullptr);
 
     // Helper to traverse tree and populate the list.
     void CollectAllNodes(const std::shared_ptr<NoteNode>& node, QList<std::shared_ptr<NoteNode>>& flatList);
+
+    static bool IsPointerLikeNode(const std::shared_ptr<NoteNode>& node);
+    static int64_t ParseOffsetValue(const QString& offsetStr);
+    static void MergeDuplicateNodes(QList<std::shared_ptr<NoteNode>>& nodes);
+    static void CloneTemplateSubtree(const std::shared_ptr<NoteNode>& templateParent, const std::shared_ptr<NoteNode>& targetParent);
+    static void ApplyArrayTemplates(const std::shared_ptr<NoteNode>& root, const std::shared_ptr<NoteNode>& logicalRoot);
 };
 
 } // namespace RALE

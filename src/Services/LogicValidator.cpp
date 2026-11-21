@@ -5,6 +5,8 @@
 
 #include <QRegularExpression>
 
+#include <functional>
+
 namespace RALE {
 
 QList<ValidationIssue> LogicValidator::ValidateGroup(const AchievementConditionGroup& group, bool otherGroupsHaveReset,
@@ -281,12 +283,60 @@ void LogicValidator::CheckMissingNotes(const AchievementConditionGroup& group, Q
         if (s.trimmed().isEmpty())
             return -1;
         QString clean = s.trimmed();
+        clean.remove('|');
+        bool isNeg = clean.startsWith('-');
+        if (isNeg || clean.startsWith('+'))
+            clean = clean.mid(1).trimmed();
         clean.remove("0x", Qt::CaseInsensitive);
         static const QRegularExpression hexFilterRegex("[^0-9A-Fa-f]");
         clean.remove(hexFilterRegex);
         bool ok = false;
         int64_t v = clean.toLongLong(&ok, 16);
-        return ok ? v : -1;
+        if (!ok)
+            return -1;
+        return isNeg ? -v : v;
+    };
+
+    std::function<std::shared_ptr<NoteNode>(const QList<std::shared_ptr<NoteNode>>&, int64_t, bool)> findBestMatch =
+        [&](const QList<std::shared_ptr<NoteNode>>& levelNodes, int64_t offset, bool allowInlineFallback) -> std::shared_ptr<NoteNode> {
+        if (offset == -1)
+            return nullptr;
+        for (const auto& n : levelNodes) {
+            if (n == nullptr || n->IsInlineArray)
+                continue;
+            if (ParseHex(n->Offset) == offset)
+                return n;
+        }
+        std::shared_ptr<NoteNode> bestRange = nullptr;
+        for (const auto& n : levelNodes) {
+            if (n == nullptr || n->IsInlineArray)
+                continue;
+            int64_t nOff = ParseHex(n->Offset);
+            if (nOff != -1 && offset >= nOff && offset < nOff + n->Size) {
+                if (bestRange == nullptr || n->Size < bestRange->Size)
+                    bestRange = n;
+            }
+        }
+        if (bestRange != nullptr)
+            return bestRange;
+
+        for (const auto& n : levelNodes) {
+            if (n == nullptr || !n->IsInlineArray || n->Size <= 0)
+                continue;
+            int64_t nOff = ParseHex(n->Offset);
+            if (nOff != -1 && offset >= nOff && offset < nOff + n->Size) {
+                int64_t rel = offset - nOff;
+                if (!n->Children.isEmpty()) {
+                    int64_t elemOff = (n->ArrayStride > 0) ? (rel % n->ArrayStride) : rel;
+                    auto matchedChild = findBestMatch(n->Children, elemOff, allowInlineFallback);
+                    if (matchedChild != nullptr)
+                        return matchedChild;
+                }
+                if (allowInlineFallback)
+                    return n;
+            }
+        }
+        return nullptr;
     };
 
     for (int i = 0; i < group.Conditions.size(); i++) {
@@ -404,18 +454,7 @@ void LogicValidator::CheckMissingNotes(const AchievementConditionGroup& group, Q
                             // Iterate intermediate offsets
                             for (int k = 1; k < chain.size(); k++) {
                                 int64_t offVal = ParseHex(chain[k]);
-                                std::shared_ptr<NoteNode> next = nullptr;
-                                for (const auto& n : levelNodes) {
-                                    int64_t nOff = ParseHex(n->Offset);
-                                    if (n->Offset.contains('-'))
-                                        nOff = -nOff;
-
-                                    // Exact match OR Range match
-                                    if (offVal >= nOff && offVal < nOff + n->Size) {
-                                        next = n;
-                                        break;
-                                    }
-                                }
+                                auto next = findBestMatch(levelNodes, offVal, false);
 
                                 if (next == nullptr) {
                                     brokenOffset = chain[k];
@@ -431,17 +470,7 @@ void LogicValidator::CheckMissingNotes(const AchievementConditionGroup& group, Q
                                 // Chain OK, check Leaf (op.Value)
                                 int64_t leafVal = ParseHex(op.Value);
 
-                                bool leafFound = false;
-                                for (const auto& n : levelNodes) {
-                                    int64_t nOff = ParseHex(n->Offset);
-                                    if (n->Offset.contains('-'))
-                                        nOff = -nOff;
-
-                                    if (leafVal >= nOff && leafVal < nOff + n->Size) {
-                                        leafFound = true;
-                                        break;
-                                    }
-                                }
+                                bool leafFound = (findBestMatch(levelNodes, leafVal, true) != nullptr);
 
                                 if (!leafFound) {
                                     msg = QString("Pointer leaf (+%1) not found in resolved structure of Base %2.%3")
