@@ -192,7 +192,7 @@ QString ToDisplayHex(int64_t addr) {
     return QString("0x%1").arg(static_cast<quint64>(addr), 8, 16, QChar('0'));
 }
 
-QString InvertChainPreview(const AchievementConditionGroup& group, int ri) {
+SuggestedLogicFix BuildInvertedChainFix(const AchievementConditionGroup& group, int ri) {
     auto invertReq = [](const AchievementCondition& c) {
         AchievementCondition copy = c.Clone();
         if (copy.Flag == "AndNext")
@@ -204,18 +204,25 @@ QString InvertChainPreview(const AchievementConditionGroup& group, int ri) {
         return copy;
     };
 
-    AchievementCondition target = invertReq(group.Conditions[ri]);
-    target.Flag = "";
-    target.RequiredHits = 0;
-
-    QStringList lines;
-    lines.prepend(LogicFormatter::ConditionToString(target));
+    int chainStart = ri;
     for (int i = ri - 1; i >= 0; --i) {
         if (IsTerminatingFlag(group.Conditions[i].Flag))
             break;
-        lines.prepend(LogicFormatter::ConditionToString(invertReq(group.Conditions[i])));
+        chainStart = i;
     }
-    return lines.join(" | ");
+
+    SuggestedLogicFix fix;
+    fix.StartConditionIndex = chainStart;
+    fix.ReplaceCount = ri - chainStart + 1;
+    for (int i = chainStart; i < ri; ++i) {
+        fix.ReplacementConditions.append(invertReq(group.Conditions[i]));
+    }
+
+    AchievementCondition target = invertReq(group.Conditions[ri]);
+    target.Flag = "";
+    target.RequiredHits = 0;
+    fix.ReplacementConditions.append(target);
+    return fix;
 }
 
 const LogicValidator::ParsedCodeNote* FindNoteContainingAddr(const QList<LogicValidator::ParsedCodeNote>& parsedNotes, int64_t addr) {
@@ -847,13 +854,14 @@ void LogicValidator::CheckUnclearedHits(const QList<AchievementConditionGroup>& 
 
 void LogicValidator::CheckUselessAndNext(const AchievementConditionGroup& group, int groupIndex, QList<ValidationIssue>& issues,
                                          std::shared_ptr<IAssetItem> asset, const QString& segmentName) {
-    QList<AchievementCondition> andNextChain;
+    QList<QPair<int, AchievementCondition>> andNextChain;
     bool valid = false;
 
-    for (const auto& req : group.Conditions) {
+    for (int ri = 0; ri < group.Conditions.size(); ++ri) {
+        const auto& req = group.Conditions[ri];
         // add all AndNexts to a chain
         if (req.Flag == "AndNext")
-            andNextChain.append(req);
+            andNextChain.append({ri, req});
         // if there's an OrNext flag, I'm just going to let this go
         if (req.Flag == "OrNext")
             valid = true;
@@ -867,12 +875,19 @@ void LogicValidator::CheckUselessAndNext(const AchievementConditionGroup& group,
                 valid = true;
 
             if (!andNextChain.isEmpty() && !valid) {
-                for (const auto& andReq : andNextChain) {
+                for (const auto& entry : andNextChain) {
+                    SuggestedLogicFix fix;
+                    fix.StartConditionIndex = entry.first;
+                    fix.ReplaceCount = 1;
+                    AchievementCondition fixed = entry.second.Clone();
+                    fixed.Flag = "";
+                    fix.ReplacementConditions.append(fixed);
+
                     issues.append(ValidationIssue(
                         FeedbackSeverity::Warning, "Useless AndNext",
-                        "Combining requirements with AND is the default behavior. Useless AndNext flags should be removed.", andReq,
+                        "Combining requirements with AND is the default behavior. Useless AndNext flags should be removed.", entry.second,
                         "https://docs.retroachievements.org/developer-docs/flags/andnext-ornext.html", asset, "Logic", segmentName,
-                        groupIndex));
+                        groupIndex, "", "", fix));
                 }
             }
             andNextChain.clear();
@@ -921,9 +936,9 @@ void LogicValidator::CheckUselessPause(const QList<AchievementConditionGroup>& g
                 else if (!isValue) {
                     issues.append(ValidationIssue(
                         FeedbackSeverity::Fail, "Useless Use of PauseIf",
-                        QString("PauseIf should only be used with requirements containing hit targets. Recommended change: %1")
-                            .arg(InvertChainPreview(g, ri)),
-                        req, "https://docs.retroachievements.org/developer-docs/flags/pauseif.html", asset, "Logic", segmentName, gi));
+                        "PauseIf should only be used with requirements containing hit targets.", req,
+                        "https://docs.retroachievements.org/developer-docs/flags/pauseif.html", asset, "Logic", segmentName, gi, "", "",
+                        BuildInvertedChainFix(g, ri)));
                 }
             }
         }
@@ -961,9 +976,9 @@ void LogicValidator::CheckUselessReset(const QList<AchievementConditionGroup>& g
                 if (!isValue || hasMeasured) {
                     issues.append(ValidationIssue(
                         FeedbackSeverity::Fail, "Useless Use of ResetIf",
-                        QString("ResetIf should only be used with requirements containing hit targets. Recommended change: %1")
-                            .arg(InvertChainPreview(g, ri)),
-                        req, "https://docs.retroachievements.org/developer-docs/flags/resetif.html", asset, "Logic", segmentName, gi));
+                        "ResetIf should only be used with requirements containing hit targets.", req,
+                        "https://docs.retroachievements.org/developer-docs/flags/resetif.html", asset, "Logic", segmentName, gi, "", "",
+                        BuildInvertedChainFix(g, ri)));
                 }
             }
         }
@@ -973,12 +988,21 @@ void LogicValidator::CheckUselessReset(const QList<AchievementConditionGroup>& g
 void LogicValidator::CheckResetWithHits(const AchievementConditionGroup& group, int groupIndex, QList<ValidationIssue>& issues,
                                         std::shared_ptr<IAssetItem> asset, const QString& segmentName) {
     bool hasAddHits = false;
-    for (const auto& req : group.Conditions) {
+    for (int ri = 0; ri < group.Conditions.size(); ++ri) {
+        const auto& req = group.Conditions[ri];
         if (!hasAddHits && req.Flag == "Reset If" && req.RequiredHits == 1) {
+            SuggestedLogicFix fix;
+            fix.StartConditionIndex = ri;
+            fix.ReplaceCount = 1;
+            AchievementCondition fixed = req.Clone();
+            fixed.RequiredHits = 0;
+            fix.ReplacementConditions.append(fixed);
+
             issues.append(ValidationIssue(
                 FeedbackSeverity::Warning, "ResetIf Hitcount = 1",
                 "A ResetIf or ResetNextIf with a hitcount of 1 does not require a hitcount. The hitcount can be safely removed.", req,
-                "https://docs.retroachievements.org/developer-docs/flags/resetif.html", asset, "Logic", segmentName, groupIndex));
+                "https://docs.retroachievements.org/developer-docs/flags/resetif.html", asset, "Logic", segmentName, groupIndex, "", "",
+                fix));
         }
 
         if (req.Flag == "Add Hits")

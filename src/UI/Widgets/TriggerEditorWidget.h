@@ -44,6 +44,9 @@ class TriggerEditorWidget : public QWidget {
     bool CollapseChains() const;
     void SetCollapseChains(bool value);
 
+    const QMap<QString, QList<std::shared_ptr<NoteNode>>>& NotesLookup() const { return _notesLookup; }
+    const QList<ConditionFormatter::RangeEntry>& RangeCache() const { return _rangeCache; }
+
     void SetTriggerText(const QString& value);
 
     bool CanUndo() const { return _viewModel.CanUndo(); }
@@ -60,6 +63,8 @@ class TriggerEditorWidget : public QWidget {
     void AddConditionFromNote(const QString& logicString, const QString& type, const QString& size);
     void SelectCondition(const AchievementCondition* target, const QString& segmentName = "", int groupIndex = -1);
     void FocusHeaderField(const QString& field);
+    const AchievementConditionGroup* GetGroupForIssue(const ValidationIssue& issue);
+    bool ApplySuggestedFix(const ValidationIssue& issue);
 
     void ExtendSelectionByPattern();
     void CopySelectedRows();
