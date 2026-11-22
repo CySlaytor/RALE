@@ -47,6 +47,8 @@ class TriggerViewModel : public QObject {
     // Returns the list of groups for the currently selected segment
     QList<AchievementConditionGroup>& GetActiveGroups();
     const QList<AchievementConditionGroup>& GetActiveGroups() const;
+    AchievementConditionGroup* GetGroup(const QString& segmentName, int groupIndex);
+    const AchievementConditionGroup* GetGroup(const QString& segmentName, int groupIndex) const;
 
     // Generator Rules (Key: GroupIndex, Value: Rules)
     QMap<int, GeneratorDefinition> GeneratorRules;
@@ -86,6 +88,7 @@ class TriggerViewModel : public QObject {
 
   signals:
     // Events - Nullable
+    void AboutToChangeSegments();
     void LogicChanged();
     void SegmentsChanged(); // Fired when loading new asset
     void HistoryChanged();  // Fired when undo stack changes

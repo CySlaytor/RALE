@@ -3,9 +3,14 @@
 #include "../../Models/AssetModels.h"
 #include "../Styles/ThemeManager.h"
 
+#include <QDesktopServices>
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <QSet>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -26,9 +31,8 @@ CodeReviewWidget::CodeReviewWidget(QWidget* parent) : QWidget(parent) {
 
     connect(cmbFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CodeReviewWidget::onFilterChanged);
 
+    connect(listIssues, &QTreeWidget::itemClicked, this, &CodeReviewWidget::onItemClicked);
     connect(listIssues, &QTreeWidget::itemDoubleClicked, this, &CodeReviewWidget::onItemDoubleClicked);
-
-    connect(listIssues, &QTreeWidget::itemActivated, this, &CodeReviewWidget::onItemActivated);
 }
 
 void CodeReviewWidget::InitializeUI() {
@@ -69,14 +73,48 @@ void CodeReviewWidget::InitializeUI() {
     listIssues->setAllColumnsShowFocus(true);
     listIssues->setSelectionBehavior(QAbstractItemView::SelectRows);
     listIssues->setSelectionMode(QAbstractItemView::SingleSelection);
+    listIssues->setMouseTracking(true);
+    listIssues->installEventFilter(this);
+    listIssues->viewport()->setMouseTracking(true);
+    listIssues->viewport()->installEventFilter(this);
 
+    listIssues->header()->setSectionResizeMode(QHeaderView::Interactive);
+    listIssues->header()->setStretchLastSection(false);
     listIssues->setColumnWidth(0, 35);
-    listIssues->setColumnWidth(1, 150);
-    listIssues->setColumnWidth(2, 150);
+    listIssues->setColumnWidth(1, 180);
+    listIssues->setColumnWidth(2, 175);
+    listIssues->setColumnWidth(3, 520);
     listIssues->setColumnWidth(4, 50);
-    listIssues->header()->setSectionResizeMode(3, QHeaderView::Stretch);
 
     mainLayout->addWidget(listIssues, 1);
+}
+
+bool CodeReviewWidget::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == listIssues->viewport()) {
+        if (event->type() == QEvent::MouseMove) {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            QModelIndex idx = listIssues->indexAt(mouseEvent->pos());
+            bool overLink = false;
+            if (idx.isValid() && idx.column() == 4) {
+                QTreeWidgetItem* item = listIssues->itemAt(mouseEvent->pos());
+                if (item != nullptr) {
+                    int issueIdx = item->data(0, Qt::UserRole).toInt();
+                    if (issueIdx >= 0 && issueIdx < _filteredIssues.size() && !_filteredIssues[issueIdx].WikiUrl.isEmpty())
+                        overLink = true;
+                }
+            }
+            listIssues->viewport()->setCursor(overLink ? Qt::PointingHandCursor : Qt::ArrowCursor);
+        } else if (event->type() == QEvent::Leave) {
+            listIssues->viewport()->setCursor(Qt::ArrowCursor);
+        }
+    } else if (watched == listIssues && event->type() == QEvent::KeyPress) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
+            TriggerIssueNavigation();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 int CodeReviewWidget::FilterIndex() const { return cmbFilter ? cmbFilter->currentIndex() : 0; }
@@ -174,7 +212,11 @@ void CodeReviewWidget::ApplyFilter() {
         item->setText(2, issue.Title);
         item->setText(3, issue.Description);
         item->setText(4, !issue.WikiUrl.isEmpty() ? "Link" : "");
+        item->setToolTip(1, assetStr);
+        item->setToolTip(2, issue.Title);
         item->setToolTip(3, issue.Description);
+        if (!issue.WikiUrl.isEmpty())
+            item->setToolTip(4, issue.WikiUrl);
 
         item->setData(0, Qt::UserRole, issueIndex);
 
@@ -240,12 +282,22 @@ void CodeReviewWidget::TriggerIssueNavigation() {
     }
 }
 
-void CodeReviewWidget::onItemDoubleClicked(QTreeWidgetItem* /*item*/, int /*column*/) {
-    // Double-clicking anywhere (including the Ref column) navigates to the issue,
-    // matching the C# reviewer; the wiki URL is informational only.
-    TriggerIssueNavigation();
+void CodeReviewWidget::onItemClicked(QTreeWidgetItem* item, int column) {
+    if (item != nullptr && column == 4) {
+        int idx = item->data(0, Qt::UserRole).toInt();
+        if (idx >= 0 && idx < _filteredIssues.size() && !_filteredIssues[idx].WikiUrl.isEmpty()) {
+            QDesktopServices::openUrl(QUrl(_filteredIssues[idx].WikiUrl));
+        }
+    }
 }
 
-void CodeReviewWidget::onItemActivated(QTreeWidgetItem* /*item*/, int /*column*/) { TriggerIssueNavigation(); }
+void CodeReviewWidget::onItemDoubleClicked(QTreeWidgetItem* item, int column) {
+    if (item != nullptr && column == 4) {
+        int idx = item->data(0, Qt::UserRole).toInt();
+        if (idx >= 0 && idx < _filteredIssues.size() && !_filteredIssues[idx].WikiUrl.isEmpty())
+            return;
+    }
+    TriggerIssueNavigation();
+}
 
 } // namespace RALE

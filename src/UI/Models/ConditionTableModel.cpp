@@ -1,5 +1,6 @@
 #include "ConditionTableModel.h"
 
+#include "TriggerViewModel.h"
 #include "../../Definitions/RaLogicSyntax.h"
 #include "../../Utilities/LogicFormatter.h"
 #include "../Styles/ThemeManager.h"
@@ -13,21 +14,30 @@ namespace RALE {
 
 ConditionTableModel::ConditionTableModel(QObject* parent) : QAbstractTableModel(parent) {}
 
+void ConditionTableModel::SetViewModel(TriggerViewModel* viewModel) { _viewModel = viewModel; }
+
+AchievementConditionGroup* ConditionTableModel::CurrentGroup() const {
+    if (_viewModel != nullptr)
+        return _viewModel->GetGroup(_segmentName, _groupIndex);
+    return _group;
+}
+
 void ConditionTableModel::RebuildVisualMap() {
     _visualToModelMap.clear();
-    if (_group == nullptr)
+    auto* group = CurrentGroup();
+    if (group == nullptr)
         return;
 
-    for (int i = 0; i < _group->Conditions.size(); i++) {
+    for (int i = 0; i < group->Conditions.size(); i++) {
         // Renumber conditions sequentially so every condition has a unique ID, matching WinForms
-        _group->Conditions[i].ID = i + 1;
+        group->Conditions[i].ID = i + 1;
 
         // C# zeroes hit counts for flags that cannot carry them while rendering; mirror
         // it so the stale hits disappear from the emitted logic too.
-        if (RaLogicSyntax::FlagsWithoutHits.contains(_group->Conditions.at(i).Flag))
-            _group->Conditions[i].RequiredHits = 0;
+        if (RaLogicSyntax::FlagsWithoutHits.contains(group->Conditions.at(i).Flag))
+            group->Conditions[i].RequiredHits = 0;
 
-        if (_collapseChains && _group->Conditions.at(i).Flag == "Add Address")
+        if (_collapseChains && group->Conditions.at(i).Flag == "Add Address")
             continue;
 
         _visualToModelMap.append(i);
@@ -48,7 +58,7 @@ void ConditionTableModel::SetGroup(AchievementConditionGroup* group, bool readOn
     _rangeCache = rangeCache;
     _issues = issues;
     _segmentName = segmentName;
-    _groupIndex = groupIndex;
+    _groupIndex = (group == nullptr) ? -1 : groupIndex;
 
     RebuildVisualMap();
     endResetModel();
@@ -60,13 +70,13 @@ void ConditionTableModel::SetIssues(const QList<ValidationIssue>* issues, const 
         _segmentName = segmentName;
     if (groupIndex >= 0)
         _groupIndex = groupIndex;
-    if (_group != nullptr && !_visualToModelMap.isEmpty()) {
+    if (CurrentGroup() != nullptr && !_visualToModelMap.isEmpty()) {
         emit dataChanged(index(0, ColID), index(_visualToModelMap.size() - 1, ColID));
     }
 }
 
 int ConditionTableModel::rowCount(const QModelIndex& parent) const {
-    if (parent.isValid() || _group == nullptr)
+    if (parent.isValid() || CurrentGroup() == nullptr)
         return 0;
     return _visualToModelMap.size();
 }
@@ -78,11 +88,12 @@ int ConditionTableModel::columnCount(const QModelIndex& parent) const {
 }
 
 AchievementCondition* ConditionTableModel::GetConditionAtRow(int visualRow) {
-    if (_group == nullptr || visualRow < 0 || visualRow >= _visualToModelMap.size())
+    auto* group = CurrentGroup();
+    if (group == nullptr || visualRow < 0 || visualRow >= _visualToModelMap.size())
         return nullptr;
     int modelIdx = _visualToModelMap[visualRow];
-    if (modelIdx >= 0 && modelIdx < _group->Conditions.size())
-        return &_group->Conditions[modelIdx];
+    if (modelIdx >= 0 && modelIdx < group->Conditions.size())
+        return &group->Conditions[modelIdx];
     return nullptr;
 }
 
@@ -93,16 +104,17 @@ int ConditionTableModel::GetModelIndexForVisualRow(int visualRow) const {
 }
 
 int ConditionTableModel::GetVisualRowForCondition(const AchievementCondition* cond) const {
-    if (_group == nullptr || cond == nullptr)
+    auto* group = CurrentGroup();
+    if (group == nullptr || cond == nullptr)
         return -1;
     for (int v = 0; v < _visualToModelMap.size(); ++v) {
         int m = _visualToModelMap[v];
-        if (m >= 0 && m < _group->Conditions.size() && &_group->Conditions.at(m) == cond)
+        if (m >= 0 && m < group->Conditions.size() && &group->Conditions.at(m) == cond)
             return v;
     }
     for (int v = 0; v < _visualToModelMap.size(); ++v) {
         int m = _visualToModelMap[v];
-        if (m >= 0 && m < _group->Conditions.size() && _group->Conditions.at(m) == *cond)
+        if (m >= 0 && m < group->Conditions.size() && group->Conditions.at(m) == *cond)
             return v;
     }
     return -1;
@@ -135,14 +147,15 @@ std::optional<ValidationIssue> ConditionTableModel::GetIssueForCondition(const A
 }
 
 QVariant ConditionTableModel::data(const QModelIndex& index, int role) const {
-    if (!index.isValid() || _group == nullptr || index.row() < 0 || index.row() >= _visualToModelMap.size())
+    auto* group = CurrentGroup();
+    if (!index.isValid() || group == nullptr || index.row() < 0 || index.row() >= _visualToModelMap.size())
         return QVariant();
 
     int modelIdx = _visualToModelMap[index.row()];
-    if (modelIdx < 0 || modelIdx >= _group->Conditions.size())
+    if (modelIdx < 0 || modelIdx >= group->Conditions.size())
         return QVariant();
 
-    const auto& cond = _group->Conditions.at(modelIdx);
+    const auto& cond = group->Conditions.at(modelIdx);
 
     if (role == Qt::DisplayRole) {
         switch (index.column()) {
@@ -155,7 +168,7 @@ QVariant ConditionTableModel::data(const QModelIndex& index, int role) const {
         case ColLSize:
             return cond.LeftOperand.Size;
         case ColLValue:
-            return ConditionFormatter::FormatOperandDisplay(cond.LeftOperand, _showDecimal, _showAliases, _notesLookup, _rangeCache, _group,
+            return ConditionFormatter::FormatOperandDisplay(cond.LeftOperand, _showDecimal, _showAliases, _notesLookup, _rangeCache, group,
                                                             modelIdx);
         case ColCmp:
             return cond.Operator;
@@ -166,7 +179,7 @@ QVariant ConditionTableModel::data(const QModelIndex& index, int role) const {
         case ColRValue: {
             QString rightSizeRef = LogicFormatter::GetRightOperandSizeReference(cond);
             return ConditionFormatter::FormatOperandDisplay(cond.RightOperand, _showDecimal, _showAliases, _notesLookup, _rangeCache,
-                                                            _group, modelIdx, rightSizeRef);
+                                                            group, modelIdx, rightSizeRef);
         }
         case ColHits:
             if (RaLogicSyntax::FlagsWithoutHits.contains(cond.Flag))
@@ -308,7 +321,7 @@ QVariant ConditionTableModel::data(const QModelIndex& index, int role) const {
                 QString sizeRef =
                     (index.column() == ColLValue) ? cond.LeftOperand.Size : LogicFormatter::GetRightOperandSizeReference(cond);
 
-                QString resolved = ConditionFormatter::ResolveAlias(key, sizeRef, _group, modelIdx, *_notesLookup, _rangeCache);
+                QString resolved = ConditionFormatter::ResolveAlias(key, sizeRef, group, modelIdx, *_notesLookup, _rangeCache);
                 if (!resolved.trimmed().isEmpty())
                     return resolved.trimmed();
 
@@ -471,13 +484,21 @@ void ConditionTableModel::ApplyConditionLogicRules(AchievementCondition& cond) {
 }
 
 bool ConditionTableModel::setData(const QModelIndex& index, const QVariant& value, int role) {
-    if (!index.isValid() || _group == nullptr || role != Qt::EditRole || _readOnly)
+    auto* group = CurrentGroup();
+    if (!index.isValid() || group == nullptr || role != Qt::EditRole || _readOnly)
         return false;
 
     emit BeforeConditionDataChanged();
 
+    // Re-fetch group after BeforeConditionDataChanged() in case undo snapshot or signal updated state
+    group = CurrentGroup();
+    if (group == nullptr || index.row() < 0 || index.row() >= _visualToModelMap.size())
+        return false;
+
     int modelIdx = _visualToModelMap[index.row()];
-    auto& cond = _group->Conditions[modelIdx];
+    if (modelIdx < 0 || modelIdx >= group->Conditions.size())
+        return false;
+    auto& cond = group->Conditions[modelIdx];
     QString str = value.toString();
 
     switch (index.column()) {
@@ -550,16 +571,23 @@ bool ConditionTableModel::setData(const QModelIndex& index, const QVariant& valu
 }
 
 void ConditionTableModel::BulkUpdateConditions(const QList<int>& visualRows, int column, const QString& value) {
-    if (_group == nullptr || visualRows.isEmpty() || _readOnly)
+    auto* group = CurrentGroup();
+    if (group == nullptr || visualRows.isEmpty() || _readOnly)
         return;
 
     emit BeforeConditionDataChanged();
+
+    group = CurrentGroup();
+    if (group == nullptr)
+        return;
 
     for (int vRow : visualRows) {
         if (vRow < 0 || vRow >= _visualToModelMap.size())
             continue;
         int mIdx = _visualToModelMap[vRow];
-        auto& cond = _group->Conditions[mIdx];
+        if (mIdx < 0 || mIdx >= group->Conditions.size())
+            continue;
+        auto& cond = group->Conditions[mIdx];
 
         if (column == ColFlag) {
             QString oldFlag = cond.Flag;
@@ -619,17 +647,18 @@ QVariant ConditionTableModel::headerData(int section, Qt::Orientation orientatio
 }
 
 Qt::ItemFlags ConditionTableModel::flags(const QModelIndex& index) const {
-    if (!index.isValid() || _group == nullptr || index.row() < 0 || index.row() >= _visualToModelMap.size())
+    auto* group = CurrentGroup();
+    if (!index.isValid() || group == nullptr || index.row() < 0 || index.row() >= _visualToModelMap.size())
         return Qt::NoItemFlags;
 
     int modelIdx = _visualToModelMap[index.row()];
-    if (modelIdx < 0 || modelIdx >= _group->Conditions.size())
+    if (modelIdx < 0 || modelIdx >= group->Conditions.size())
         return Qt::NoItemFlags;
 
     if (_readOnly)
         return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 
-    const auto& cond = _group->Conditions.at(modelIdx);
+    const auto& cond = group->Conditions.at(modelIdx);
 
     if (index.column() == ColLSize) {
         if (cond.LeftOperand.Type == "Value" || cond.LeftOperand.Type == "Float" || cond.LeftOperand.Type == "Recall")

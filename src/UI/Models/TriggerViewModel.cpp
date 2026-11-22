@@ -21,7 +21,27 @@ const QList<AchievementConditionGroup>& TriggerViewModel::GetActiveGroups() cons
     return emptyList;
 }
 
+AchievementConditionGroup* TriggerViewModel::GetGroup(const QString& segmentName, int groupIndex) {
+    auto it = _allSegments.find(segmentName);
+    if (it == _allSegments.end())
+        return nullptr;
+    if (groupIndex < 0 || groupIndex >= it.value().size())
+        return nullptr;
+    return &it.value()[groupIndex];
+}
+
+const AchievementConditionGroup* TriggerViewModel::GetGroup(const QString& segmentName, int groupIndex) const {
+    auto it = _allSegments.constFind(segmentName);
+    if (it == _allSegments.constEnd())
+        return nullptr;
+    if (groupIndex < 0 || groupIndex >= it.value().size())
+        return nullptr;
+    return &it.value().at(groupIndex);
+}
+
 void TriggerViewModel::LoadAsset(std::shared_ptr<IAssetItem> asset) {
+    emit AboutToChangeSegments();
+
     BoundAsset = asset;
     _history.Clear();
     GeneratorRules.clear();
@@ -56,6 +76,8 @@ void TriggerViewModel::SelectSegment(const QString& segmentName) {
 void TriggerViewModel::UpdateLogic(bool pushUndo) {
     if (BoundAsset == nullptr)
         return;
+
+    emit AboutToChangeSegments();
 
     _segmentGeneratorRules[ActiveSegmentName] = GeneratorRules;
     auto& activeGroups = GetActiveGroups();
@@ -185,6 +207,8 @@ void TriggerViewModel::Redo() {
 }
 
 void TriggerViewModel::RestoreState(const TriggerEditorState& state) {
+    emit AboutToChangeSegments();
+
     if (!state.Segments.isEmpty()) {
         _allSegments = state.Segments;
     } else {
@@ -226,6 +250,7 @@ void TriggerViewModel::RestoreState(const TriggerEditorState& state) {
 
 void TriggerViewModel::AddGroup() {
     PushUndoState();
+    emit AboutToChangeSegments();
     auto& groups = GetActiveGroups();
     QString newName = groups.isEmpty() ? "Core"
                                        : (AssetStrategy->isLeaderboard() ? QString("Group %1").arg(groups.size() + 1)
@@ -243,6 +268,7 @@ void TriggerViewModel::RemoveGroup(int index) {
         return;
 
     PushUndoState(index);
+    emit AboutToChangeSegments();
 
     QMap<int, GeneratorDefinition> shiftedRules;
     for (auto it = GeneratorRules.cbegin(); it != GeneratorRules.cend(); ++it) {
@@ -272,6 +298,7 @@ void TriggerViewModel::RemoveAllAltGroups() {
         return;
 
     PushUndoState();
+    emit AboutToChangeSegments();
     GeneratorRules.clear();
 
     AchievementConditionGroup first = groups[0];

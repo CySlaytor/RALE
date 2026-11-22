@@ -54,11 +54,17 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget* parent) : QWidget(parent), _vi
                   {"Value (Float5)", "FLOAT5"},
                   {"Value (Float6)", "FLOAT6"}};
 
+    _conditionModel.SetViewModel(&_viewModel);
+
     InitializeUI();
     InitializeLeaderboardControls();
     InitializeColumnContextMenus();
 
     SetStatus("Ready");
+
+    connect(&_viewModel, &TriggerViewModel::AboutToChangeSegments, this, [this]() {
+        _conditionModel.SetGroup(nullptr, true, _showDecimal, _showAliases, _collapseChains, &_notesLookup, &_rangeCache, &_currentIssues);
+    });
 
     connect(&_viewModel, &TriggerViewModel::LogicChanged, this, [this]() {
         emit TriggerTextChanged();

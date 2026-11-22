@@ -14,6 +14,8 @@
 
 namespace RALE {
 
+class TriggerViewModel;
+
 class ConditionTableModel : public QAbstractTableModel {
     Q_OBJECT
 
@@ -33,6 +35,8 @@ class ConditionTableModel : public QAbstractTableModel {
     };
 
     explicit ConditionTableModel(QObject* parent = nullptr);
+
+    void SetViewModel(TriggerViewModel* viewModel);
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     int columnCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -60,6 +64,7 @@ class ConditionTableModel : public QAbstractTableModel {
     void ConditionDataChanged();
 
   private:
+    TriggerViewModel* _viewModel = nullptr;
     AchievementConditionGroup* _group = nullptr;
     bool _readOnly = false;
     bool _showDecimal = false;
@@ -74,6 +79,7 @@ class ConditionTableModel : public QAbstractTableModel {
 
     QList<int> _visualToModelMap; // Maps visual row to group->Conditions index
 
+    AchievementConditionGroup* CurrentGroup() const;
     void RebuildVisualMap();
     std::optional<ValidationIssue> GetIssueForCondition(const AchievementCondition& cond) const;
     QList<ValidationIssue> GetIssuesForCondition(const AchievementCondition& cond) const;

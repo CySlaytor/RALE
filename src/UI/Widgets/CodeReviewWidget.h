@@ -24,10 +24,13 @@ class CodeReviewWidget : public QWidget {
   signals:
     void IssueSelected(const ValidationIssue& issue);
 
+  protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
   private slots:
     void onFilterChanged();
+    void onItemClicked(QTreeWidgetItem* item, int column);
     void onItemDoubleClicked(QTreeWidgetItem* item, int column);
-    void onItemActivated(QTreeWidgetItem* item, int column);
 
   private:
     QComboBox* cmbFilter = nullptr;
