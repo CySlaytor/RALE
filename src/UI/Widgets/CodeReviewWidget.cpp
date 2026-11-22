@@ -19,6 +19,9 @@ CodeReviewWidget::CodeReviewWidget(QWidget* parent) : QWidget(parent) {
     cmbFilter->addItem("Show All Issues");
     cmbFilter->addItem("Logic Warnings & Errors");
     cmbFilter->addItem("Missing Code Notes");
+    cmbFilter->addItem("Code Notes");
+    cmbFilter->addItem("Presentation & Writing");
+    cmbFilter->addItem("Set Design");
     cmbFilter->setCurrentIndex(0);
 
     connect(cmbFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CodeReviewWidget::onFilterChanged);
@@ -47,7 +50,7 @@ void CodeReviewWidget::InitializeUI() {
     lblHeader->setFont(hf);
 
     cmbFilter = new QComboBox(headerPanel);
-    cmbFilter->setFixedWidth(160);
+    cmbFilter->setFixedWidth(180);
     ThemeManager::SetupComboBox(cmbFilter, 14);
 
     lblStatus = new QLabel("No issues found.", headerPanel);
@@ -95,10 +98,13 @@ void CodeReviewWidget::ApplyFilter() {
     // Identify the selected issue by its full contents (asset + title + description
     // + reference), not just asset/title: many issues share the same title.
     auto IssueKey = [](const ValidationIssue& issue) -> QString {
-        return QString("%1|%2|%3|%4|%5")
+        return QString("%1|%2|%3|%4|%5|%6|%7|%8|%9")
             .arg(static_cast<int>(issue.Severity))
             .arg(issue.Asset != nullptr ? issue.Asset->ID : 0)
-            .arg(issue.Title, issue.Description, issue.WikiUrl);
+            .arg(issue.Asset != nullptr && issue.Asset->isLeaderboard() ? 1 : 0)
+            .arg(issue.Title, issue.Description, issue.WikiUrl, issue.SegmentName)
+            .arg(issue.GroupIndex)
+            .arg(issue.NoteAddress);
     };
 
     QString selectedKey;
@@ -128,11 +134,17 @@ void CodeReviewWidget::ApplyFilter() {
 
     for (int i = 0; i < sortedIssues.size(); i++) {
         const auto& issue = sortedIssues[i];
-        bool isMissingNote = (issue.Title == "Undocumented Memory");
+        bool isMissingNote = (issue.Title == "Undocumented Memory" || issue.Title == "Missing Code Note");
 
-        if (filterMode == 1 && isMissingNote)
+        if (filterMode == 1 && (isMissingNote || issue.Category != "Logic"))
             continue;
         if (filterMode == 2 && !isMissingNote)
+            continue;
+        if (filterMode == 3 && issue.Category != "Code Notes")
+            continue;
+        if (filterMode == 4 && issue.Category != "Presentation")
+            continue;
+        if (filterMode == 5 && issue.Category != "Set Design")
             continue;
 
         if (isMissingNote) {
@@ -144,7 +156,17 @@ void CodeReviewWidget::ApplyFilter() {
         _filteredIssues.append(issue);
         int issueIndex = _filteredIssues.size() - 1;
 
-        QString assetStr = issue.Asset != nullptr ? QString("%1 - %2").arg(issue.Asset->ID).arg(issue.Asset->Title) : "Global";
+        QString assetStr;
+        if (issue.Asset != nullptr) {
+            assetStr = issue.Asset->isLeaderboard() ? QString("L%1 - %2").arg(issue.Asset->ID).arg(issue.Asset->Title)
+                                                    : QString("%1 - %2").arg(issue.Asset->ID).arg(issue.Asset->Title);
+        } else if (!issue.NoteAddress.isEmpty()) {
+            assetStr = "Code Notes";
+        } else if (!issue.Category.isEmpty()) {
+            assetStr = issue.Category;
+        } else {
+            assetStr = "Global";
+        }
 
         auto* item = new QTreeWidgetItem();
         item->setText(0, GetSeverityIcon(issue.Severity));
@@ -152,15 +174,19 @@ void CodeReviewWidget::ApplyFilter() {
         item->setText(2, issue.Title);
         item->setText(3, issue.Description);
         item->setText(4, !issue.WikiUrl.isEmpty() ? "Link" : "");
+        item->setToolTip(3, issue.Description);
 
         item->setData(0, Qt::UserRole, issueIndex);
 
-        if (issue.Severity == FeedbackSeverity::Error) {
+        if (issue.Severity >= FeedbackSeverity::Fail) {
             item->setForeground(0, Qt::red);
             item->setForeground(2, Qt::red);
         } else if (issue.Severity == FeedbackSeverity::Warning) {
             item->setForeground(0, QColor(255, 140, 0));
             item->setForeground(2, QColor(255, 140, 0));
+        } else if (issue.Severity == FeedbackSeverity::Pass) {
+            item->setForeground(0, QColor(46, 139, 87));
+            item->setForeground(2, QColor(46, 139, 87));
         }
 
         if (!issue.WikiUrl.isEmpty()) {
@@ -191,11 +217,14 @@ void CodeReviewWidget::UpdateStatus(int count) {
 QString CodeReviewWidget::GetSeverityIcon(FeedbackSeverity severity) const {
     switch (severity) {
     case FeedbackSeverity::Error:
+    case FeedbackSeverity::Fail:
         return QString::fromUtf8("❌");
     case FeedbackSeverity::Warning:
         return QString::fromUtf8("⚠️");
     case FeedbackSeverity::Info:
         return QString::fromUtf8("ℹ️");
+    case FeedbackSeverity::Pass:
+        return QString::fromUtf8("✅");
     default:
         return "";
     }

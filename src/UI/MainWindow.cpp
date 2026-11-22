@@ -98,6 +98,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
         _isDirty = true;
         _assetModel.NotifyAssetChanged(_selectedAsset);
+        RefreshSetLevelIssues();
         UpdateSelectionUI();
         UpdateTriggerActionButtons();
     });
@@ -179,12 +180,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         if (_selectedAsset == nullptr)
             return;
         for (int i = _globalIssues.size() - 1; i >= 0; --i) {
-            if (_globalIssues[i].Asset != nullptr && _globalIssues[i].Asset->ID == _selectedAsset->ID)
+            if (_globalIssues[i].Asset != nullptr && _globalIssues[i].Asset->ID == _selectedAsset->ID &&
+                _globalIssues[i].Asset->isLeaderboard() == _selectedAsset->isLeaderboard())
                 _globalIssues.removeAt(i);
         }
         _globalIssues.append(issues);
         if (!_isLoading)
-            codeReviewControl->SetIssues(_globalIssues);
+            RefreshSetLevelIssues();
     });
 
     connect(triggerEditor, &TriggerEditorWidget::MultiRegionLogicRequested, this, &MainWindow::onMultiRegionBatch);
@@ -206,12 +208,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     // Code Reviewer
     connect(codeReviewControl, &CodeReviewWidget::IssueSelected, this, [this](ValidationIssue issue) {
+        if (!issue.NoteAddress.isEmpty()) {
+            codeNoteEditor->HighlightAddress(issue.NoteAddress);
+            return;
+        }
         if (issue.Asset == nullptr)
             return;
-        if (_selectedAsset == nullptr || _selectedAsset->ID != issue.Asset->ID)
+        if (_selectedAsset == nullptr || _selectedAsset->ID != issue.Asset->ID ||
+            _selectedAsset->isLeaderboard() != issue.Asset->isLeaderboard())
             SelectAssetInGrid(issue.Asset);
         if (issue.Target.has_value())
-            triggerEditor->SelectCondition(&issue.Target.value());
+            triggerEditor->SelectCondition(&issue.Target.value(), issue.SegmentName, issue.GroupIndex);
+        else if (!issue.TargetField.isEmpty())
+            triggerEditor->FocusHeaderField(issue.TargetField);
     });
 
     // Code Note Editor actions
@@ -242,9 +251,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             return;
 
         _projectRepo.LocalData->Notes = notes;
-        triggerEditor->SetNotes(notes);
         _notesCacheDirty = true;
         _isDirty = true;
+        triggerEditor->SetNotes(notes);
+        RunGlobalValidation();
     });
 
     // Resets current unsaved note edits back to the last saved disk state
@@ -487,10 +497,7 @@ void MainWindow::InitializeFilters() {
         cmbSource->setCurrentIndex(lastSrc);
 
     // Wiring
-    connect(cmbAssetType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() {
-        ReloadDataView();
-        RunGlobalValidation();
-    });
+    connect(cmbAssetType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() { ReloadDataView(); });
     connect(cmbSource, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onFilterChanged);
     connect(cmbCategory, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onFilterChanged);
 }
@@ -1329,6 +1336,11 @@ void MainWindow::SelectAssetInGrid(const std::shared_ptr<IAssetItem>& asset) {
     ReloadDataView();
 
     int row = _assetModel.FindRowByAssetId(asset->ID);
+    if (row == -1 && !txtAssetSearch->text().isEmpty()) {
+        txtAssetSearch->clear();
+        ReloadDataView();
+        row = _assetModel.FindRowByAssetId(asset->ID);
+    }
     if (row != -1) {
         achievementGrid->selectRow(row);
         LoadSelectedAsset();
@@ -1396,41 +1408,53 @@ void MainWindow::RebuildNotesCache() {
     _notesCacheDirty = false;
 }
 
+void MainWindow::RefreshSetLevelIssues() {
+    for (int i = _globalIssues.size() - 1; i >= 0; --i) {
+        if (_globalIssues[i].Category == "Set Design")
+            _globalIssues.removeAt(i);
+    }
+
+    QList<std::shared_ptr<IAssetItem>> allAssets = _projectRepo.GetMergedAssets(false);
+    allAssets.append(_projectRepo.GetMergedAssets(true));
+    _globalIssues.append(_validator.ValidateSet(allAssets));
+
+    if (!_isLoading)
+        codeReviewControl->SetIssues(_globalIssues);
+}
+
 void MainWindow::RunGlobalValidation() {
     _globalIssues.clear();
-    bool validateLeaderboards = (cmbAssetType->currentIndex() == 1);
-    auto allAssets = _projectRepo.GetMergedAssets(validateLeaderboards);
 
     if (_notesCacheDirty) {
         RebuildNotesCache();
     }
 
-    for (const auto& asset : allAssets) {
-        std::unique_ptr<IAssetStrategy> strategy;
-        if (asset->isLeaderboard())
-            strategy = std::make_unique<LeaderboardStrategy>();
-        else
-            strategy = std::make_unique<AchievementStrategy>();
+    const QList<CodeNote> notes = (_projectRepo.LocalData != nullptr) ? _projectRepo.LocalData->Notes : QList<CodeNote>();
+    const auto parsedNotes = LogicValidator::BuildParsedNotes(notes);
+    const int consoleId = (_projectRepo.ServerData != nullptr) ? _projectRepo.ServerData->ConsoleId : 0;
 
-        auto segments = strategy->ParseLogic(asset->Logic);
-        QList<AchievementConditionGroup> allGroups;
-        // Preserve segment insertion order (Start/Cancel/Submit/Value) like the C#
-        // dictionary; QMap iteration is alphabetical and would make Cancel "Core".
-        for (const QString& segmentName : strategy->GetSegmentNames()) {
-            auto it = segments.constFind(segmentName);
-            if (it != segments.constEnd())
-                allGroups.append(it.value());
-        }
-        // Include any segment the strategy does not name (defensive).
-        for (auto it = segments.cbegin(); it != segments.cend(); ++it) {
-            if (strategy->GetSegmentNames().contains(it.key()))
-                continue;
-            allGroups.append(it.value());
-        }
+    AchievementStrategy achStrategy;
+    LeaderboardStrategy lbStrategy;
 
-        auto issues = _validator.ValidateAsset(allGroups, asset, &_cachedNotesLookup, &_cachedRangeCache);
-        _globalIssues.append(issues);
+    const auto allAchievements = _projectRepo.GetMergedAssets(false);
+    for (const auto& ach : allAchievements) {
+        auto segments = achStrategy.ParseLogic(ach->Logic);
+        _globalIssues.append(_validator.ValidateAchievementWithParsedNotes(segments.value("Core"), ach, &_cachedNotesLookup,
+                                                                           &_cachedRangeCache, parsedNotes));
     }
+
+    const auto allLeaderboards = _projectRepo.GetMergedAssets(true);
+    for (const auto& lb : allLeaderboards) {
+        auto segments = lbStrategy.ParseLogic(lb->Logic);
+        _globalIssues.append(
+            _validator.ValidateLeaderboardWithParsedNotes(segments, lb, &_cachedNotesLookup, &_cachedRangeCache, parsedNotes));
+    }
+
+    _globalIssues.append(_validator.ValidateCodeNotes(notes, consoleId));
+
+    QList<std::shared_ptr<IAssetItem>> allAssets = allAchievements;
+    allAssets.append(allLeaderboards);
+    _globalIssues.append(_validator.ValidateSet(allAssets));
 
     codeReviewControl->SetIssues(_globalIssues);
 }
@@ -1735,6 +1759,7 @@ void MainWindow::onNewAsset() {
         achievementGrid->selectRow(row);
         LoadSelectedAsset();
     }
+    RunGlobalValidation();
 }
 
 void MainWindow::onDuplicateAsset() {
@@ -1812,6 +1837,7 @@ void MainWindow::onDuplicateAsset() {
             achievementGrid->scrollTo(_assetModel.index(firstNewRow, 0));
         }
     }
+    RunGlobalValidation();
 }
 
 void MainWindow::onDeleteAsset() {
@@ -1852,6 +1878,7 @@ void MainWindow::onDeleteAsset() {
         UpdateSelectionUI();
         UpdateTriggerActionButtons();
     }
+    RunGlobalValidation();
 }
 
 void MainWindow::onResetAsset() {
@@ -2115,6 +2142,7 @@ void MainWindow::onRenumberLocalIDs() {
 
     _isDirty = true;
     ReloadDataView();
+    RunGlobalValidation();
 }
 
 void MainWindow::onViewDiff() {
@@ -2459,6 +2487,7 @@ void MainWindow::onRevertRegion() {
     ReloadDataView();
     if (_selectedAsset != nullptr)
         RefreshSelectedAssetAfterStoreChange();
+    RunGlobalValidation();
     QMessageBox::information(this, "Revert Region", QString("Reverted %1 assets to %2.").arg(count).arg(targetRegion));
 }
 
@@ -2530,6 +2559,7 @@ void MainWindow::onLogicOptimizer() {
     ReloadDataView();
     if (_selectedAsset != nullptr)
         RefreshSelectedAssetAfterStoreChange();
+    RunGlobalValidation();
 }
 
 void MainWindow::onMultiRegionBatch(MultiRegionDialog* dialog) {
@@ -2629,6 +2659,7 @@ void MainWindow::onMultiRegionBatch(MultiRegionDialog* dialog) {
     ReloadDataView();
     if (_selectedAsset != nullptr)
         RefreshSelectedAssetAfterStoreChange();
+    RunGlobalValidation();
 }
 
 bool MainWindow::IsAssetInLocalStore(const std::shared_ptr<IAssetItem>& item) {

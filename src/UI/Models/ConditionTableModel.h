@@ -43,9 +43,10 @@ class ConditionTableModel : public QAbstractTableModel {
 
     void SetGroup(AchievementConditionGroup* group, bool readOnly, bool showDecimal, bool showAliases, bool collapseChains,
                   const QMap<QString, QList<std::shared_ptr<NoteNode>>>* notesLookup,
-                  const QList<ConditionFormatter::RangeEntry>* rangeCache, const QList<ValidationIssue>* issues = nullptr);
+                  const QList<ConditionFormatter::RangeEntry>* rangeCache, const QList<ValidationIssue>* issues = nullptr,
+                  const QString& segmentName = "", int groupIndex = -1);
 
-    void SetIssues(const QList<ValidationIssue>* issues);
+    void SetIssues(const QList<ValidationIssue>* issues, const QString& segmentName = "", int groupIndex = -1);
 
     AchievementCondition* GetConditionAtRow(int visualRow);
     int GetModelIndexForVisualRow(int visualRow) const;
@@ -64,6 +65,8 @@ class ConditionTableModel : public QAbstractTableModel {
     bool _showDecimal = false;
     bool _showAliases = false;
     bool _collapseChains = false;
+    QString _segmentName = "";
+    int _groupIndex = -1;
 
     const QMap<QString, QList<std::shared_ptr<NoteNode>>>* _notesLookup = nullptr;
     const QList<ConditionFormatter::RangeEntry>* _rangeCache = nullptr;
@@ -73,6 +76,7 @@ class ConditionTableModel : public QAbstractTableModel {
 
     void RebuildVisualMap();
     std::optional<ValidationIssue> GetIssueForCondition(const AchievementCondition& cond) const;
+    QList<ValidationIssue> GetIssuesForCondition(const AchievementCondition& cond) const;
 
     void HandleFlagChange(AchievementCondition& cond, const QString& oldFlag);
     void HandleOperatorChange(AchievementCondition& cond, const QString& oldOp);

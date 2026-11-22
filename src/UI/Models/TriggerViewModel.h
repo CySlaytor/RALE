@@ -54,6 +54,7 @@ class TriggerViewModel : public QObject {
     // References for Validation (Set by View)
     const QMap<QString, QList<std::shared_ptr<NoteNode>>>* NotesLookup = nullptr;
     const QList<ConditionFormatter::RangeEntry>* RangeCache = nullptr;
+    const QList<CodeNote>* RawNotes = nullptr;
 
     // History Properties
     bool CanUndo() const { return _history.CanUndo(); }

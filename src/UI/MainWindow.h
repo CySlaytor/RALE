@@ -188,6 +188,7 @@ class MainWindow : public QMainWindow {
     void UpdateTriggerActionButtons();
     void SelectAssetInGrid(const std::shared_ptr<IAssetItem>& asset);
     void RunGlobalValidation();
+    void RefreshSetLevelIssues();
     void RefreshSelectedAssetAfterStoreChange();
 
     void EnsureAssetIsLocal(const std::shared_ptr<IAssetItem>& asset);

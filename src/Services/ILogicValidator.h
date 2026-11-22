@@ -20,7 +20,18 @@ class ILogicValidator {
     // Updated to accept notesLookup and rangeCache for documentation checks
     virtual QList<ValidationIssue> ValidateAsset(const QList<AchievementConditionGroup>& groups, std::shared_ptr<IAssetItem> asset,
                                                  const QMap<QString, QList<std::shared_ptr<NoteNode>>>* notesLookup = nullptr,
-                                                 const QList<ConditionFormatter::RangeEntry>* rangeCache = nullptr) = 0;
+                                                 const QList<ConditionFormatter::RangeEntry>* rangeCache = nullptr,
+                                                 const QList<CodeNote>* rawNotes = nullptr) = 0;
+
+    virtual QList<ValidationIssue> ValidateLeaderboard(const QMap<QString, QList<AchievementConditionGroup>>& segments,
+                                                       std::shared_ptr<IAssetItem> asset,
+                                                       const QMap<QString, QList<std::shared_ptr<NoteNode>>>* notesLookup = nullptr,
+                                                       const QList<ConditionFormatter::RangeEntry>* rangeCache = nullptr,
+                                                       const QList<CodeNote>* rawNotes = nullptr) = 0;
+
+    virtual QList<ValidationIssue> ValidateCodeNotes(const QList<CodeNote>& notes, int consoleId = 0) = 0;
+
+    virtual QList<ValidationIssue> ValidateSet(const QList<std::shared_ptr<IAssetItem>>& allAssets) = 0;
 };
 
 } // namespace RALE

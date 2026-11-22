@@ -58,7 +58,8 @@ class TriggerEditorWidget : public QWidget {
     void Redo();
 
     void AddConditionFromNote(const QString& logicString, const QString& type, const QString& size);
-    void SelectCondition(const AchievementCondition* target);
+    void SelectCondition(const AchievementCondition* target, const QString& segmentName = "", int groupIndex = -1);
+    void FocusHeaderField(const QString& field);
 
     void ExtendSelectionByPattern();
     void CopySelectedRows();
@@ -219,6 +220,7 @@ class TriggerEditorWidget : public QWidget {
     void RefreshGroupsListUI();
     void RefreshCurrentGridDisplay();
     void RunValidation();
+    void UpdateHeaderFeedbackHighlights();
     void SetStatus(const QString& msg);
 
     void HandleAddressSelection(int row, int col);

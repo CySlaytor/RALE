@@ -39,11 +39,11 @@ QString LogicFormatter::ConditionToString(const AchievementCondition& cond) {
     return sb;
 }
 
-QString LogicFormatter::GroupsToString(const QList<AchievementConditionGroup>& groups) {
+QString LogicFormatter::GroupsToString(const QList<AchievementConditionGroup>& groups, QChar separator) {
     QString sb;
     for (int i = 0; i < groups.size(); i++) {
         if (i > 0)
-            sb += 'S';
+            sb += separator;
         const auto& group = groups[i];
         for (int c = 0; c < group.Conditions.size(); c++) {
             if (c > 0)

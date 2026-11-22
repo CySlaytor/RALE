@@ -289,7 +289,10 @@ void TriggerViewModel::RemoveAllAltGroups() {
 // Expose validation via the injected service
 QList<ValidationIssue> TriggerViewModel::ValidateCurrentLogic() {
     // Pass the notes references to the validator
-    return _validator.ValidateAsset(GetActiveGroups(), BoundAsset, NotesLookup, RangeCache);
+    if (BoundAsset != nullptr && BoundAsset->isLeaderboard()) {
+        return _validator.ValidateLeaderboard(_allSegments, BoundAsset, NotesLookup, RangeCache, RawNotes);
+    }
+    return _validator.ValidateAsset(GetActiveGroups(), BoundAsset, NotesLookup, RangeCache, RawNotes);
 }
 
 } // namespace RALE

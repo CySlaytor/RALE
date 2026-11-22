@@ -103,6 +103,7 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget* parent) : QWidget(parent), _vi
         }
 
         _isProgrammaticallyChanging = wasChanging;
+        RunValidation();
         emit AchievementDataChanged();
     });
 
@@ -708,7 +709,10 @@ void TriggerEditorWidget::SetNotes(const QList<CodeNote>& notes) {
 
     _viewModel.NotesLookup = &_notesLookup;
     _viewModel.RangeCache = &_rangeCache;
+    _viewModel.RawNotes = &_rawNotes;
 
+    if (_viewModel.BoundAsset != nullptr && _viewModel.BoundAsset->ID != 0)
+        RunValidation();
     RefreshCurrentGridDisplay();
 }
 
@@ -883,6 +887,7 @@ void TriggerEditorWidget::Clear() {
     if (_headerView != nullptr)
         _headerView->viewport()->update();
     _currentIssues.clear();
+    UpdateHeaderFeedbackHighlights();
 
     cmbPoints->setVisible(true);
     cmbType->setVisible(true);
@@ -991,7 +996,8 @@ void TriggerEditorWidget::RefreshCurrentGridDisplay() {
         }
     }
 
-    _conditionModel.SetGroup(group, isGenerated, _showDecimal, _showAliases, _collapseChains, &_notesLookup, &_rangeCache, &_currentIssues);
+    _conditionModel.SetGroup(group, isGenerated, _showDecimal, _showAliases, _collapseChains, &_notesLookup, &_rangeCache, &_currentIssues,
+                             _viewModel.ActiveSegmentName, row);
 
     if (group != nullptr && !selectedModelRows.isEmpty()) {
         QItemSelection selection;
@@ -1025,6 +1031,39 @@ void TriggerEditorWidget::RefreshCurrentGridDisplay() {
     conditionGrid->verticalScrollBar()->setValue(savedScroll);
 }
 
+void TriggerEditorWidget::UpdateHeaderFeedbackHighlights() {
+    auto applyForField = [this](QLineEdit* edit, const QString& fieldName) {
+        if (edit == nullptr)
+            return;
+        FeedbackSeverity maxSev = FeedbackSeverity::None;
+        QStringList tips;
+        for (const auto& iss : _currentIssues) {
+            if (iss.TargetField == fieldName) {
+                if (iss.Severity > maxSev)
+                    maxSev = iss.Severity;
+                tips.append(QString("%1: %2").arg(iss.Title, iss.Description));
+            }
+        }
+        QString state;
+        if (maxSev >= FeedbackSeverity::Fail)
+            state = "fail";
+        else if (maxSev == FeedbackSeverity::Warning)
+            state = "warn";
+        else if (maxSev == FeedbackSeverity::Info)
+            state = "info";
+
+        if (edit->property("feedbackState").toString() != state) {
+            edit->setProperty("feedbackState", state);
+            edit->style()->unpolish(edit);
+            edit->style()->polish(edit);
+        }
+        edit->setToolTip(tips.join("\n"));
+    };
+
+    applyForField(txtTitle, "title");
+    applyForField(txtDescription, "desc");
+}
+
 void TriggerEditorWidget::RunValidation() {
     _currentIssues = _viewModel.ValidateCurrentLogic();
     emit ValidationCompleted(_currentIssues);
@@ -1032,7 +1071,7 @@ void TriggerEditorWidget::RunValidation() {
     bool hasErrors = false;
     bool hasWarnings = false;
     for (const auto& i : _currentIssues) {
-        if (i.Severity >= FeedbackSeverity::Error)
+        if (i.Severity >= FeedbackSeverity::Fail)
             hasErrors = true;
         else if (i.Severity >= FeedbackSeverity::Warning)
             hasWarnings = true;
@@ -1047,7 +1086,8 @@ void TriggerEditorWidget::RunValidation() {
             SetStatus("Ready");
     }
 
-    _conditionModel.SetIssues(&_currentIssues);
+    UpdateHeaderFeedbackHighlights();
+    _conditionModel.SetIssues(&_currentIssues, _viewModel.ActiveSegmentName, groupsList ? groupsList->currentRow() : -1);
 }
 
 void TriggerEditorWidget::CommitActiveEditor() {
@@ -1064,6 +1104,7 @@ void TriggerEditorWidget::onTitleChanged(const QString& text) {
     if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
         return;
     _viewModel.BoundAsset->Title = text;
+    RunValidation();
     emit AchievementDataChanged();
 }
 
@@ -1083,6 +1124,7 @@ void TriggerEditorWidget::onDescriptionChanged(const QString& text) {
     if (_isProgrammaticallyChanging || _viewModel.BoundAsset == nullptr)
         return;
     _viewModel.BoundAsset->Description = text;
+    RunValidation();
     emit AchievementDataChanged();
 }
 
@@ -2417,24 +2459,46 @@ QString TriggerEditorWidget::ValidateMemorySize(const QString& inputSize) {
     return RaLogicSyntax::MemorySizes.contains(inputSize) ? inputSize : "8-bit";
 }
 
-void TriggerEditorWidget::SelectCondition(const AchievementCondition* target) {
+void TriggerEditorWidget::SelectCondition(const AchievementCondition* target, const QString& segmentName, int groupIndexHint) {
     if (target == nullptr)
         return;
+
+    if (!segmentName.isEmpty() && lvLeaderboardComponents->isVisible()) {
+        for (int s = 0; s < lvLeaderboardComponents->count(); ++s) {
+            if (lvLeaderboardComponents->item(s)->text().compare(segmentName, Qt::CaseInsensitive) == 0) {
+                if (lvLeaderboardComponents->currentRow() != s)
+                    lvLeaderboardComponents->setCurrentRow(s);
+                break;
+            }
+        }
+    }
 
     const auto& groups = _viewModel.GetActiveGroups();
     int groupIndex = -1;
     const AchievementCondition* actualCond = nullptr;
 
-    for (int i = 0; i < groups.size(); i++) {
-        for (const auto& c : groups[i].Conditions) {
+    if (groupIndexHint >= 0 && groupIndexHint < groups.size()) {
+        for (const auto& c : groups[groupIndexHint].Conditions) {
             if (c == *target) {
-                groupIndex = i;
+                groupIndex = groupIndexHint;
                 actualCond = &c;
                 break;
             }
         }
-        if (groupIndex != -1)
-            break;
+    }
+
+    if (groupIndex == -1) {
+        for (int i = 0; i < groups.size(); i++) {
+            for (const auto& c : groups[i].Conditions) {
+                if (c == *target) {
+                    groupIndex = i;
+                    actualCond = &c;
+                    break;
+                }
+            }
+            if (groupIndex != -1)
+                break;
+        }
     }
 
     // Fallback matching the C# reviewer: the validation snapshot may be stale after
@@ -2464,6 +2528,16 @@ void TriggerEditorWidget::SelectCondition(const AchievementCondition* target) {
             conditionGrid->selectionModel()->setCurrentIndex(_conditionModel.index(vRow, 0), QItemSelectionModel::NoUpdate);
             conditionGrid->scrollTo(_conditionModel.index(vRow, 0));
         }
+    }
+}
+
+void TriggerEditorWidget::FocusHeaderField(const QString& field) {
+    if (field == "title" && txtTitle != nullptr) {
+        txtTitle->setFocus();
+        txtTitle->selectAll();
+    } else if (field == "desc" && txtDescription != nullptr) {
+        txtDescription->setFocus();
+        txtDescription->selectAll();
     }
 }
 

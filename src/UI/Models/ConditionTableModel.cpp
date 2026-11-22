@@ -36,7 +36,8 @@ void ConditionTableModel::RebuildVisualMap() {
 
 void ConditionTableModel::SetGroup(AchievementConditionGroup* group, bool readOnly, bool showDecimal, bool showAliases, bool collapseChains,
                                    const QMap<QString, QList<std::shared_ptr<NoteNode>>>* notesLookup,
-                                   const QList<ConditionFormatter::RangeEntry>* rangeCache, const QList<ValidationIssue>* issues) {
+                                   const QList<ConditionFormatter::RangeEntry>* rangeCache, const QList<ValidationIssue>* issues,
+                                   const QString& segmentName, int groupIndex) {
     beginResetModel();
     _group = group;
     _readOnly = readOnly;
@@ -46,13 +47,19 @@ void ConditionTableModel::SetGroup(AchievementConditionGroup* group, bool readOn
     _notesLookup = notesLookup;
     _rangeCache = rangeCache;
     _issues = issues;
+    _segmentName = segmentName;
+    _groupIndex = groupIndex;
 
     RebuildVisualMap();
     endResetModel();
 }
 
-void ConditionTableModel::SetIssues(const QList<ValidationIssue>* issues) {
+void ConditionTableModel::SetIssues(const QList<ValidationIssue>* issues, const QString& segmentName, int groupIndex) {
     _issues = issues;
+    if (!segmentName.isEmpty())
+        _segmentName = segmentName;
+    if (groupIndex >= 0)
+        _groupIndex = groupIndex;
     if (_group != nullptr && !_visualToModelMap.isEmpty()) {
         emit dataChanged(index(0, ColID), index(_visualToModelMap.size() - 1, ColID));
     }
@@ -101,16 +108,28 @@ int ConditionTableModel::GetVisualRowForCondition(const AchievementCondition* co
     return -1;
 }
 
-std::optional<ValidationIssue> ConditionTableModel::GetIssueForCondition(const AchievementCondition& cond) const {
+QList<ValidationIssue> ConditionTableModel::GetIssuesForCondition(const AchievementCondition& cond) const {
+    QList<ValidationIssue> matches;
     if (_issues == nullptr)
-        return std::nullopt;
+        return matches;
 
-    std::optional<ValidationIssue> best = std::nullopt;
     for (const auto& iss : *_issues) {
-        if (iss.Target.has_value() && iss.Target.value() == cond) {
-            if (!best.has_value() || iss.Severity > best->Severity)
-                best = iss;
-        }
+        if (!iss.SegmentName.isEmpty() && !_segmentName.isEmpty() && iss.SegmentName != _segmentName)
+            continue;
+        if (iss.GroupIndex >= 0 && _groupIndex >= 0 && iss.GroupIndex != _groupIndex)
+            continue;
+        if (iss.Target.has_value() && iss.Target.value() == cond)
+            matches.append(iss);
+    }
+    return matches;
+}
+
+std::optional<ValidationIssue> ConditionTableModel::GetIssueForCondition(const AchievementCondition& cond) const {
+    const auto matches = GetIssuesForCondition(cond);
+    std::optional<ValidationIssue> best = std::nullopt;
+    for (const auto& iss : matches) {
+        if (!best.has_value() || iss.Severity > best->Severity)
+            best = iss;
     }
     return best;
 }
@@ -199,10 +218,14 @@ QVariant ConditionTableModel::data(const QModelIndex& index, int role) const {
         if (index.column() == ColID) {
             auto issue = GetIssueForCondition(cond);
             if (issue.has_value()) {
-                if (issue->Severity == FeedbackSeverity::Error)
+                if (issue->Severity >= FeedbackSeverity::Fail)
                     return isDark ? QColor(90, 30, 30) : QColor(255, 220, 220); // Soft red
                 else if (issue->Severity == FeedbackSeverity::Warning)
                     return isDark ? QColor(90, 80, 30) : QColor(255, 245, 200); // Soft yellow
+                else if (issue->Severity == FeedbackSeverity::Info)
+                    return isDark ? QColor(35, 65, 95) : QColor(215, 235, 255); // Soft blue
+                else if (issue->Severity == FeedbackSeverity::Pass)
+                    return isDark ? QColor(30, 75, 40) : QColor(220, 250, 220); // Soft green
             }
             return staticColor; // SystemColors.ControlLight
         }
@@ -241,6 +264,25 @@ QVariant ConditionTableModel::data(const QModelIndex& index, int role) const {
 
         return QVariant();
     } else if (role == Qt::ToolTipRole) {
+        if (index.column() == ColID) {
+            const auto matches = GetIssuesForCondition(cond);
+            if (!matches.isEmpty()) {
+                QStringList lines;
+                for (const auto& iss : matches) {
+                    QString sevLabel = "Info";
+                    if (iss.Severity == FeedbackSeverity::Error)
+                        sevLabel = "Error";
+                    else if (iss.Severity == FeedbackSeverity::Fail)
+                        sevLabel = "Fail";
+                    else if (iss.Severity == FeedbackSeverity::Warning)
+                        sevLabel = "Warning";
+                    else if (iss.Severity == FeedbackSeverity::Pass)
+                        sevLabel = "Pass";
+                    lines.append(QString("[%1] %2: %3").arg(sevLabel, iss.Title, iss.Description));
+                }
+                return lines.join("\n");
+            }
+        }
         if (index.column() == ColLSize && cond.LeftOperand.Size.isEmpty() && RaLogicSyntax::MemoryTypes.contains(cond.LeftOperand.Type)) {
             return "Implicit 32-bit";
         }

@@ -203,6 +203,18 @@ QLineEdit {
 QLineEdit:focus {
     border-color: #0078d7;
 }
+QLineEdit[feedbackState="fail"] {
+    background-color: #3a1d1d;
+    border-color: #e5534b;
+}
+QLineEdit[feedbackState="warn"] {
+    background-color: #36301a;
+    border-color: #d29922;
+}
+QLineEdit[feedbackState="info"] {
+    background-color: #1b2a3a;
+    border-color: #58a6ff;
+}
 
 QDialog QLineEdit {
     background-color: #141414;

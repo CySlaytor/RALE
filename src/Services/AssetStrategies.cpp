@@ -69,7 +69,8 @@ QMap<QString, QList<AchievementConditionGroup>> LeaderboardStrategy::ParseLogic(
         }
 
         if (!typeKey.isEmpty()) {
-            auto groups = AchievementParser::ParseAchievementTrigger(cleanLogic, 'S', false);
+            const QChar sep = (typeKey == "Value") ? '$' : 'S';
+            auto groups = AchievementParser::ParseAchievementTrigger(cleanLogic, sep, false);
             if (groups.isEmpty()) {
                 AchievementConditionGroup g;
                 g.GroupName = "Core";
@@ -98,7 +99,7 @@ QString LeaderboardStrategy::BuildLogic(const QMap<QString, QList<AchievementCon
     sb += "STA:" + LogicFormatter::GroupsToString(segments.value("Start")) + "::";
     sb += "CAN:" + LogicFormatter::GroupsToString(segments.value("Cancel")) + "::";
     sb += "SUB:" + LogicFormatter::GroupsToString(segments.value("Submit")) + "::";
-    sb += "VAL:" + LogicFormatter::GroupsToString(segments.value("Value"));
+    sb += "VAL:" + LogicFormatter::GroupsToString(segments.value("Value"), '$');
 
     return sb;
 }
