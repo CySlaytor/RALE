@@ -2297,7 +2297,7 @@ void TriggerEditorWidget::HandleAddressSelection(int row, int col) {
         while (!collected.isEmpty()) {
             int64_t baseAddrNum = ParseHex(collected[0].LeftOperand.Value);
             if (!RaLogicSyntax::MemoryTypes.contains(collected[0].LeftOperand.Type) ||
-                ConditionFormatter::GetEffectiveNote(_notesLookup, baseAddrNum) == nullptr) {
+                ConditionFormatter::GetEffectiveNote(_notesLookup, baseAddrNum, &_rangeCache) == nullptr) {
                 collected.removeFirst();
             } else
                 break;

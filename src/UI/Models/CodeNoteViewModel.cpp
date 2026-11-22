@@ -594,19 +594,56 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
 
     // Re-apply Array Indexing Filter just in case it wasn't cleaned by the caller
     const auto notesLookup = NotesLookup();
+    auto isKnownBase = [&](int64_t baseAddr) -> bool {
+        if (ConditionFormatter::GetEffectiveNote(notesLookup, baseAddr) != nullptr)
+            return true;
+        for (const auto& r : _rangeCache) {
+            if (baseAddr >= r.Start && baseAddr < r.End && r.Node != nullptr && !r.Node->IsPointerArray)
+                return true;
+        }
+        return false;
+    };
+
     while (offsets.size() > 1) {
         int64_t baseAddr = offsets[0];
-        if (ConditionFormatter::GetEffectiveNote(notesLookup, baseAddr) == nullptr) {
+        if (!isKnownBase(baseAddr)) {
             offsets.removeAt(0);
         } else {
             break;
         }
     }
 
+    bool matchedExactBase = false;
     for (const auto& n : AllNotes) {
         if (ParseAddress(n.Address) == offsets[0]) {
             SelectBaseNote(n);
+            matchedExactBase = true;
             break;
+        }
+    }
+
+    if (!matchedExactBase) {
+        const RangeCacheEntry* bestRange = nullptr;
+        for (const auto& r : _rangeCache) {
+            if (offsets[0] >= r.Start && offsets[0] < r.End && r.Node != nullptr && !r.Node->IsPointerArray) {
+                if (bestRange == nullptr || r.Start > bestRange->Start ||
+                    (r.Start == bestRange->Start && (r.End - r.Start) < (bestRange->End - bestRange->Start))) {
+                    bestRange = &r;
+                }
+            }
+        }
+        if (bestRange != nullptr) {
+            CodeNote liveNote = bestRange->Note;
+            for (const auto& n : AllNotes) {
+                if (LogicFormatter::NormalizeAddress(n.Address) == LogicFormatter::NormalizeAddress(bestRange->Note.Address)) {
+                    liveNote = n;
+                    break;
+                }
+            }
+            SelectBaseNote(liveNote);
+            int64_t delta = offsets[0] - bestRange->Start;
+            offsets[0] = bestRange->Start;
+            offsets.insert(1, delta);
         }
     }
 
@@ -618,72 +655,11 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
     int matchedDepth = 0;
     int64_t finalRemainder = 0;
 
-    auto ParseOffsetString = [](const QString& offsetStr) -> int64_t {
-        QString clean = offsetStr.trimmed();
-        clean.remove('|').remove('+').remove('-').remove("0x", Qt::CaseInsensitive);
-        bool ok = false;
-        int64_t val = clean.toLongLong(&ok, 16);
-        if (ok) {
-            if (offsetStr.contains('-'))
-                return -val;
-            return val;
-        }
-        return std::numeric_limits<int64_t>::min();
-    };
-
-    std::function<std::shared_ptr<NoteNode>(const QList<std::shared_ptr<NoteNode>>&, int64_t, int64_t&)> findNodeStep =
-        [&](const QList<std::shared_ptr<NoteNode>>& levelNodes, int64_t targetOffset, int64_t& outStepRemainder) -> std::shared_ptr<NoteNode> {
-        outStepRemainder = 0;
-        // 1. Exact offset match on non-inline-array nodes
-        for (const auto& n : levelNodes) {
-            if (n == nullptr || n->IsInlineArray)
-                continue;
-            if (ParseOffsetString(n->Offset) == targetOffset)
-                return n;
-        }
-        // 2. Narrowest range match on non-inline-array nodes
-        std::shared_ptr<NoteNode> bestRange = nullptr;
-        int64_t bestStart = 0;
-        for (const auto& n : levelNodes) {
-            if (n == nullptr || n->IsInlineArray)
-                continue;
-            int64_t start = ParseOffsetString(n->Offset);
-            if (start != std::numeric_limits<int64_t>::min() && targetOffset >= start && targetOffset < start + n->Size) {
-                if (bestRange == nullptr || n->Size < bestRange->Size) {
-                    bestRange = n;
-                    bestStart = start;
-                }
-            }
-        }
-        if (bestRange != nullptr) {
-            outStepRemainder = targetOffset - bestStart;
-            return bestRange;
-        }
-        // 3. Inline array modulo-stride match
-        for (const auto& n : levelNodes) {
-            if (n == nullptr || !n->IsInlineArray || n->Size <= 0)
-                continue;
-            int64_t start = ParseOffsetString(n->Offset);
-            if (start != std::numeric_limits<int64_t>::min() && targetOffset >= start && targetOffset < start + n->Size) {
-                int64_t rel = targetOffset - start;
-                if (!n->Children.isEmpty()) {
-                    int64_t elemOff = (n->ArrayStride > 0) ? (rel % n->ArrayStride) : rel;
-                    int64_t childRem = 0;
-                    auto matchedChild = findNodeStep(n->Children, elemOff, childRem);
-                    if (matchedChild != nullptr) {
-                        outStepRemainder = childRem;
-                        return matchedChild;
-                    }
-                }
-                outStepRemainder = rel;
-                return n;
-            }
-        }
-        return nullptr;
-    };
-
+    std::shared_ptr<NoteNode> rootContainer = nullptr;
     QList<std::shared_ptr<NoteNode>> rootNodes;
     for (const auto& n : nodes) {
+        if (n->IndentLevel == -2)
+            rootContainer = n;
         if (n->IndentLevel == 0 || (n->Parent != nullptr && n->Parent->IndentLevel == -1) || (n->Parent == nullptr && n->IndentLevel != -2))
             rootNodes.append(n);
     }
@@ -693,10 +669,11 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
     if (offsets.size() <= 1)
         return;
 
-    int64_t firstRemainder = 0;
-    std::shared_ptr<NoteNode> current = findNodeStep(rootNodes, offsets[1], firstRemainder);
+    int64_t firstMatchedOff = 0;
+    std::shared_ptr<NoteNode> current =
+        ConditionFormatter::FindBestMatchingNode(rootNodes, offsets[1], offsets.size() == 2, &firstMatchedOff, rootContainer);
     if (current != nullptr) {
-        finalRemainder = firstRemainder;
+        finalRemainder = offsets[1] - firstMatchedOff;
     }
 
     if (current != nullptr) {
@@ -706,10 +683,13 @@ void CodeNoteViewModel::HighlightVariable(QList<int64_t> offsets) {
         // Continue matching even if we have a remainder (Array/Struct coverage logic)
         while (matchedDepth < offsets.size()) {
             int64_t nextOffset = offsets[matchedDepth];
-            int64_t stepRemainder = 0;
-            std::shared_ptr<NoteNode> nextNode = findNodeStep(current->Children, nextOffset, stepRemainder);
+            int64_t stepMatchedOff = 0;
+            bool isLastStep = (matchedDepth == offsets.size() - 1);
+            std::shared_ptr<NoteNode> nextNode =
+                ConditionFormatter::FindBestMatchingNode(current->Children, nextOffset, isLastStep, &stepMatchedOff, current);
 
             if (nextNode != nullptr) {
+                int64_t stepRemainder = nextOffset - stepMatchedOff;
                 current = nextNode;
                 bestMatchNode = current;
                 matchedDepth++;

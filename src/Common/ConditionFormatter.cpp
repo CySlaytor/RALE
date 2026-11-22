@@ -5,14 +5,16 @@
 
 #include <QRegularExpression>
 
+#include <optional>
+
 namespace RALE {
 
 namespace {
 
-int64_t ParseOffsetHex(const QString& s) {
+std::optional<int64_t> ParseOffsetHexOpt(const QString& s) {
     static const QRegularExpression validHexRegex("^[0-9A-Fa-f]+$");
     if (s.trimmed().isEmpty())
-        return -1;
+        return std::nullopt;
     QString clean = s;
     clean.remove('|');
     clean = clean.trimmed();
@@ -22,79 +24,42 @@ int64_t ParseOffsetHex(const QString& s) {
     if (clean.startsWith("0x", Qt::CaseInsensitive))
         clean = clean.mid(2).trimmed();
     if (!validHexRegex.match(clean).hasMatch())
-        return -1;
+        return std::nullopt;
     bool ok = false;
     int64_t v = clean.toLongLong(&ok, 16);
     if (!ok)
-        return -1;
+        return std::nullopt;
     return isNeg ? -v : v;
 }
 
-// Prioritizes exact non-inline-array matches and narrow enclosing ranges before checking
-// inline [NxM bytes] arrays via modulo element stride.
-std::shared_ptr<NoteNode> FindBestMatchingNode(const QList<std::shared_ptr<NoteNode>>& levelNodes, int64_t offset,
-                                               bool allowInlineArrayFallback, int64_t* outMatchedNodeOff = nullptr) {
-    if (offset == -1)
-        return nullptr;
+bool IsPointerLikeNoteNode(const std::shared_ptr<NoteNode>& node) {
+    if (node == nullptr || node->IsInlineArray)
+        return false;
+    if (!node->Children.isEmpty())
+        return true;
+    return node->Description.contains("Pointer", Qt::CaseInsensitive) || node->Description.contains('&');
+}
 
-    // 1. Exact offset match on non-inline-array nodes
-    for (const auto& node : levelNodes) {
-        if (node == nullptr || node->IsInlineArray)
+std::shared_ptr<NoteNode> FindFirstDocumentedPointer(const QList<std::shared_ptr<NoteNode>>& nodes, int64_t minRelOffset,
+                                                     int64_t maxSize, int64_t baseOffset = 0) {
+    std::shared_ptr<NoteNode> best = nullptr;
+    int64_t bestRel = 0;
+
+    for (const auto& n : nodes) {
+        if (n == nullptr || n->IsTemplateInherited || n->Children.isEmpty() || !IsPointerLikeNoteNode(n))
             continue;
-        int64_t nodeOff = ParseOffsetHex(node->Offset);
-        if (nodeOff != -1 && offset == nodeOff) {
-            if (outMatchedNodeOff != nullptr)
-                *outMatchedNodeOff = nodeOff;
-            return node;
+        auto offOpt = ParseOffsetHexOpt(n->Offset);
+        if (!offOpt.has_value())
+            continue;
+        int64_t rel = offOpt.value() - baseOffset;
+        if (rel < minRelOffset || (maxSize > 0 && rel >= maxSize))
+            continue;
+        if (best == nullptr || rel < bestRel) {
+            best = n;
+            bestRel = rel;
         }
     }
-
-    // 2. Range match on non-inline-array nodes (smallest enclosing span)
-    std::shared_ptr<NoteNode> bestRangeNode = nullptr;
-    int64_t bestRangeOff = 0;
-    for (const auto& node : levelNodes) {
-        if (node == nullptr || node->IsInlineArray)
-            continue;
-        int64_t nodeOff = ParseOffsetHex(node->Offset);
-        if (nodeOff != -1 && offset >= nodeOff && offset < nodeOff + node->Size) {
-            if (bestRangeNode == nullptr || node->Size < bestRangeNode->Size) {
-                bestRangeNode = node;
-                bestRangeOff = nodeOff;
-            }
-        }
-    }
-    if (bestRangeNode != nullptr) {
-        if (outMatchedNodeOff != nullptr)
-            *outMatchedNodeOff = bestRangeOff;
-        return bestRangeNode;
-    }
-
-    // 3. Inline array container match: resolve element offset modulo ArrayStride into array template children
-    for (const auto& node : levelNodes) {
-        if (node == nullptr || !node->IsInlineArray || node->Size <= 0)
-            continue;
-        int64_t nodeOff = ParseOffsetHex(node->Offset);
-        if (nodeOff != -1 && offset >= nodeOff && offset < nodeOff + node->Size) {
-            int64_t rel = offset - nodeOff;
-            if (!node->Children.isEmpty()) {
-                int64_t elemOff = (node->ArrayStride > 0) ? (rel % node->ArrayStride) : rel;
-                int64_t childNodeOff = 0;
-                auto matchedChild = FindBestMatchingNode(node->Children, elemOff, allowInlineArrayFallback, &childNodeOff);
-                if (matchedChild != nullptr) {
-                    if (outMatchedNodeOff != nullptr)
-                        *outMatchedNodeOff = nodeOff + (rel - elemOff) + childNodeOff;
-                    return matchedChild;
-                }
-            }
-            if (allowInlineArrayFallback) {
-                if (outMatchedNodeOff != nullptr)
-                    *outMatchedNodeOff = nodeOff;
-                return node;
-            }
-        }
-    }
-
-    return nullptr;
+    return best;
 }
 
 QList<std::shared_ptr<NoteNode>> ResolveNoteRedirects(QList<std::shared_ptr<NoteNode>> workingNodes,
@@ -133,6 +98,146 @@ QList<std::shared_ptr<NoteNode>> ResolveNoteRedirects(QList<std::shared_ptr<Note
 }
 
 } // namespace
+
+// Prioritizes exact non-inline-array matches and narrow enclosing ranges before checking
+// inline [NxM bytes] arrays via modulo element stride or first documented pointer fallback.
+std::shared_ptr<NoteNode> ConditionFormatter::FindBestMatchingNode(const QList<std::shared_ptr<NoteNode>>& levelNodes, int64_t offset,
+                                                                   bool allowInlineArrayFallback, int64_t* outMatchedNodeOff,
+                                                                   const std::shared_ptr<NoteNode>& parentContainer) {
+    if (offset < 0 && parentContainer == nullptr)
+        return nullptr;
+
+    // 1. Exact offset match on non-inline-array nodes
+    for (const auto& node : levelNodes) {
+        if (node == nullptr || node->IsInlineArray)
+            continue;
+        auto nodeOffOpt = ParseOffsetHexOpt(node->Offset);
+        if (nodeOffOpt.has_value() && offset == nodeOffOpt.value()) {
+            if (outMatchedNodeOff != nullptr)
+                *outMatchedNodeOff = nodeOffOpt.value();
+            return node;
+        }
+    }
+
+    // 2. Range match on non-inline-array nodes (smallest enclosing span)
+    std::shared_ptr<NoteNode> bestRangeNode = nullptr;
+    int64_t bestRangeOff = 0;
+    for (const auto& node : levelNodes) {
+        if (node == nullptr || node->IsInlineArray)
+            continue;
+        auto nodeOffOpt = ParseOffsetHexOpt(node->Offset);
+        if (nodeOffOpt.has_value() && offset >= nodeOffOpt.value() && offset < nodeOffOpt.value() + node->Size) {
+            if (bestRangeNode == nullptr || node->Size < bestRangeNode->Size) {
+                bestRangeNode = node;
+                bestRangeOff = nodeOffOpt.value();
+            }
+        }
+    }
+    if (bestRangeNode != nullptr) {
+        if (outMatchedNodeOff != nullptr)
+            *outMatchedNodeOff = bestRangeOff;
+        return bestRangeNode;
+    }
+
+    // 3. Inline array container match: resolve element offset modulo ArrayStride or first documented pointer
+    for (const auto& node : levelNodes) {
+        if (node == nullptr || !node->IsInlineArray || node->Size <= 0)
+            continue;
+        auto nodeOffOpt = ParseOffsetHexOpt(node->Offset);
+        if (!nodeOffOpt.has_value())
+            continue;
+        int64_t nodeOff = nodeOffOpt.value();
+        if (offset >= nodeOff && offset < nodeOff + node->Size) {
+            int64_t rel = offset - nodeOff;
+            if (!node->Children.isEmpty()) {
+                if (node->ArrayStride > 0) {
+                    int64_t elemOff = rel % node->ArrayStride;
+                    int64_t childNodeOff = 0;
+                    auto matchedChild = FindBestMatchingNode(node->Children, elemOff, allowInlineArrayFallback, &childNodeOff, node);
+                    if (matchedChild != nullptr) {
+                        if (outMatchedNodeOff != nullptr)
+                            *outMatchedNodeOff = nodeOff + (rel - elemOff) + childNodeOff;
+                        return matchedChild;
+                    }
+                } else {
+                    int64_t childNodeOff = 0;
+                    auto matchedChild = FindBestMatchingNode(node->Children, rel, allowInlineArrayFallback, &childNodeOff, node);
+                    if (matchedChild != nullptr) {
+                        if (outMatchedNodeOff != nullptr)
+                            *outMatchedNodeOff = nodeOff + childNodeOff;
+                        return matchedChild;
+                    }
+                }
+            }
+
+            auto firstSiblingDocPtr = FindFirstDocumentedPointer(levelNodes, 0, node->Size, nodeOff);
+            if (firstSiblingDocPtr != nullptr && (!allowInlineArrayFallback || node->ArrayStride == 0)) {
+                if (outMatchedNodeOff != nullptr)
+                    *outMatchedNodeOff = nodeOff + (rel & ~int64_t(3));
+                return firstSiblingDocPtr;
+            }
+
+            if (allowInlineArrayFallback) {
+                if (outMatchedNodeOff != nullptr)
+                    *outMatchedNodeOff = nodeOff;
+                return node;
+            }
+        }
+    }
+
+    // 4. Parent array container match: applies strictly to pointers/elements inside [0, parentContainer->Size)
+    if (parentContainer != nullptr && (parentContainer->IsPointerArray || parentContainer->IsInlineArray) && parentContainer->Size > 0) {
+        if (offset >= 0 && offset < parentContainer->Size) {
+            if (parentContainer->ArrayStride > 0) {
+                int64_t elemOff = offset % parentContainer->ArrayStride;
+
+                for (const auto& node : levelNodes) {
+                    if (node == nullptr || node->IsInlineArray || node->IsTemplateInherited)
+                        continue;
+                    auto nodeOffOpt = ParseOffsetHexOpt(node->Offset);
+                    if (!nodeOffOpt.has_value() || nodeOffOpt.value() < 0 || nodeOffOpt.value() >= parentContainer->Size)
+                        continue;
+                    if ((nodeOffOpt.value() % parentContainer->ArrayStride) == elemOff) {
+                        if (outMatchedNodeOff != nullptr)
+                            *outMatchedNodeOff = offset - elemOff + (nodeOffOpt.value() % parentContainer->ArrayStride);
+                        return node;
+                    }
+                }
+
+                std::shared_ptr<NoteNode> bestModRange = nullptr;
+                int64_t bestModStart = 0;
+                for (const auto& node : levelNodes) {
+                    if (node == nullptr || node->IsInlineArray || node->IsTemplateInherited)
+                        continue;
+                    auto nodeOffOpt = ParseOffsetHexOpt(node->Offset);
+                    if (!nodeOffOpt.has_value() || nodeOffOpt.value() < 0 || nodeOffOpt.value() >= parentContainer->Size)
+                        continue;
+                    int64_t slotStart = nodeOffOpt.value() % parentContainer->ArrayStride;
+                    if (elemOff >= slotStart && elemOff < slotStart + node->Size) {
+                        if (bestModRange == nullptr || node->Size < bestModRange->Size) {
+                            bestModRange = node;
+                            bestModStart = slotStart;
+                        }
+                    }
+                }
+                if (bestModRange != nullptr) {
+                    if (outMatchedNodeOff != nullptr)
+                        *outMatchedNodeOff = offset - elemOff + bestModStart;
+                    return bestModRange;
+                }
+            }
+
+            auto firstDocPtr = FindFirstDocumentedPointer(levelNodes, 0, parentContainer->Size);
+            if (firstDocPtr != nullptr && (!allowInlineArrayFallback || parentContainer->ArrayStride == 0)) {
+                if (outMatchedNodeOff != nullptr)
+                    *outMatchedNodeOff = offset & ~int64_t(3);
+                return firstDocPtr;
+            }
+        }
+    }
+
+    return nullptr;
+}
 
 QString ConditionFormatter::FormatOperandDisplay(const Operand& op, bool showDecimal, bool showAliases,
                                                  const QMap<QString, QList<std::shared_ptr<NoteNode>>>* notesLookup,
@@ -238,7 +343,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
         while (chainStack.size() > 1) {
             const auto& first = chainStack.first();
             int64_t baseAddrNum = ParseHex(LogicFormatter::NormalizeAddress(first.Value));
-            if (!first.IsMem || GetEffectiveNote(notesLookup, baseAddrNum) == nullptr) {
+            if (!first.IsMem || GetEffectiveNote(notesLookup, baseAddrNum, rangeCache) == nullptr) {
                 chainStack.removeFirst();
             } else {
                 break;
@@ -248,7 +353,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
         if (chainStack.size() == 1) {
             const auto& first = chainStack.first();
             int64_t baseAddrNum = ParseHex(LogicFormatter::NormalizeAddress(first.Value));
-            if (!first.IsMem || GetEffectiveNote(notesLookup, baseAddrNum) == nullptr) {
+            if (!first.IsMem || GetEffectiveNote(notesLookup, baseAddrNum, rangeCache) == nullptr) {
                 chainStack.removeFirst();
             }
         }
@@ -257,17 +362,61 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
             auto baseNode = chainStack.takeFirst();
             QString normalizedBase = LogicFormatter::NormalizeAddress(baseNode.Value);
 
+            QList<std::shared_ptr<NoteNode>> workingNodes;
+            bool hasWorkingNodes = false;
+
             if (notesLookup.contains(normalizedBase)) {
                 // Redirect Resolution Logic added here
                 // Check if the Base Note is a Redirect (refer to $0x...)
-                QList<std::shared_ptr<NoteNode>> workingNodes = ResolveNoteRedirects(notesLookup.value(normalizedBase), notesLookup);
+                workingNodes = ResolveNoteRedirects(notesLookup.value(normalizedBase), notesLookup);
+                hasWorkingNodes = !workingNodes.isEmpty();
+            } else if (rangeCache != nullptr) {
+                int64_t baseVal = ParseHex(baseNode.Value);
+                const RangeEntry* bestRangeMatch = nullptr;
+                if (baseVal != -1) {
+                    for (const auto& match : *rangeCache) {
+                        if (baseVal >= match.Start && baseVal < match.End && match.Node != nullptr && !match.Node->IsPointerArray) {
+                            if (bestRangeMatch == nullptr || match.Start > bestRangeMatch->Start ||
+                                (match.Start == bestRangeMatch->Start && (match.End - match.Start) < (bestRangeMatch->End - bestRangeMatch->Start))) {
+                                bestRangeMatch = &match;
+                            }
+                        }
+                    }
+                }
+                if (bestRangeMatch != nullptr) {
+                    QString startKey = QString("0x%1").arg(bestRangeMatch->Start, 0, 16);
+                    if (notesLookup.contains(startKey)) {
+                        workingNodes = ResolveNoteRedirects(notesLookup.value(startKey), notesLookup);
+                    } else {
+                        workingNodes = {bestRangeMatch->Node};
+                    }
+                    hasWorkingNodes = !workingNodes.isEmpty();
+                    chainStack.prepend(ChainNode{false, QString("0x%1").arg(baseVal - bestRangeMatch->Start, 0, 16)});
+                }
+            }
 
+            if (hasWorkingNodes) {
+                std::shared_ptr<NoteNode> rootContainer = nullptr;
                 QList<std::shared_ptr<NoteNode>> currentLevelNodes;
                 for (const auto& n : workingNodes) {
-                    if (n->IndentLevel != -2 && (n->Parent == nullptr || n->Parent->IndentLevel == -1))
-                        currentLevelNodes.append(n);
+                    if (n->IndentLevel == -2) {
+                        rootContainer = n;
+                        for (const auto& ch : n->Children) {
+                            if (ch->IndentLevel == -1)
+                                currentLevelNodes.append(ch->Children);
+                            else if (ch->IndentLevel != -2)
+                                currentLevelNodes.append(ch);
+                        }
+                    }
+                }
+                if (currentLevelNodes.isEmpty()) {
+                    for (const auto& n : workingNodes) {
+                        if (n->IndentLevel != -2 && (n->Parent == nullptr || n->Parent->IndentLevel == -1))
+                            currentLevelNodes.append(n);
+                    }
                 }
 
+                std::shared_ptr<NoteNode> parentContainer = rootContainer;
                 bool chainValid = true;
 
                 while (!chainStack.isEmpty()) {
@@ -278,10 +427,11 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                         break;
                     }
 
-                    auto match = FindBestMatchingNode(currentLevelNodes, offset, false);
-                    if (match != nullptr)
+                    auto match = FindBestMatchingNode(currentLevelNodes, offset, false, nullptr, parentContainer);
+                    if (match != nullptr) {
                         currentLevelNodes = match->Children;
-                    else {
+                        parentContainer = match;
+                    } else {
                         chainValid = false;
                         break;
                     }
@@ -290,7 +440,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                 std::shared_ptr<NoteNode> finalMatchNode = nullptr;
                 int64_t finalMatchedOff = 0;
                 if (chainValid && targetVal != -1) {
-                    finalMatchNode = FindBestMatchingNode(currentLevelNodes, targetVal, true, &finalMatchedOff);
+                    finalMatchNode = FindBestMatchingNode(currentLevelNodes, targetVal, true, &finalMatchedOff, parentContainer);
                 }
 
                 if (finalMatchNode != nullptr) {
@@ -403,15 +553,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                         topLevelChildren.append(child);
                 }
 
-                specificMatch = FindBestMatchingNode(topLevelChildren, relOffset, true, &matchedOff);
-                if (specificMatch == nullptr && bestMatch->Node->ArrayStride > 0) {
-                    int64_t elemRel = relOffset % bestMatch->Node->ArrayStride;
-                    int64_t elemOff = 0;
-                    specificMatch = FindBestMatchingNode(topLevelChildren, elemRel, true, &elemOff);
-                    if (specificMatch != nullptr) {
-                        matchedOff = (relOffset - elemRel) + elemOff;
-                    }
-                }
+                specificMatch = FindBestMatchingNode(topLevelChildren, relOffset, true, &matchedOff, bestMatch->Node);
             }
 
             std::shared_ptr<NoteNode> activeNode = (specificMatch != nullptr) ? specificMatch : bestMatch->Node;
@@ -500,14 +642,7 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
                             topLevelChildren.append(n);
                     }
                     int64_t matchedOff = 0;
-                    auto matchedNode = FindBestMatchingNode(topLevelChildren, targetOffset, true, &matchedOff);
-                    if (matchedNode == nullptr && root->ArrayStride > 0) {
-                        int64_t elemRel = targetOffset % root->ArrayStride;
-                        int64_t elemOff = 0;
-                        matchedNode = FindBestMatchingNode(topLevelChildren, elemRel, true, &elemOff);
-                        if (matchedNode != nullptr)
-                            matchedOff = (targetOffset - elemRel) + elemOff;
-                    }
+                    auto matchedNode = FindBestMatchingNode(topLevelChildren, targetOffset, true, &matchedOff, root);
                     if (matchedNode != nullptr) {
                         QString d = matchedNode->Description;
                         d.remove(tagRegex);
@@ -526,18 +661,27 @@ QString ConditionFormatter::ResolveAlias(const QString& address,
 }
 
 std::shared_ptr<NoteNode> ConditionFormatter::GetEffectiveNote(const QMap<QString, QList<std::shared_ptr<NoteNode>>>& notesLookup,
-                                                               int64_t addrVal) {
+                                                               int64_t addrVal, const QList<RangeEntry>* rangeCache) {
     QString addrStr = QString("0x%1").arg(addrVal, 0, 16);
-    if (!notesLookup.contains(addrStr))
-        return nullptr;
+    if (notesLookup.contains(addrStr)) {
+        QList<std::shared_ptr<NoteNode>> workingNodes = ResolveNoteRedirects(notesLookup.value(addrStr), notesLookup);
 
-    QList<std::shared_ptr<NoteNode>> workingNodes = ResolveNoteRedirects(notesLookup.value(addrStr), notesLookup);
-
-    for (const auto& n : workingNodes) {
-        if (n->IndentLevel == -2)
-            return n;
+        for (const auto& n : workingNodes) {
+            if (n->IndentLevel == -2)
+                return n;
+        }
+        return workingNodes.isEmpty() ? nullptr : workingNodes.first();
     }
-    return workingNodes.isEmpty() ? nullptr : workingNodes.first();
+
+    if (rangeCache != nullptr && addrVal >= 0) {
+        for (const auto& match : *rangeCache) {
+            if (addrVal >= match.Start && addrVal < match.End && match.Node != nullptr && !match.Node->IsPointerArray) {
+                return match.Node;
+            }
+        }
+    }
+
+    return nullptr;
 }
 
 } // namespace RALE

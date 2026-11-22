@@ -37,8 +37,14 @@ class ConditionFormatter {
                                 const AchievementConditionGroup* group, int rowIndex,
                                 const QMap<QString, QList<std::shared_ptr<NoteNode>>>& notesLookup, const QList<RangeEntry>* rangeCache);
 
+    // Resolves a matching child node inside a hierarchy level or array container.
+    static std::shared_ptr<NoteNode> FindBestMatchingNode(const QList<std::shared_ptr<NoteNode>>& levelNodes, int64_t offset,
+                                                          bool allowInlineArrayFallback, int64_t* outMatchedNodeOff = nullptr,
+                                                          const std::shared_ptr<NoteNode>& parentContainer = nullptr);
+
     // Newly added helper to fetch a resolved note, handling redirects to mirror AutoCR
-    static std::shared_ptr<NoteNode> GetEffectiveNote(const QMap<QString, QList<std::shared_ptr<NoteNode>>>& notesLookup, int64_t addrVal);
+    static std::shared_ptr<NoteNode> GetEffectiveNote(const QMap<QString, QList<std::shared_ptr<NoteNode>>>& notesLookup, int64_t addrVal,
+                                                      const QList<RangeEntry>* rangeCache = nullptr);
 
   private:
     struct ChainNode {

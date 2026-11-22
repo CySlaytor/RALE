@@ -5,6 +5,7 @@
 #include <QMap>
 #include <QStack>
 
+#include <algorithm>
 #include <functional>
 
 namespace RALE {
@@ -96,11 +97,11 @@ void PointerTreeParser::MergeDuplicateNodes(QList<std::shared_ptr<NoteNode>>& no
 
 void PointerTreeParser::CloneTemplateSubtree(const std::shared_ptr<NoteNode>& templateParent,
                                              const std::shared_ptr<NoteNode>& targetParent) {
-    if (templateParent == nullptr || targetParent == nullptr)
+    if (templateParent == nullptr || targetParent == nullptr || templateParent == targetParent)
         return;
 
     for (const auto& src : templateParent->Children) {
-        if (src == nullptr || src->IsTemplateInherited)
+        if (src == nullptr)
             continue;
 
         auto dst = std::make_shared<NoteNode>();
@@ -119,7 +120,8 @@ void PointerTreeParser::CloneTemplateSubtree(const std::shared_ptr<NoteNode>& te
         dst->IsInlineArray = src->IsInlineArray;
         dst->IsPointerArray = src->IsPointerArray;
         dst->IsTemplateInherited = true;
-        dst->TemplateSource = src;
+        auto realSource = src->IsTemplateInherited ? src->TemplateSource.lock() : src;
+        dst->TemplateSource = (realSource != nullptr) ? realSource : src;
 
         CloneTemplateSubtree(src, dst);
         targetParent->Children.append(dst);
@@ -130,47 +132,81 @@ void PointerTreeParser::ApplyArrayTemplates(const std::shared_ptr<NoteNode>& roo
     if (logicalRoot == nullptr)
         return;
 
-    auto applyToContainer = [](const std::shared_ptr<NoteNode>& parentNode, int64_t arrOffset, int64_t arrSize, int64_t arrStride,
-                               bool useArrayElemTemplates) {
-        if (parentNode == nullptr || arrSize <= 0)
+    struct ArrayMember {
+        std::shared_ptr<NoteNode> node;
+        int64_t relOffset = 0;
+    };
+
+    auto applyInheritanceToMembers = [](QList<ArrayMember>& members, int64_t arrStride) {
+        if (members.isEmpty())
             return;
 
-        QMap<int64_t, std::shared_ptr<NoteNode>> templateMap;
-        for (const auto& child : parentNode->Children) {
-            if (child == nullptr || child->IsTemplateInherited)
+        std::stable_sort(members.begin(), members.end(),
+                         [](const ArrayMember& a, const ArrayMember& b) { return a.relOffset < b.relOffset; });
+
+        std::shared_ptr<NoteNode> primaryTemplate = nullptr;
+        QMap<int64_t, std::shared_ptr<NoteNode>> slotTemplates;
+
+        for (const auto& m : members) {
+            if (m.node == nullptr || m.node->IsTemplateInherited)
                 continue;
-            if (useArrayElemTemplates && !child->IsArrayElement)
-                continue;
-            if (child->Children.isEmpty() || !IsPointerLikeNode(child))
+            if (m.node->Children.isEmpty() || !IsPointerLikeNode(m.node))
                 continue;
 
-            int64_t tOffset = ParseOffsetValue(child->Offset);
-            if (!templateMap.contains(tOffset)) {
-                templateMap.insert(tOffset, child);
+            if (primaryTemplate == nullptr) {
+                primaryTemplate = m.node;
             }
-        }
-
-        if (templateMap.isEmpty())
-            return;
-
-        for (const auto& sibling : parentNode->Children) {
-            if (sibling == nullptr || sibling->IsTemplateInherited)
-                continue;
-            if (!sibling->Children.isEmpty() || !IsPointerLikeNode(sibling))
-                continue;
-            if (useArrayElemTemplates && sibling->IsArrayElement)
-                continue;
-
-            int64_t sOffset = ParseOffsetValue(sibling->Offset);
-            int64_t rel = sOffset - arrOffset;
-            if (rel >= 0 && rel < arrSize) {
-                int64_t elemOffset = (arrStride > 0) ? (rel % arrStride) : rel;
-                auto tmpl = templateMap.value(elemOffset, nullptr);
-                if (tmpl != nullptr && tmpl != sibling) {
-                    CloneTemplateSubtree(tmpl, sibling);
+            if (arrStride > 0) {
+                int64_t slotOff = m.relOffset % arrStride;
+                if (!slotTemplates.contains(slotOff)) {
+                    slotTemplates.insert(slotOff, m.node);
                 }
             }
         }
+
+        if (primaryTemplate == nullptr)
+            return;
+
+        for (const auto& m : members) {
+            const auto& sibling = m.node;
+            if (sibling == nullptr || sibling == primaryTemplate || sibling->IsTemplateInherited)
+                continue;
+            if (!sibling->Children.isEmpty() || !IsPointerLikeNode(sibling))
+                continue;
+
+            std::shared_ptr<NoteNode> tmpl = nullptr;
+            if (arrStride > 0) {
+                tmpl = slotTemplates.value(m.relOffset % arrStride, nullptr);
+            }
+            if (tmpl == nullptr) {
+                tmpl = primaryTemplate;
+            }
+
+            if (tmpl != nullptr && tmpl != sibling) {
+                CloneTemplateSubtree(tmpl, sibling);
+            }
+        }
+    };
+
+    auto applyToContainer = [&applyInheritanceToMembers](const std::shared_ptr<NoteNode>& parentNode, int64_t arrOffset, int64_t arrSize,
+                                                         int64_t arrStride) {
+        if (parentNode == nullptr || arrSize <= 0)
+            return;
+
+        QList<ArrayMember> members;
+        members.reserve(parentNode->Children.size());
+
+        for (const auto& child : parentNode->Children) {
+            if (child == nullptr || child->IsTemplateInherited)
+                continue;
+
+            int64_t rel = ParseOffsetValue(child->Offset) - arrOffset;
+            if (rel >= 0 && rel < arrSize) {
+                members.append({child, rel});
+            }
+        }
+
+        applyInheritanceToMembers(members, arrStride);
     };
 
     // Process all container parents bottom-up (post-order) so nested arrays within arrays
@@ -189,43 +225,35 @@ void PointerTreeParser::ApplyArrayTemplates(const std::shared_ptr<NoteNode>& roo
         for (const auto& item : parent->Children) {
             if (item == nullptr || item->IsTemplateInherited)
                 continue;
-            if (item->IsInlineArray && !item->Children.isEmpty() && item->Size > 0) {
+            if (item->IsInlineArray && item->Size > 0) {
                 int64_t arrOffset = ParseOffsetValue(item->Offset);
+                QList<ArrayMember> members;
 
-                QMap<int64_t, std::shared_ptr<NoteNode>> templateMap;
-                for (const auto& tmpl : item->Children) {
-                    if (tmpl == nullptr || tmpl->Children.isEmpty() || !IsPointerLikeNode(tmpl))
+                for (const auto& arrChild : item->Children) {
+                    if (arrChild == nullptr || arrChild->IsTemplateInherited)
                         continue;
-                    int64_t tOffset = ParseOffsetValue(tmpl->Offset);
-                    if (!templateMap.contains(tOffset)) {
-                        templateMap.insert(tOffset, tmpl);
+                    int64_t rel = ParseOffsetValue(arrChild->Offset);
+                    if (rel >= 0 && rel < item->Size) {
+                        members.append({arrChild, rel});
                     }
                 }
 
-                if (!templateMap.isEmpty()) {
-                    for (const auto& sibling : parent->Children) {
-                        if (sibling == nullptr || sibling == item || sibling->IsTemplateInherited)
-                            continue;
-                        if (!sibling->Children.isEmpty() || !IsPointerLikeNode(sibling))
-                            continue;
-
-                        int64_t sOffset = ParseOffsetValue(sibling->Offset);
-                        int64_t rel = sOffset - arrOffset;
-                        if (rel >= 0 && rel < item->Size) {
-                            int64_t elemOffset = (item->ArrayStride > 0) ? (rel % item->ArrayStride) : rel;
-                            auto tmpl = templateMap.value(elemOffset, nullptr);
-                            if (tmpl != nullptr) {
-                                CloneTemplateSubtree(tmpl, sibling);
-                            }
-                        }
+                for (const auto& sibling : parent->Children) {
+                    if (sibling == nullptr || sibling == item || sibling->IsTemplateInherited || sibling->IsInlineArray)
+                        continue;
+                    int64_t rel = ParseOffsetValue(sibling->Offset) - arrOffset;
+                    if (rel >= 0 && rel < item->Size) {
+                        members.append({sibling, rel});
                     }
                 }
+
+                applyInheritanceToMembers(members, item->ArrayStride);
             }
         }
 
         // Sub-case C: Pointer-to-array parent containing both template |0x.. and sibling +0x.. children
         if (parent != logicalRoot && parent->IsPointerArray && parent->Size > 0) {
-            applyToContainer(parent, 0, parent->Size, parent->ArrayStride, true);
+            applyToContainer(parent, 0, parent->Size, parent->ArrayStride);
         }
     };
 
@@ -233,7 +261,7 @@ void PointerTreeParser::ApplyArrayTemplates(const std::shared_ptr<NoteNode>& roo
 
     // Sub-case A: Root-level array declaration
     if (root != nullptr && (root->IsInlineArray || root->IsPointerArray) && root->Size > 0) {
-        applyToContainer(logicalRoot, 0, root->Size, root->ArrayStride, true);
+        applyToContainer(logicalRoot, 0, root->Size, root->ArrayStride);
     }
 }
 
