@@ -75,6 +75,10 @@ void AppSettings::Load() {
         Current.Generator_Copies = ini.value("Generator_Copies", Current.Generator_Copies).toString();
         Current.Generator_Stride = ini.value("Generator_Stride", Current.Generator_Stride).toString();
         Current.Generator_IsArray = ini.value("Generator_IsArray", Current.Generator_IsArray).toBool();
+
+        Current.SuggestedFix_ShowDecimal = ini.value("SuggestedFix_ShowDecimal", Current.SuggestedFix_ShowDecimal).toBool();
+        Current.SuggestedFix_ShowAliases = ini.value("SuggestedFix_ShowAliases", Current.SuggestedFix_ShowAliases).toBool();
+        Current.SuggestedFix_CollapseChains = ini.value("SuggestedFix_CollapseChains", Current.SuggestedFix_CollapseChains).toBool();
         ini.endGroup();
     } catch (...) { /* Ignore errors, use defaults */
     }
@@ -126,6 +130,10 @@ void AppSettings::Save() {
         ini.setValue("Generator_Copies", Current.Generator_Copies);
         ini.setValue("Generator_Stride", Current.Generator_Stride);
         ini.setValue("Generator_IsArray", Current.Generator_IsArray);
+
+        ini.setValue("SuggestedFix_ShowDecimal", Current.SuggestedFix_ShowDecimal);
+        ini.setValue("SuggestedFix_ShowAliases", Current.SuggestedFix_ShowAliases);
+        ini.setValue("SuggestedFix_CollapseChains", Current.SuggestedFix_CollapseChains);
         ini.endGroup();
     } catch (...) { /* Ignore errors */
     }

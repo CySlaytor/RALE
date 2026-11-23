@@ -25,8 +25,7 @@ class SuggestedFixDialog : public QDialog {
   public:
     SuggestedFixDialog(const ValidationIssue& issue, const std::shared_ptr<IAssetItem>& asset,
                        const QMap<QString, QList<std::shared_ptr<NoteNode>>>* notesLookup,
-                       const QList<ConditionFormatter::RangeEntry>* rangeCache, bool showDecimal, bool showAliases,
-                       QWidget* parent = nullptr);
+                       const QList<ConditionFormatter::RangeEntry>* rangeCache, QWidget* parent = nullptr);
 
     bool HasValidFix() const { return _hasValidFix; }
     SuggestedFixType FixType() const { return _issue.FixType; }
@@ -50,7 +49,8 @@ class SuggestedFixDialog : public QDialog {
     const QList<ConditionFormatter::RangeEntry>* _rangeCache = nullptr;
 
     bool _showDecimal = false;
-    bool _showAliases = false;
+    bool _showAliases = true;
+    bool _collapseChains = true;
     bool _hasValidFix = false;
 
     QString _resultingLogic;
@@ -68,6 +68,7 @@ class SuggestedFixDialog : public QDialog {
     QLabel* _lblExplanation = nullptr;
     QTableWidget* _tblBefore = nullptr;
     QTableWidget* _tblAfter = nullptr;
+    QCheckBox* _chkCollapseChains = nullptr;
     QCheckBox* _chkAliases = nullptr;
     QCheckBox* _chkDecimal = nullptr;
     QLineEdit* _txtBeforeText = nullptr;

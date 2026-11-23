@@ -1486,8 +1486,7 @@ void MainWindow::onApplySuggestedFix(const ValidationIssue& issue) {
     if (targetAsset == nullptr)
         return;
 
-    SuggestedFixDialog dialog(issue, targetAsset, &_cachedNotesLookup, &_cachedRangeCache, triggerEditor->ShowDecimal(),
-                              triggerEditor->ShowAliases(), this);
+    SuggestedFixDialog dialog(issue, targetAsset, &_cachedNotesLookup, &_cachedRangeCache, this);
     if (dialog.exec() != QDialog::Accepted || !dialog.HasValidFix())
         return;
 

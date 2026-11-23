@@ -52,6 +52,10 @@ class UserSettings {
     QString Generator_Copies = "1";
     QString Generator_Stride = "0x0";
     bool Generator_IsArray = false;
+
+    bool SuggestedFix_ShowDecimal = false;
+    bool SuggestedFix_ShowAliases = true;
+    bool SuggestedFix_CollapseChains = true;
 };
 
 class AppSettings {

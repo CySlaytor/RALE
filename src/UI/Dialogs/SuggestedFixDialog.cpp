@@ -12,6 +12,7 @@
 #include <QHeaderView>
 #include <QListWidget>
 #include <QPainter>
+#include <QScrollBar>
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 
@@ -93,10 +94,10 @@ class SuggestedFixTableDelegate : public QStyledItemDelegate {
 
 SuggestedFixDialog::SuggestedFixDialog(const ValidationIssue& issue, const std::shared_ptr<IAssetItem>& asset,
                                        const QMap<QString, QList<std::shared_ptr<NoteNode>>>* notesLookup,
-                                       const QList<ConditionFormatter::RangeEntry>* rangeCache, bool showDecimal, bool showAliases,
-                                       QWidget* parent)
-    : QDialog(parent), _issue(issue), _asset(asset), _notesLookup(notesLookup), _rangeCache(rangeCache), _showDecimal(showDecimal),
-      _showAliases(showAliases) {
+                                       const QList<ConditionFormatter::RangeEntry>* rangeCache, QWidget* parent)
+    : QDialog(parent), _issue(issue), _asset(asset), _notesLookup(notesLookup), _rangeCache(rangeCache),
+      _showDecimal(AppSettings::Current.SuggestedFix_ShowDecimal), _showAliases(AppSettings::Current.SuggestedFix_ShowAliases),
+      _collapseChains(AppSettings::Current.SuggestedFix_CollapseChains) {
     setWindowTitle(QString("Suggested Fix - %1").arg(issue.Title));
     setModal(true);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
@@ -370,6 +371,9 @@ void SuggestedFixDialog::InitializeUI() {
         afterLayout->addWidget(_tblAfter);
         mainLayout->addWidget(grpAfter, 1);
 
+        connect(_tblBefore->verticalScrollBar(), &QScrollBar::valueChanged, _tblAfter->verticalScrollBar(), &QScrollBar::setValue);
+        connect(_tblAfter->verticalScrollBar(), &QScrollBar::valueChanged, _tblBefore->verticalScrollBar(), &QScrollBar::setValue);
+
         PopulateLogicTables();
     } else if (_issue.FixType == SuggestedFixType::ApplyTitleCase || _issue.FixType == SuggestedFixType::NormalizeSmartQuotes) {
         auto* grpBefore = new QGroupBox("Before", this);
@@ -404,6 +408,12 @@ void SuggestedFixDialog::InitializeUI() {
     bottomRow->setSpacing(8);
 
     if (isLogicFix) {
+        _chkCollapseChains = new QCheckBox("Collapse Chains", this);
+        _chkCollapseChains->setToolTip("Hides intermediate AddAddress rows to display pointer chains compactly");
+        _chkCollapseChains->setChecked(_collapseChains);
+        connect(_chkCollapseChains, &QCheckBox::toggled, this, &SuggestedFixDialog::onDisplayOptionChanged);
+        bottomRow->addWidget(_chkCollapseChains);
+
         _chkAliases = new QCheckBox("Show Aliases", this);
         _chkAliases->setChecked(_showAliases);
         connect(_chkAliases, &QCheckBox::toggled, this, &SuggestedFixDialog::onDisplayOptionChanged);
@@ -436,10 +446,18 @@ void SuggestedFixDialog::InitializeUI() {
 }
 
 void SuggestedFixDialog::onDisplayOptionChanged() {
+    if (_chkCollapseChains != nullptr)
+        _collapseChains = _chkCollapseChains->isChecked();
     if (_chkAliases != nullptr)
         _showAliases = _chkAliases->isChecked();
     if (_chkDecimal != nullptr)
         _showDecimal = _chkDecimal->isChecked();
+
+    AppSettings::Current.SuggestedFix_CollapseChains = _collapseChains;
+    AppSettings::Current.SuggestedFix_ShowAliases = _showAliases;
+    AppSettings::Current.SuggestedFix_ShowDecimal = _showDecimal;
+    AppSettings::Save();
+
     PopulateLogicTables();
 }
 
@@ -480,17 +498,25 @@ void SuggestedFixDialog::PopulateSingleLogicTable(QTableWidget* table, const Ach
             (!RaLogicSyntax::FlagsWithoutHits.contains(cond.Flag) && cond.RequiredHits > 0) ? QString::number(cond.RequiredHits) : ""};
     };
 
+    int lastChangedVisualRow = -1;
+
     for (int idx = _chainStartIndex; idx <= _chainEndIndex; ++idx) {
+        const bool isAddAddress = (group.Conditions[idx].Flag == "Add Address");
+        if (_collapseChains && isAddAddress)
+            continue;
+
         const int row = table->rowCount();
         table->insertRow(row);
 
         const QStringList vals = cellsFor(group, idx);
         const QStringList otherVals = (idx < compareGroup.Conditions.size()) ? cellsFor(compareGroup, idx) : vals;
-        const bool isAddAddress = (group.Conditions[idx].Flag == "Add Address");
+        bool rowChanged = false;
 
         for (int c = 0; c < 10; ++c) {
             QString displayVal = vals[c];
             const bool changed = (vals[c] != otherVals[c]);
+            if (changed)
+                rowChanged = true;
             if (c == 1 && displayVal.isEmpty() && changed)
                 displayVal = "(No Flag)";
 
@@ -505,6 +531,13 @@ void SuggestedFixDialog::PopulateSingleLogicTable(QTableWidget* table, const Ach
             }
             table->setItem(row, c, item);
         }
+
+        if (rowChanged)
+            lastChangedVisualRow = row;
+    }
+
+    if (lastChangedVisualRow >= 0 && table->item(lastChangedVisualRow, 0) != nullptr) {
+        table->scrollToItem(table->item(lastChangedVisualRow, 0), QAbstractItemView::PositionAtCenter);
     }
 }
 
