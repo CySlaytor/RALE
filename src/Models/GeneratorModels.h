@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QList>
+#include <QMap>
 #include <QString>
 
 namespace RALE {
@@ -10,7 +11,15 @@ class GeneratorRule {
     QString SourceAddress = "";
     int Stride = 0;
 
-    bool operator==(const GeneratorRule& other) const { return SourceAddress == other.SourceAddress && Stride == other.Stride; }
+    // Optional per-rule note template and per-copy overrides (1-based copy index)
+    QString NoteHeaderTemplate = "";
+    QMap<int, QString> NoteCustomNames;
+    QMap<int, QString> NoteExplicitTitles;
+
+    bool operator==(const GeneratorRule& other) const {
+        return SourceAddress == other.SourceAddress && Stride == other.Stride && NoteHeaderTemplate == other.NoteHeaderTemplate &&
+               NoteCustomNames == other.NoteCustomNames && NoteExplicitTitles == other.NoteExplicitTitles;
+    }
     bool operator!=(const GeneratorRule& other) const { return !(*this == other); }
 };
 
@@ -25,6 +34,9 @@ class GeneratorDefinition {
     // When generating an array, duplicates only conditions referencing selected addresses instead of the entire group
     bool DuplicateSelectedOnly = false;
 
+    // When enabled, duplicates associated Code Notes (static and AddAddress pointer chains) after groups are generated
+    bool DuplicateNotes = false;
+
     // Tracks how many conditions formed the original "Template".
     // This allows the ViewModel to clear previous generations before applying new ones.
     int TemplateConditionCount = 0;
@@ -33,7 +45,7 @@ class GeneratorDefinition {
 
     bool operator==(const GeneratorDefinition& other) const {
         return Copies == other.Copies && IsArray == other.IsArray && DuplicateSelectedOnly == other.DuplicateSelectedOnly &&
-               TemplateConditionCount == other.TemplateConditionCount && Rules == other.Rules;
+               DuplicateNotes == other.DuplicateNotes && TemplateConditionCount == other.TemplateConditionCount && Rules == other.Rules;
     }
     bool operator!=(const GeneratorDefinition& other) const { return !(*this == other); }
 };

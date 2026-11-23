@@ -1,9 +1,11 @@
 #include "TriggerEditorWidget.h"
 
+#include "../../Common/AppSettings.h"
 #include "../../Common/ImageCache.h"
 #include "../../Definitions/RaLogicSyntax.h"
 #include "../../Parsers/AchievementParser.h"
 #include "../../Parsers/PointerTreeParser.h"
+#include "../../Services/GeneratorNoteDuplicator.h"
 #include "../../Services/LogicGeneratorService.h"
 #include "../../Services/LogicValidator.h"
 #include "../../Utilities/LogicFormatter.h"
@@ -652,6 +654,8 @@ void TriggerEditorWidget::SetShowAliases(bool value) { chkAliasMode->setChecked(
 bool TriggerEditorWidget::CollapseChains() const { return _collapseChains; }
 void TriggerEditorWidget::SetCollapseChains(bool value) { chkCollapseChains->setChecked(value); }
 
+void TriggerEditorWidget::SetConsoleId(int consoleId) { _consoleId = consoleId; }
+
 void TriggerEditorWidget::SetTriggerText(const QString& value) {
     if (_viewModel.BoundAsset != nullptr && _viewModel.BoundAsset->Logic != value) {
         _viewModel.SetLogicPreservingHistory(value);
@@ -924,6 +928,8 @@ void TriggerEditorWidget::Clear() {
     emit ValidationCompleted({});
     _isProgrammaticallyChanging = false;
 }
+
+void TriggerEditorWidget::ClearLocalHistory() { _viewModel.ClearHistory(); }
 
 void TriggerEditorWidget::Undo() {
     CommitActiveEditor();
@@ -2755,11 +2761,10 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
             preSelectedAddresses.insert(LogicFormatter::NormalizeAddress(cond.RightOperand.Value));
     }
 
-    GeneratorConfigDialog form(rootItems, autoStride, hasExistingDef ? &existingDef : nullptr, &preSelectedAddresses, this);
+    GeneratorConfigDialog form(rootItems, autoStride, hasExistingDef ? &existingDef : nullptr, &preSelectedAddresses, this, &_rawNotes,
+                               &groups[groupIndex]);
 
     if (form.exec() == QDialog::Accepted) {
-        _viewModel.PushUndoState(groupIndex);
-
         if (!form.IsArray && groupIndex < _viewModel.GetActiveGroups().size() - 1) {
             auto result = QMessageBox::warning(
                 this, "Overwrite Confirmation",
@@ -2768,6 +2773,11 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
 
             if (result == QMessageBox::Cancel)
                 return;
+
+            if (form.DuplicateNotes)
+                emit BeforeGeneratorWithNotes();
+            else
+                _viewModel.PushUndoState(groupIndex);
 
             if (result == QMessageBox::Yes) {
                 auto& activeGroups = _viewModel.GetActiveGroups();
@@ -2782,12 +2792,18 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
                         ++it;
                 }
             }
+        } else {
+            if (form.DuplicateNotes)
+                emit BeforeGeneratorWithNotes();
+            else
+                _viewModel.PushUndoState(groupIndex);
         }
 
         GeneratorDefinition def;
         def.Copies = form.Copies;
         def.IsArray = form.IsArray;
         def.DuplicateSelectedOnly = form.DuplicateSelectedOnly;
+        def.DuplicateNotes = form.DuplicateNotes;
 
         if (def.IsArray) {
             auto& activeGroups = _viewModel.GetActiveGroups();
@@ -2804,12 +2820,39 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
             GeneratorRule rule;
             rule.SourceAddress = addr;
             rule.Stride = form.Stride;
+            const QString normAddr = LogicFormatter::NormalizeAddress(addr);
+            if (form.NoteOverrides.contains(normAddr)) {
+                const auto& ov = form.NoteOverrides.value(normAddr);
+                rule.NoteHeaderTemplate = ov.HeaderTemplate;
+                rule.NoteCustomNames = ov.CustomNames;
+                rule.NoteExplicitTitles = ov.ExplicitTitles;
+            }
             def.Rules.append(rule);
         }
 
+        // Phase 1: Finalize all generated logic groups and pointer chains
         _viewModel.GeneratorRules[groupIndex] = def;
         _viewModel.UpdateLogic(false);
         RefreshGroupsListUI();
+
+        // Phase 2: Resolve and duplicate associated Code Notes using finalized groups
+        if (def.DuplicateNotes) {
+            auto noteResult = GeneratorNoteDuplicator::DuplicateNotesForGenerator(
+                _viewModel.GetActiveGroups(), groupIndex, def, _rawNotes, _consoleId, AppSettings::Current.CodeNoteUnicodeTree,
+                AppSettings::Current.CodeNoteIndentDescriptions);
+
+            emit GeneratorNotesGenerated(noteResult.UpdatedNotes, noteResult.CreatedOrModifiedCount, noteResult.SkippedExistingCount);
+
+            if (noteResult.HasChanges() && noteResult.SkippedExistingCount > 0) {
+                SetStatus(QString("Generator applied (%1 note(s) duplicated, %2 existing skipped).")
+                              .arg(noteResult.CreatedOrModifiedCount)
+                              .arg(noteResult.SkippedExistingCount));
+            } else if (noteResult.HasChanges()) {
+                SetStatus(QString("Generator applied (%1 note(s) duplicated).").arg(noteResult.CreatedOrModifiedCount));
+            } else if (noteResult.SkippedExistingCount > 0) {
+                SetStatus(QString("Generator applied (%1 existing note(s) skipped).").arg(noteResult.SkippedExistingCount));
+            }
+        }
     }
 }
 

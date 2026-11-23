@@ -44,6 +44,8 @@ class TriggerEditorWidget : public QWidget {
     bool CollapseChains() const;
     void SetCollapseChains(bool value);
 
+    void SetConsoleId(int consoleId);
+
     const QMap<QString, QList<std::shared_ptr<NoteNode>>>& NotesLookup() const { return _notesLookup; }
     const QList<ConditionFormatter::RangeEntry>& RangeCache() const { return _rangeCache; }
 
@@ -56,6 +58,7 @@ class TriggerEditorWidget : public QWidget {
     void BindAchievement(std::shared_ptr<IAssetItem> asset, const QString& setType = "Core");
     void SetActionButtonStates(bool hasServerSnapshot, bool canRevert, bool canReset);
     void Clear();
+    void ClearLocalHistory();
 
     void Undo();
     void Redo();
@@ -94,6 +97,8 @@ class TriggerEditorWidget : public QWidget {
     void MultiRegionLogicRequested(MultiRegionDialog* dialog);
     void LogicOptimizationRequested();
     void CloneStrideRequested();
+    void BeforeGeneratorWithNotes();
+    void GeneratorNotesGenerated(const QList<CodeNote>& updatedNotes, int createdOrModifiedCount, int skippedExistingCount);
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -149,6 +154,7 @@ class TriggerEditorWidget : public QWidget {
     bool _showDecimal = false;
     bool _showAliases = false;
     bool _collapseChains = false;
+    int _consoleId = 0;
     QString _preserveSegmentSelection = "";
     QString _titleBeforeEdit = "";
     QString _descBeforeEdit = "";

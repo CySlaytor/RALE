@@ -77,6 +77,7 @@ void AppSettings::Load() {
         Current.Generator_IsArray = ini.value("Generator_IsArray", Current.Generator_IsArray).toBool();
         Current.Generator_DuplicateSelectedOnly =
             ini.value("Generator_DuplicateSelectedOnly", Current.Generator_DuplicateSelectedOnly).toBool();
+        Current.Generator_DuplicateNotes = ini.value("Generator_DuplicateNotes", Current.Generator_DuplicateNotes).toBool();
 
         Current.SuggestedFix_ShowDecimal = ini.value("SuggestedFix_ShowDecimal", Current.SuggestedFix_ShowDecimal).toBool();
         Current.SuggestedFix_ShowAliases = ini.value("SuggestedFix_ShowAliases", Current.SuggestedFix_ShowAliases).toBool();
@@ -133,6 +134,7 @@ void AppSettings::Save() {
         ini.setValue("Generator_Stride", Current.Generator_Stride);
         ini.setValue("Generator_IsArray", Current.Generator_IsArray);
         ini.setValue("Generator_DuplicateSelectedOnly", Current.Generator_DuplicateSelectedOnly);
+        ini.setValue("Generator_DuplicateNotes", Current.Generator_DuplicateNotes);
 
         ini.setValue("SuggestedFix_ShowDecimal", Current.SuggestedFix_ShowDecimal);
         ini.setValue("SuggestedFix_ShowAliases", Current.SuggestedFix_ShowAliases);

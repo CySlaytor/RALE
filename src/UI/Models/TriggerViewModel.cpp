@@ -193,6 +193,8 @@ void TriggerViewModel::PushUndoState(int activeGroupIndex) {
     _history.PushState(state);
 }
 
+void TriggerViewModel::ClearHistory() { _history.Clear(); }
+
 void TriggerViewModel::Undo() {
     if (!_history.CanUndo())
         return;

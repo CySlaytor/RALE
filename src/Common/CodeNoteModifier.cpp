@@ -4,6 +4,8 @@
 
 #include <QRegularExpression>
 
+#include <cmath>
+
 namespace RALE {
 
 QString CodeNoteModifier::NoteStyle::GetSeparatorString() const {
@@ -371,6 +373,47 @@ QString CodeNoteModifier::InjectNoteContent(const QString& baseNoteText, const Q
     // Convert NoteStyle back to the string expected by CodeNoteLogic.FixHierarchy
     // Merge and Format!
     return CodeNoteLogic::FixHierarchy(sb, indentStylePref, indentDescriptions);
+}
+
+QString CodeNoteModifier::InjectNoteSubtrees(const QString& baseNoteText, const QList<SubtreeInjection>& injections,
+                                             const QString& indentStylePref, bool indentDescriptions, int consoleId) {
+    if (injections.isEmpty())
+        return baseNoteText;
+
+    QString sb = baseNoteText;
+    if (!sb.isEmpty() && !sb.endsWith('\n'))
+        sb += "\n";
+    sb += "\n";
+
+    static const QRegularExpression offsetLineRx(R"(^[\+\-]*[\+\-]0x[0-9a-fA-F]+)", QRegularExpression::CaseInsensitiveOption);
+
+    for (const auto& inj : injections) {
+        if (inj.ChainOffsets.isEmpty())
+            continue;
+
+        for (int i = 0; i < inj.ChainOffsets.size() - 1; ++i) {
+            int64_t offset = inj.ChainOffsets[i];
+            QString sign = offset < 0 ? "-" : "+";
+            QString hex = QString("0x%1").arg(std::abs(offset), 0, 16);
+            QString indent(i, '+');
+            sb += QString("%1%2%3\n").arg(indent, sign, hex);
+        }
+
+        QString baseIndent(inj.ChainOffsets.size() - 1, '+');
+        QString normBlock = inj.NodeBlockText;
+        normBlock.replace("\r\n", "\n").replace('\r', '\n');
+        const QStringList blockLines = normBlock.split('\n', Qt::SkipEmptyParts);
+        for (int l = 0; l < blockLines.size(); ++l) {
+            const QString trimmed = blockLines[l].trimmed();
+            if (l == 0 || offsetLineRx.match(trimmed).hasMatch()) {
+                sb += baseIndent + trimmed + "\n";
+            } else {
+                sb += trimmed + "\n";
+            }
+        }
+    }
+
+    return CodeNoteLogic::FixHierarchy(sb, indentStylePref, indentDescriptions, consoleId);
 }
 
 } // namespace RALE

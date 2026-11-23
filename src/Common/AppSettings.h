@@ -53,6 +53,7 @@ class UserSettings {
     QString Generator_Stride = "0x0";
     bool Generator_IsArray = false;
     bool Generator_DuplicateSelectedOnly = false;
+    bool Generator_DuplicateNotes = false;
 
     bool SuggestedFix_ShowDecimal = false;
     bool SuggestedFix_ShowAliases = true;

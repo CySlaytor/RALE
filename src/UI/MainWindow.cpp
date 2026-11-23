@@ -207,6 +207,42 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // Trigger Editor -> Code Note Editor Bridge for Clone Stride
     connect(triggerEditor, &TriggerEditorWidget::CloneStrideRequested, this, [this]() { codeNoteEditor->OpenCloneStrideDialog(); });
 
+    // Atomic Undo/Redo Transaction for Generator + Code Note Duplication
+    connect(triggerEditor, &TriggerEditorWidget::BeforeGeneratorWithNotes, this, [this]() {
+        if (_isLoading || _selectedAsset == nullptr)
+            return;
+        codeNoteEditor->CommitChanges();
+        _projectRepo.EnsureLocalDataExists();
+        const QList<CodeNote> latestNotes = codeNoteEditor->GetAllNotes();
+        if (_projectRepo.LocalData->Notes != latestNotes) {
+            _projectRepo.LocalData->Notes = latestNotes;
+            triggerEditor->SetNotes(latestNotes);
+        }
+        // Snapshot LocalData BEFORE EnsureAssetIsLocal() and Phase 1 mutation so Undo restores pre-generator state cleanly
+        PushMainUndo();
+        EnsureAssetIsLocal();
+        _currentAssetDirty = true;
+    });
+
+    connect(triggerEditor, &TriggerEditorWidget::GeneratorNotesGenerated, this,
+            [this](const QList<CodeNote>& updatedNotes, int createdOrModifiedCount, int /*skippedExistingCount*/) {
+                if (_isLoading || _projectRepo.LocalData == nullptr)
+                    return;
+
+                if (createdOrModifiedCount > 0 && !updatedNotes.isEmpty()) {
+                    _projectRepo.LocalData->Notes = updatedNotes;
+                    codeNoteEditor->SetNotes(updatedNotes);
+                    triggerEditor->SetNotes(updatedNotes);
+                    _notesCacheDirty = true;
+                    _isDirty = true;
+                    RunGlobalValidation();
+                }
+
+                // Clear local trigger undo history so Ctrl+Z uses _mainHistory and reverts both logic and notes atomically
+                triggerEditor->ClearLocalHistory();
+                UpdateUndoRedoState();
+            });
+
     // Code Reviewer
     connect(codeReviewControl, &CodeReviewWidget::IssueSelected, this, [this](ValidationIssue issue) {
         if (!issue.NoteAddress.isEmpty()) {
@@ -1013,6 +1049,7 @@ void MainWindow::LoadFiles(const QString& primaryPath) {
 
         int consoleId = (_projectRepo.ServerData != nullptr) ? _projectRepo.ServerData->ConsoleId : 0;
         codeNoteEditor->SetConsoleId(consoleId);
+        triggerEditor->SetConsoleId(consoleId);
 
         bool hasServerAssets = false;
         if (_projectRepo.ServerData != nullptr) {

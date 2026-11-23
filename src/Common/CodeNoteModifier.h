@@ -23,6 +23,11 @@ class CodeNoteModifier {
         QString GetSeparatorString() const;
     };
 
+    struct SubtreeInjection {
+        QList<int64_t> ChainOffsets;
+        QString NodeBlockText;
+    };
+
     static NoteStyle DetectStyle(const QString& currentNote, const QList<CodeNote>& allNotes);
     static NoteStyle DetectGlobalStyle(const QList<CodeNote>& allNotes);
 
@@ -32,6 +37,9 @@ class CodeNoteModifier {
 
     static QString InjectNoteContent(const QString& baseNoteText, const QList<int64_t>& chainOffsets, const QString& newContent,
                                      const NoteStyle& globalStyle, const QString& indentStylePref, bool indentDescriptions);
+
+    static QString InjectNoteSubtrees(const QString& baseNoteText, const QList<SubtreeInjection>& injections,
+                                      const QString& indentStylePref, bool indentDescriptions, int consoleId = 0);
 
   private:
     class StyleStats {

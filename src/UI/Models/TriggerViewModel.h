@@ -76,6 +76,7 @@ class TriggerViewModel : public QObject {
     TriggerEditorState CaptureCurrentState(int activeGroupIndex = 0) const;
     void PushExplicitState(const TriggerEditorState& state);
     void PushUndoState(int activeGroupIndex = 0);
+    void ClearHistory();
     void Undo();
     void Redo();
 

@@ -68,7 +68,7 @@ template <typename T> class HistoryManager {
 
         _undoStack.push(currentState);
         if (_undoStack.size() > MaxDepth) {
-            _undoStack.removeFirst();
+            _redoStack.removeFirst();
         }
         T nextState = _redoStack.pop();
 
@@ -160,15 +160,15 @@ class TriggerEditorState {
                 return false;
             if (r1.DuplicateSelectedOnly != r2.DuplicateSelectedOnly)
                 return false;
+            if (r1.DuplicateNotes != r2.DuplicateNotes)
+                return false;
             if (r1.TemplateConditionCount != r2.TemplateConditionCount)
                 return false;
             if (r1.Rules.size() != r2.Rules.size())
                 return false;
             // Simple rule check assuming order might matter or strict equality
             for (int i = 0; i < r1.Rules.size(); i++) {
-                if (r1.Rules[i].SourceAddress != r2.Rules[i].SourceAddress)
-                    return false;
-                if (r1.Rules[i].Stride != r2.Rules[i].Stride)
+                if (r1.Rules[i] != r2.Rules[i])
                     return false;
             }
         }

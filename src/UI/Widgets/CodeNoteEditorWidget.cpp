@@ -243,12 +243,16 @@ bool CodeNoteEditorWidget::eventFilter(QObject* watched, QEvent* event) {
         } else if (event->type() == QEvent::KeyPress) {
             auto* ke = static_cast<QKeyEvent*>(event);
             if (ke->modifiers() == Qt::ControlModifier && ke->key() == Qt::Key_Z) {
-                Undo();
-                return true;
+                if (CanUndo()) {
+                    Undo();
+                    return true;
+                }
             } else if ((ke->modifiers() == Qt::ControlModifier && ke->key() == Qt::Key_Y) ||
                        (ke->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier) && ke->key() == Qt::Key_Z)) {
-                Redo();
-                return true;
+                if (CanRedo()) {
+                    Redo();
+                    return true;
+                }
             }
         }
     }

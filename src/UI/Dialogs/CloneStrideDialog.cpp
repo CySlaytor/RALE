@@ -1,6 +1,7 @@
 #include "CloneStrideDialog.h"
 
 #include "../../Common/AppSettings.h"
+#include "../../Services/CodeNoteTemplateService.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -61,85 +62,12 @@ void CloneStrideDialog::done(int r) {
 }
 
 void CloneStrideDialog::parseInitialNote(uint32_t& outStride, QString& outTemplate, QString& outFirstName) {
-    outStride = 64; // Fallback default stride
-    outFirstName = "";
-    outTemplate = "Structure {INDEX:02}";
-
-    QString trimmed = m_originalNoteText.trimmed();
-    if (trimmed.isEmpty())
-        return;
-
-    QString normalized = trimmed;
-    normalized.replace("\r\n", "\n").replace('\r', '\n');
-    QStringList lines = normalized.split('\n');
-    QString header = lines.first().trimmed();
-
-    // Separate header line from structure body offsets
-    if (lines.size() > 1) {
-        QStringList bodyLines = lines.mid(1);
-        m_originalBody = "\r\n" + bodyLines.join("\r\n");
-    } else {
-        m_originalBody = "";
-    }
-
-    // 1. Match ANY leading bracketed tag (e.g. [32-bit BE & 0x1FFFFFFF], [8-bit], [144 bytes], [30x16 bytes])
-    QString prefixTag = "";
-    static const QRegularExpression leadingBracketRx(R"(^(\s*\[[^\]]+\]\s*))");
-    auto bracketMatch = leadingBracketRx.match(header);
-    if (bracketMatch.hasMatch()) {
-        prefixTag = bracketMatch.captured(1).trimmed();
-
-        // Auto-detect stride if bracketed tag specifies byte size
-        static const QRegularExpression bytesRx(R"(\[(?:(\d+)\s*x\s*(\d+)|(\d+))\s*bytes\])", QRegularExpression::CaseInsensitiveOption);
-        auto bytesMatch = bytesRx.match(prefixTag);
-        if (bytesMatch.hasMatch()) {
-            if (!bytesMatch.captured(1).isEmpty() && !bytesMatch.captured(2).isEmpty()) {
-                outStride = bytesMatch.captured(1).toUInt() * bytesMatch.captured(2).toUInt();
-            } else if (!bytesMatch.captured(3).isEmpty()) {
-                outStride = bytesMatch.captured(3).toUInt();
-            }
-        }
-    }
-
-    // 2. Auto-detect numbering and parenthesized names strictly outside the prefix tag
-    QString titleCandidate = header;
-    if (!prefixTag.isEmpty()) {
-        titleCandidate = titleCandidate.mid(bracketMatch.capturedLength()).trimmed();
-    }
-
-    // Extract custom name inside parentheses, e.g. "(Isolation)"
-    static const QRegularExpression parenRx(R"(\(([^)]+)\))");
-    auto parenMatch = parenRx.match(titleCandidate);
-    if (parenMatch.hasMatch()) {
-        outFirstName = parenMatch.captured(1).trimmed();
-        titleCandidate.replace(parenMatch.capturedStart(), parenMatch.capturedLength(), "({NAME})");
-    }
-
-    // Detect sequential index e.g. "Level 01", "Level 1", "#01"
-    static const QRegularExpression numRx(R"((\b(?:Level|Stage|Player|Char|Slot|Item|#)?\s*)(\d+))",
-                                          QRegularExpression::CaseInsensitiveOption);
-    auto numMatch = numRx.match(titleCandidate);
-    if (numMatch.hasMatch()) {
-        QString digits = numMatch.captured(2);
-        QString token = (digits.length() >= 2) ? "{INDEX:02}" : "{INDEX}";
-        titleCandidate.replace(numMatch.capturedStart(2), digits.length(), token);
-    } else if (!titleCandidate.contains("{INDEX")) {
-        // If title has no number, append index token so each clone has a distinct sequential title
-        if (!titleCandidate.isEmpty()) {
-            titleCandidate += " {INDEX:02}";
-        } else {
-            titleCandidate = "{INDEX:02}";
-        }
-    }
-
-    // Re-attach prefix tag to the template
-    if (!prefixTag.isEmpty()) {
-        outTemplate = prefixTag + " " + titleCandidate;
-    } else {
-        outTemplate = titleCandidate;
-    }
-
-    m_detectedFirstName = outFirstName;
+    const NoteTemplateInfo info = CodeNoteTemplateService::ParseTemplateFromNote(m_originalNoteText);
+    outStride = info.DetectedStride;
+    outTemplate = info.HeaderTemplate;
+    outFirstName = info.FirstCustomName;
+    m_originalBody = info.BodyText;
+    m_detectedFirstName = info.FirstCustomName;
 }
 
 void CloneStrideDialog::setupLayout() {
@@ -295,33 +223,7 @@ int64_t CloneStrideDialog::getBaseAddress() const {
 
 QString CloneStrideDialog::formatTitle(int index, uint32_t offsetBytes, const QString& customName) const {
     QString tmpl = m_templateEdit ? m_templateEdit->text() : "Structure {INDEX:02}";
-
-    // Replace index placeholders
-    QString idxStr = QString::number(index + 1);
-    QString idx02Str = QString("%1").arg(index + 1, 2, 10, QChar('0'));
-    QString idx03Str = QString("%1").arg(index + 1, 3, 10, QChar('0'));
-
-    tmpl.replace("{INDEX:03}", idx03Str);
-    tmpl.replace("{INDEX:02}", idx02Str);
-    tmpl.replace("{INDEX}", idxStr);
-
-    // Replace offset placeholder with clean lowercase 0x and uppercase hex digits
-    QString offHex = QString("+0x%1").arg(QString("%1").arg(offsetBytes, 2, 16, QChar('0')).toUpper());
-    tmpl.replace("{OFFSET}", offHex);
-
-    // Replace name placeholder
-    if (tmpl.contains("({NAME})")) {
-        if (customName.trimmed().isEmpty()) {
-            tmpl.replace("({NAME})", "");
-        } else {
-            tmpl.replace("({NAME})", "(" + customName.trimmed() + ")");
-        }
-    } else {
-        tmpl.replace("{NAME}", customName.trimmed());
-    }
-
-    // Clean up redundant consecutive spaces
-    return tmpl.simplified();
+    return CodeNoteTemplateService::ExpandTemplate(tmpl, index + 1, offsetBytes, customName);
 }
 
 void CloneStrideDialog::onParametersChanged() {
