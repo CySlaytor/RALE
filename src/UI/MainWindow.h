@@ -82,6 +82,7 @@ class MainWindow : public QMainWindow {
     void onLogicOptimizer();
 
     void onMultiRegionBatch(MultiRegionDialog* dialog);
+    void onApplySuggestedFix(const ValidationIssue& issue);
 
     void onUndo();
     void onRedo();

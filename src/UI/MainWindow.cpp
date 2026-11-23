@@ -11,6 +11,7 @@
 #include "Dialogs/MultiRegionDialog.h"
 #include "Dialogs/RevertRegionDialog.h"
 #include "Dialogs/SettingsDialog.h"
+#include "Dialogs/SuggestedFixDialog.h"
 #include "Dialogs/TextDiffDialog.h"
 #include "Dialogs/UpdateDialog.h"
 
@@ -222,6 +223,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         else if (!issue.TargetField.isEmpty())
             triggerEditor->FocusHeaderField(issue.TargetField);
     });
+
+    connect(codeReviewControl, &CodeReviewWidget::SuggestedFixRequested, this, &MainWindow::onApplySuggestedFix);
 
     // Code Note Editor actions
     connect(codeNoteEditor, &CodeNoteEditorWidget::ReloadRequested, this, &MainWindow::onReload);
@@ -1457,6 +1460,109 @@ void MainWindow::RunGlobalValidation() {
     _globalIssues.append(_validator.ValidateSet(allAssets));
 
     codeReviewControl->SetIssues(_globalIssues);
+}
+
+void MainWindow::onApplySuggestedFix(const ValidationIssue& issue) {
+    if (!issue.HasSuggestedFix() || issue.Asset == nullptr)
+        return;
+
+    if (_notesCacheDirty)
+        RebuildNotesCache();
+
+    std::shared_ptr<IAssetItem> targetAsset = nullptr;
+    const bool isSelected = (_selectedAsset != nullptr && _selectedAsset->ID == issue.Asset->ID &&
+                             _selectedAsset->isLeaderboard() == issue.Asset->isLeaderboard());
+    if (isSelected) {
+        targetAsset = _selectedAsset;
+    } else {
+        for (const auto& item : _projectRepo.GetMergedAssets(issue.Asset->isLeaderboard())) {
+            if (item->ID == issue.Asset->ID) {
+                targetAsset = item;
+                break;
+            }
+        }
+    }
+
+    if (targetAsset == nullptr)
+        return;
+
+    SuggestedFixDialog dialog(issue, targetAsset, &_cachedNotesLookup, &_cachedRangeCache, triggerEditor->ShowDecimal(),
+                              triggerEditor->ShowAliases(), this);
+    if (dialog.exec() != QDialog::Accepted || !dialog.HasValidFix())
+        return;
+
+    _projectRepo.EnsureLocalDataExists();
+    PushMainUndo();
+
+    if (targetAsset->State == AssetState::Synced) {
+        auto clone = targetAsset->clone(false);
+        if (isSelected)
+            _selectedAsset = clone;
+        targetAsset = clone;
+    }
+
+    if (!targetAsset->isLeaderboard()) {
+        auto ra = std::static_pointer_cast<RaAchievement>(targetAsset);
+        std::shared_ptr<RaAchievement> localAch = nullptr;
+        for (const auto& a : _projectRepo.LocalData->Achievements) {
+            if (a->ID == ra->ID) {
+                localAch = a;
+                break;
+            }
+        }
+        if (localAch == nullptr) {
+            localAch = ra;
+            _projectRepo.LocalData->Achievements.append(localAch);
+        }
+        targetAsset = localAch;
+        if (isSelected)
+            _selectedAsset = localAch;
+    } else {
+        auto rl = std::static_pointer_cast<RaLeaderboard>(targetAsset);
+        std::shared_ptr<RaLeaderboard> localLb = nullptr;
+        for (const auto& l : _projectRepo.LocalData->Leaderboards) {
+            if (l->ID == rl->ID) {
+                localLb = l;
+                break;
+            }
+        }
+        if (localLb == nullptr) {
+            localLb = rl;
+            _projectRepo.LocalData->Leaderboards.append(localLb);
+        }
+        targetAsset = localLb;
+        if (isSelected)
+            _selectedAsset = localLb;
+    }
+
+    switch (dialog.FixType()) {
+    case SuggestedFixType::InvertChain:
+    case SuggestedFixType::ClearResetHitCount:
+    case SuggestedFixType::RemoveUselessAndNext:
+        targetAsset->Logic = dialog.ResultingLogic();
+        break;
+    case SuggestedFixType::ApplyTitleCase:
+        targetAsset->Title = dialog.ResultingTitle();
+        break;
+    case SuggestedFixType::NormalizeSmartQuotes:
+        if (dialog.TargetField() == "desc")
+            targetAsset->Description = dialog.ResultingDescription();
+        else
+            targetAsset->Title = dialog.ResultingTitle();
+        break;
+    default:
+        return;
+    }
+
+    UpdateAssetState(targetAsset);
+    _isDirty = true;
+    _currentAssetDirty = false;
+    ReloadDataView();
+    if (_selectedAsset != nullptr)
+        RefreshSelectedAssetAfterStoreChange();
+    RunGlobalValidation();
+    UpdateSelectionUI();
+    UpdateTriggerActionButtons();
 }
 
 void MainWindow::PushMainUndo() {

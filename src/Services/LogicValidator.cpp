@@ -192,39 +192,6 @@ QString ToDisplayHex(int64_t addr) {
     return QString("0x%1").arg(static_cast<quint64>(addr), 8, 16, QChar('0'));
 }
 
-SuggestedLogicFix BuildInvertedChainFix(const AchievementConditionGroup& group, int ri) {
-    auto invertReq = [](const AchievementCondition& c) {
-        AchievementCondition copy = c.Clone();
-        if (copy.Flag == "AndNext")
-            copy.Flag = "OrNext";
-        else if (copy.Flag == "OrNext")
-            copy.Flag = "AndNext";
-        if (IsComparisonOp(copy.Operator))
-            copy.Operator = ReverseCmpOp(copy.Operator);
-        return copy;
-    };
-
-    int chainStart = ri;
-    for (int i = ri - 1; i >= 0; --i) {
-        if (IsTerminatingFlag(group.Conditions[i].Flag))
-            break;
-        chainStart = i;
-    }
-
-    SuggestedLogicFix fix;
-    fix.StartConditionIndex = chainStart;
-    fix.ReplaceCount = ri - chainStart + 1;
-    for (int i = chainStart; i < ri; ++i) {
-        fix.ReplacementConditions.append(invertReq(group.Conditions[i]));
-    }
-
-    AchievementCondition target = invertReq(group.Conditions[ri]);
-    target.Flag = "";
-    target.RequiredHits = 0;
-    fix.ReplacementConditions.append(target);
-    return fix;
-}
-
 const LogicValidator::ParsedCodeNote* FindNoteContainingAddr(const QList<LogicValidator::ParsedCodeNote>& parsedNotes, int64_t addr) {
     for (int i = static_cast<int>(parsedNotes.size()) - 1; i >= 0; --i) {
         if (parsedNotes[i].Contains(addr))
@@ -854,14 +821,13 @@ void LogicValidator::CheckUnclearedHits(const QList<AchievementConditionGroup>& 
 
 void LogicValidator::CheckUselessAndNext(const AchievementConditionGroup& group, int groupIndex, QList<ValidationIssue>& issues,
                                          std::shared_ptr<IAssetItem> asset, const QString& segmentName) {
-    QList<QPair<int, AchievementCondition>> andNextChain;
+    QList<AchievementCondition> andNextChain;
     bool valid = false;
 
-    for (int ri = 0; ri < group.Conditions.size(); ++ri) {
-        const auto& req = group.Conditions[ri];
+    for (const auto& req : group.Conditions) {
         // add all AndNexts to a chain
         if (req.Flag == "AndNext")
-            andNextChain.append({ri, req});
+            andNextChain.append(req);
         // if there's an OrNext flag, I'm just going to let this go
         if (req.Flag == "OrNext")
             valid = true;
@@ -875,19 +841,12 @@ void LogicValidator::CheckUselessAndNext(const AchievementConditionGroup& group,
                 valid = true;
 
             if (!andNextChain.isEmpty() && !valid) {
-                for (const auto& entry : andNextChain) {
-                    SuggestedLogicFix fix;
-                    fix.StartConditionIndex = entry.first;
-                    fix.ReplaceCount = 1;
-                    AchievementCondition fixed = entry.second.Clone();
-                    fixed.Flag = "";
-                    fix.ReplacementConditions.append(fixed);
-
+                for (const auto& andReq : andNextChain) {
                     issues.append(ValidationIssue(
                         FeedbackSeverity::Warning, "Useless AndNext",
-                        "Combining requirements with AND is the default behavior. Useless AndNext flags should be removed.", entry.second,
+                        "Combining requirements with AND is the default behavior. Useless AndNext flags should be removed.", andReq,
                         "https://docs.retroachievements.org/developer-docs/flags/andnext-ornext.html", asset, "Logic", segmentName,
-                        groupIndex, "", "", fix));
+                        groupIndex, "", "", SuggestedFixType::RemoveUselessAndNext));
                 }
             }
             andNextChain.clear();
@@ -936,9 +895,9 @@ void LogicValidator::CheckUselessPause(const QList<AchievementConditionGroup>& g
                 else if (!isValue) {
                     issues.append(ValidationIssue(
                         FeedbackSeverity::Fail, "Useless Use of PauseIf",
-                        "PauseIf should only be used with requirements containing hit targets.", req,
-                        "https://docs.retroachievements.org/developer-docs/flags/pauseif.html", asset, "Logic", segmentName, gi, "", "",
-                        BuildInvertedChainFix(g, ri)));
+                        "PauseIf should only be used with requirements containing hit targets.",
+                        req, "https://docs.retroachievements.org/developer-docs/flags/pauseif.html", asset, "Logic", segmentName, gi, "",
+                        "", SuggestedFixType::InvertChain));
                 }
             }
         }
@@ -976,9 +935,9 @@ void LogicValidator::CheckUselessReset(const QList<AchievementConditionGroup>& g
                 if (!isValue || hasMeasured) {
                     issues.append(ValidationIssue(
                         FeedbackSeverity::Fail, "Useless Use of ResetIf",
-                        "ResetIf should only be used with requirements containing hit targets.", req,
-                        "https://docs.retroachievements.org/developer-docs/flags/resetif.html", asset, "Logic", segmentName, gi, "", "",
-                        BuildInvertedChainFix(g, ri)));
+                        "ResetIf should only be used with requirements containing hit targets.",
+                        req, "https://docs.retroachievements.org/developer-docs/flags/resetif.html", asset, "Logic", segmentName, gi, "",
+                        "", SuggestedFixType::InvertChain));
                 }
             }
         }
@@ -988,21 +947,13 @@ void LogicValidator::CheckUselessReset(const QList<AchievementConditionGroup>& g
 void LogicValidator::CheckResetWithHits(const AchievementConditionGroup& group, int groupIndex, QList<ValidationIssue>& issues,
                                         std::shared_ptr<IAssetItem> asset, const QString& segmentName) {
     bool hasAddHits = false;
-    for (int ri = 0; ri < group.Conditions.size(); ++ri) {
-        const auto& req = group.Conditions[ri];
+    for (const auto& req : group.Conditions) {
         if (!hasAddHits && req.Flag == "Reset If" && req.RequiredHits == 1) {
-            SuggestedLogicFix fix;
-            fix.StartConditionIndex = ri;
-            fix.ReplaceCount = 1;
-            AchievementCondition fixed = req.Clone();
-            fixed.RequiredHits = 0;
-            fix.ReplacementConditions.append(fixed);
-
             issues.append(ValidationIssue(
                 FeedbackSeverity::Warning, "ResetIf Hitcount = 1",
                 "A ResetIf or ResetNextIf with a hitcount of 1 does not require a hitcount. The hitcount can be safely removed.", req,
                 "https://docs.retroachievements.org/developer-docs/flags/resetif.html", asset, "Logic", segmentName, groupIndex, "", "",
-                fix));
+                SuggestedFixType::ClearResetHitCount));
         }
 
         if (req.Flag == "Add Hits")
@@ -1721,14 +1672,16 @@ void LogicValidator::CheckTitleCase(std::shared_ptr<IAssetItem> asset, QList<Val
     const auto analysis = TitleCaseAnalyzer::Analyze(asset->Title);
     if (!analysis.Changes.isEmpty()) {
         QStringList changeDescs;
+        QStringList fixDetails;
         for (const auto& c : analysis.Changes) {
             changeDescs.append(QString("%1 -> %2 (%3)").arg(c.Word, c.Cased, c.Reason));
+            fixDetails.append(QString("%1 -> %2: %3").arg(c.Word, c.Cased, c.Reason));
         }
         const QString desc = QString("Titles should be written in CMOS title case. Suggested: \"%1\" [%2]")
                                  .arg(analysis.Suggestion, changeDescs.join("; "));
         issues.append(ValidationIssue(FeedbackSeverity::Info, "Title Case", desc, std::nullopt,
                                       "https://en.wikipedia.org/wiki/Title_case#Chicago_Manual_of_Style", asset, "Presentation", "", -1,
-                                      "title"));
+                                      "title", "", SuggestedFixType::ApplyTitleCase, analysis.Suggestion, fixDetails));
     }
 }
 
@@ -1760,7 +1713,7 @@ void LogicValidator::CheckWritingMistakes(std::shared_ptr<IAssetItem> asset, QLi
                 FeedbackSeverity::Warning, "Smart Quotes / Special Characters",
                 QString("Smart quotes in %1 can cause rendering issues in emulators. Suggested: \"%2\"").arg(fieldLabel, corrected),
                 std::nullopt, "https://docs.retroachievements.org/developer-docs/tips-and-tricks.html#naming-convention-tips", asset,
-                "Presentation", "", -1, elt));
+                "Presentation", "", -1, elt, "", SuggestedFixType::NormalizeSmartQuotes, corrected));
         } else {
             const auto foreignMatch = foreignRe.match(text);
             if (foreignMatch.hasMatch()) {

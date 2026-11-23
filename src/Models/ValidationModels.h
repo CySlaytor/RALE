@@ -2,8 +2,8 @@
 
 #include "LogicModels.h"
 
-#include <QList>
 #include <QString>
+#include <QStringList>
 
 #include <memory>
 #include <optional>
@@ -14,12 +14,13 @@ class IAssetItem;
 
 enum class FeedbackSeverity { Pass = 0, None = 0, Info = 1, Warning = 2, Fail = 3, Error = 4 };
 
-struct SuggestedLogicFix {
-    int StartConditionIndex = -1;
-    int ReplaceCount = 0;
-    QList<AchievementCondition> ReplacementConditions;
-
-    bool IsValid() const { return StartConditionIndex >= 0 && ReplaceCount > 0 && !ReplacementConditions.isEmpty(); }
+enum class SuggestedFixType {
+    None = 0,
+    InvertChain,
+    ClearResetHitCount,
+    RemoveUselessAndNext,
+    ApplyTitleCase,
+    NormalizeSmartQuotes
 };
 
 class ValidationIssue {
@@ -34,14 +35,17 @@ class ValidationIssue {
     QString TargetField = "";
     QString NoteAddress = "";
 
+    SuggestedFixType FixType = SuggestedFixType::None;
+    QString FixPreviewText = "";
+    QStringList FixDetails;
+
     // The specific condition object this issue relates to (for highlighting in the grid)
     std::optional<AchievementCondition> Target;
 
-    // Optional structured replacement for one-click visual quick fixes
-    std::optional<SuggestedLogicFix> SuggestedFix;
-
     // The asset this issue belongs to (for global list navigation)
     std::shared_ptr<IAssetItem> Asset;
+
+    bool HasSuggestedFix() const { return FixType != SuggestedFixType::None; }
 
     ValidationIssue() = default;
 
@@ -49,10 +53,11 @@ class ValidationIssue {
                     const std::optional<AchievementCondition>& target = std::nullopt, const QString& wikiUrl = "",
                     std::shared_ptr<IAssetItem> asset = nullptr, const QString& category = "Logic", const QString& segmentName = "",
                     int groupIndex = -1, const QString& targetField = "", const QString& noteAddress = "",
-                    const std::optional<SuggestedLogicFix>& suggestedFix = std::nullopt)
+                    SuggestedFixType fixType = SuggestedFixType::None, const QString& fixPreviewText = "",
+                    const QStringList& fixDetails = {})
         : Severity(severity), Title(title), Description(description), WikiUrl(wikiUrl), Category(category), SegmentName(segmentName),
-          GroupIndex(groupIndex), TargetField(targetField), NoteAddress(noteAddress), Target(target), SuggestedFix(suggestedFix),
-          Asset(asset) {}
+          GroupIndex(groupIndex), TargetField(targetField), NoteAddress(noteAddress), FixType(fixType), FixPreviewText(fixPreviewText),
+          FixDetails(fixDetails), Target(target), Asset(asset) {}
 };
 
 } // namespace RALE
