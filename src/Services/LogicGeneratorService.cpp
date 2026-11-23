@@ -29,8 +29,42 @@ void LogicGeneratorService::ApplyGeneratorRules(QList<AchievementConditionGroup>
 
             // We need to capture the current template conditions to clone them
             QList<AchievementCondition> templateConditions;
-            for (const auto& c : arrayGroup.Conditions)
-                templateConditions.append(c.Clone());
+            if (def.DuplicateSelectedOnly) {
+                // Keep Add Address chains attached to their terminating condition so pointer chains stay intact
+                QList<QList<AchievementCondition>> units;
+                QList<AchievementCondition> currentUnit;
+                for (const auto& c : arrayGroup.Conditions) {
+                    currentUnit.append(c.Clone());
+                    if (c.Flag != "Add Address") {
+                        units.append(currentUnit);
+                        currentUnit.clear();
+                    }
+                }
+                if (!currentUnit.isEmpty())
+                    units.append(currentUnit);
+
+                for (const auto& unit : units) {
+                    bool unitMatches = false;
+                    for (const auto& c : unit) {
+                        for (const auto& rule : def.Rules) {
+                            if (OperandMatchesAddress(c.LeftOperand, rule.SourceAddress) ||
+                                OperandMatchesAddress(c.RightOperand, rule.SourceAddress)) {
+                                unitMatches = true;
+                                break;
+                            }
+                        }
+                        if (unitMatches)
+                            break;
+                    }
+                    if (unitMatches) {
+                        for (const auto& c : unit)
+                            templateConditions.append(c);
+                    }
+                }
+            } else {
+                for (const auto& c : arrayGroup.Conditions)
+                    templateConditions.append(c.Clone());
+            }
 
             // Generate N copies
             for (int i = 1; i <= def.Copies; i++) {
@@ -79,11 +113,11 @@ void LogicGeneratorService::ApplyGeneratorRules(QList<AchievementConditionGroup>
     }
 }
 
-void LogicGeneratorService::ApplyOffsetToOperand(Operand& op, const QString& targetAddress, int stride, int multiplier) {
+bool LogicGeneratorService::OperandMatchesAddress(const Operand& op, const QString& targetAddress) const {
     if (op.Value.isEmpty())
-        return;
+        return false;
     if (!RaLogicSyntax::MemoryTypes.contains(op.Type))
-        return;
+        return false;
 
     QString cleanTarget = targetAddress.startsWith("0x", Qt::CaseInsensitive) ? targetAddress.mid(2) : targetAddress;
     QString cleanOp = op.Value.startsWith("0x", Qt::CaseInsensitive) ? op.Value.mid(2) : op.Value;
@@ -93,8 +127,18 @@ void LogicGeneratorService::ApplyOffsetToOperand(Operand& op, const QString& tar
     bool opOk = false;
     uint64_t opVal = cleanOp.toULongLong(&opOk, 16);
 
-    bool matches = (targetOk && opOk) ? (opVal == targetVal) : (cleanOp.compare(cleanTarget, Qt::CaseInsensitive) == 0);
-    if (matches && opOk) {
+    return (targetOk && opOk) ? (opVal == targetVal) : (cleanOp.compare(cleanTarget, Qt::CaseInsensitive) == 0);
+}
+
+void LogicGeneratorService::ApplyOffsetToOperand(Operand& op, const QString& targetAddress, int stride, int multiplier) {
+    if (!OperandMatchesAddress(op, targetAddress))
+        return;
+
+    QString cleanOp = op.Value.startsWith("0x", Qt::CaseInsensitive) ? op.Value.mid(2) : op.Value;
+    bool opOk = false;
+    uint64_t opVal = cleanOp.toULongLong(&opOk, 16);
+
+    if (opOk) {
         int64_t baseVal = static_cast<int64_t>(opVal);
         int64_t offset = static_cast<int64_t>(stride) * multiplier;
         int64_t newVal = baseVal + offset;

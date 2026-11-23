@@ -9,6 +9,7 @@ class LogicGeneratorService : public ILogicGenerator {
     void ApplyGeneratorRules(QList<AchievementConditionGroup>& activeGroups, const QMap<int, GeneratorDefinition>& generatorRules) override;
 
   private:
+    bool OperandMatchesAddress(const Operand& op, const QString& targetAddress) const;
     void ApplyOffsetToOperand(Operand& op, const QString& targetAddress, int stride, int multiplier);
 };
 

@@ -40,6 +40,7 @@ GeneratorConfigDialog::GeneratorConfigDialog(const QList<std::shared_ptr<Generat
     txtCopies->setText(AppSettings::Current.Generator_Copies);
     txtStride->setText(AppSettings::Current.Generator_Stride);
     chkGenerateAsArray->setChecked(AppSettings::Current.Generator_IsArray);
+    chkDuplicateSelectedOnly->setChecked(AppSettings::Current.Generator_DuplicateSelectedOnly);
 
     // 2. Pre-fill Stride if auto-detected (Only override if the user hasn't explicitly customized it this session)
     if (defaultStride > 0 && !_userModifiedStride) {
@@ -51,6 +52,7 @@ GeneratorConfigDialog::GeneratorConfigDialog(const QList<std::shared_ptr<Generat
         // If we are editing an existing generator, override with its stored definition
         txtCopies->setText(QString::number(existingDef->Copies));
         chkGenerateAsArray->setChecked(existingDef->IsArray);
+        chkDuplicateSelectedOnly->setChecked(existingDef->DuplicateSelectedOnly);
 
         int foundStride = existingDef->Rules[0].Stride;
         txtStride->setText("0x" + QString::number(foundStride, 16).toUpper());
@@ -89,6 +91,7 @@ GeneratorConfigDialog::GeneratorConfigDialog(const QList<std::shared_ptr<Generat
         _isUpdatingCheck = false;
     }
 
+    chkDuplicateSelectedOnly->setEnabled(chkGenerateAsArray->isChecked());
     loadPositionSettings();
 }
 
@@ -109,7 +112,7 @@ void GeneratorConfigDialog::done(int r) {
 
 void GeneratorConfigDialog::InitializeUI() {
     setWindowTitle("Create Generator");
-    setFixedSize(364, 370);
+    setFixedSize(364, 394);
 
     auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(12, 9, 12, 10);
@@ -160,6 +163,16 @@ void GeneratorConfigDialog::InitializeUI() {
 
     chkGenerateAsArray = new QCheckBox("Generate as Array (Append to this Group, don't create Alts)", this);
     mainLayout->addWidget(chkGenerateAsArray);
+
+    chkDuplicateSelectedOnly = new QCheckBox("Duplicate only selected address(es)", this);
+    chkDuplicateSelectedOnly->setToolTip(
+        "When generating an array, only duplicate conditions containing the checked address(es) instead of the entire group");
+    chkDuplicateSelectedOnly->setEnabled(false);
+    connect(chkGenerateAsArray, &QCheckBox::toggled, chkDuplicateSelectedOnly, &QWidget::setEnabled);
+    auto* subOptionRow = new QHBoxLayout();
+    subOptionRow->setContentsMargins(18, 0, 0, 0);
+    subOptionRow->addWidget(chkDuplicateSelectedOnly);
+    mainLayout->addLayout(subOptionRow);
 
     auto* btnRow = new QHBoxLayout();
     btnRow->setContentsMargins(0, 6, 0, 0);
@@ -325,11 +338,13 @@ void GeneratorConfigDialog::onBtnOK() {
     Copies = c;
     Stride = s;
     IsArray = chkGenerateAsArray->isChecked();
+    DuplicateSelectedOnly = IsArray && chkDuplicateSelectedOnly->isChecked();
 
     // Save state for next use
     AppSettings::Current.Generator_Copies = txtCopies->text();
     AppSettings::Current.Generator_Stride = txtStride->text();
     AppSettings::Current.Generator_IsArray = chkGenerateAsArray->isChecked();
+    AppSettings::Current.Generator_DuplicateSelectedOnly = chkDuplicateSelectedOnly->isChecked();
     AppSettings::Save();
     _userModifiedStride = true; // Mark as explicitly set by user
 

@@ -158,6 +158,8 @@ class TriggerEditorState {
                 return false;
             if (r1.IsArray != r2.IsArray)
                 return false;
+            if (r1.DuplicateSelectedOnly != r2.DuplicateSelectedOnly)
+                return false;
             if (r1.TemplateConditionCount != r2.TemplateConditionCount)
                 return false;
             if (r1.Rules.size() != r2.Rules.size())

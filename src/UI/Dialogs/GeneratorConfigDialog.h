@@ -32,6 +32,7 @@ class GeneratorConfigDialog : public QDialog {
     int Copies = 1;
     int Stride = 0;
     bool IsArray = false;
+    bool DuplicateSelectedOnly = false;
 
     // List of addresses the user selected to apply the generator rule to
     QStringList SelectedAddresses;
@@ -58,6 +59,7 @@ class GeneratorConfigDialog : public QDialog {
     QLineEdit* txtCopies = nullptr;
     QLineEdit* txtStride = nullptr;
     QCheckBox* chkGenerateAsArray = nullptr;
+    QCheckBox* chkDuplicateSelectedOnly = nullptr;
     QPushButton* btnSelectAll = nullptr;
     QPushButton* btnOK = nullptr;
     QPushButton* btnCancel = nullptr;

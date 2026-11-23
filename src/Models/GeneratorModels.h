@@ -22,6 +22,9 @@ class GeneratorDefinition {
     // Determines if we create new Alt groups (False) or append to the current group (True)
     bool IsArray = false;
 
+    // When generating an array, duplicates only conditions referencing selected addresses instead of the entire group
+    bool DuplicateSelectedOnly = false;
+
     // Tracks how many conditions formed the original "Template".
     // This allows the ViewModel to clear previous generations before applying new ones.
     int TemplateConditionCount = 0;
@@ -29,8 +32,8 @@ class GeneratorDefinition {
     QList<GeneratorRule> Rules;
 
     bool operator==(const GeneratorDefinition& other) const {
-        return Copies == other.Copies && IsArray == other.IsArray && TemplateConditionCount == other.TemplateConditionCount &&
-               Rules == other.Rules;
+        return Copies == other.Copies && IsArray == other.IsArray && DuplicateSelectedOnly == other.DuplicateSelectedOnly &&
+               TemplateConditionCount == other.TemplateConditionCount && Rules == other.Rules;
     }
     bool operator!=(const GeneratorDefinition& other) const { return !(*this == other); }
 };

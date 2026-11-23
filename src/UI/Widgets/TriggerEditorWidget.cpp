@@ -2787,11 +2787,16 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
         GeneratorDefinition def;
         def.Copies = form.Copies;
         def.IsArray = form.IsArray;
+        def.DuplicateSelectedOnly = form.DuplicateSelectedOnly;
 
         if (def.IsArray) {
             auto& activeGroups = _viewModel.GetActiveGroups();
             if (groupIndex >= 0 && groupIndex < activeGroups.size()) {
-                def.TemplateConditionCount = activeGroups[groupIndex].Conditions.size();
+                def.TemplateConditionCount = (hasExistingDef && !existingDef.Rules.isEmpty() && existingDef.IsArray &&
+                                              existingDef.TemplateConditionCount > 0 &&
+                                              existingDef.TemplateConditionCount <= activeGroups[groupIndex].Conditions.size())
+                                                 ? existingDef.TemplateConditionCount
+                                                 : activeGroups[groupIndex].Conditions.size();
             }
         }
 
