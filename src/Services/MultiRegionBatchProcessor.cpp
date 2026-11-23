@@ -20,6 +20,7 @@ void MultiRegionBatchProcessor::ApplyMultiRegionToAsset(std::shared_ptr<IAssetIt
 
     auto segments = strategy->ParseLogic(localItem->Logic);
     QStringList keys = segments.keys();
+    bool updatedMetadata = false;
 
     for (const QString& segmentKey : keys) {
         const auto& groups = segments[segmentKey];
@@ -80,9 +81,13 @@ void MultiRegionBatchProcessor::ApplyMultiRegionToAsset(std::shared_ptr<IAssetIt
 
             // Apply Address Swap
             for (auto& grp : newRegionGroups) {
+                bool prevWasAddAddress = false;
                 for (auto& c : grp.Conditions) {
-                    ApplyAddressSwap(c.LeftOperand, targetCfg.AddressRanges);
-                    ApplyAddressSwap(c.RightOperand, targetCfg.AddressRanges);
+                    if (!prevWasAddAddress) {
+                        ApplyAddressSwap(c.LeftOperand, targetCfg.AddressRanges);
+                        ApplyAddressSwap(c.RightOperand, targetCfg.AddressRanges);
+                    }
+                    prevWasAddAddress = (c.Flag == "Add Address");
                 }
             }
 
@@ -108,7 +113,10 @@ void MultiRegionBatchProcessor::ApplyMultiRegionToAsset(std::shared_ptr<IAssetIt
         segments[segmentKey] = finalGroups;
 
         // IMPORTANT: Update Metadata with new Group Names
-        _metadata.UpdateAssetGroups(localItem->ID, finalGroups);
+        if (!localItem->isLeaderboard() || !updatedMetadata) {
+            _metadata.UpdateAssetGroups(localItem->ID, finalGroups);
+            updatedMetadata = true;
+        }
     }
 
     // Save Back

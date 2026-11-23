@@ -1466,6 +1466,8 @@ void MainWindow::onApplySuggestedFix(const ValidationIssue& issue) {
     if (!issue.HasSuggestedFix() || issue.Asset == nullptr)
         return;
 
+    triggerEditor->CommitActiveEditor();
+
     if (_notesCacheDirty)
         RebuildNotesCache();
 
@@ -1782,7 +1784,7 @@ QString MainWindow::InvertOperator(const QString& op) {
 }
 
 void MainWindow::ApplyBulkEdit(const std::shared_ptr<IAssetItem>& sourceTemplate) {
-    if (sourceTemplate == nullptr || sourceTemplate->isLeaderboard())
+    if (sourceTemplate == nullptr || sourceTemplate->isLeaderboard() || _projectRepo.LocalData == nullptr)
         return;
     auto srcAch = std::static_pointer_cast<RaAchievement>(sourceTemplate);
 
@@ -2284,6 +2286,9 @@ void MainWindow::onViewDiff() {
 }
 
 void MainWindow::onClearDataReset() {
+    if (!ConfirmDiscardChanges())
+        return;
+
     auto result = QMessageBox::warning(
         this, "Clear Data / Reset",
         "This will delete all application configuration and cached data. The application will restart.\n\nAre you sure?",
@@ -2291,6 +2296,7 @@ void MainWindow::onClearDataReset() {
 
     if (result == QMessageBox::Yes) {
         try {
+            _isDirty = false;
             QString appPath = QCoreApplication::applicationDirPath();
             QFile::remove(QDir(appPath).filePath("settings.ini"));
 
@@ -2525,6 +2531,9 @@ void MainWindow::onRevertRegion() {
         return;
 
     QString targetRegion = form.SelectedRegion;
+    _projectRepo.EnsureLocalDataExists();
+    if (_projectRepo.LocalData == nullptr)
+        return;
     PushMainUndo();
     int count = 0;
 

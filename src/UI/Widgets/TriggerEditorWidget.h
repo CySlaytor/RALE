@@ -145,6 +145,7 @@ class TriggerEditorWidget : public QWidget {
     ConditionTableDelegate* _tableDelegate = nullptr;
 
     bool _isProgrammaticallyChanging = false;
+    bool _logicUpdatePending = false;
     bool _showDecimal = false;
     bool _showAliases = false;
     bool _collapseChains = false;

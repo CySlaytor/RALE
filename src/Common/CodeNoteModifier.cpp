@@ -197,6 +197,9 @@ CodeNoteModifier::NoteStyle CodeNoteModifier::DetectLocalStyle(const QString& pa
 }
 
 QString CodeNoteModifier::DeleteNodeFamily(const QString& baseNoteText, const std::shared_ptr<NoteNode>& node) {
+    if (node == nullptr)
+        return baseNoteText;
+
     QString normalized = baseNoteText;
     normalized.replace("\r\n", "\n").replace('\r', '\n');
     QStringList lines = normalized.split('\n');
@@ -253,11 +256,14 @@ QString CodeNoteModifier::DeleteNodeFamily(const QString& baseNoteText, const st
 
 QString CodeNoteModifier::UpdateRealNode(const QString& baseNoteText, const std::shared_ptr<NoteNode>& node, const QString& newContent,
                                          const NoteStyle& globalStyle) {
+    if (node == nullptr)
+        return baseNoteText;
+
     QString normalized = baseNoteText;
     normalized.replace("\r\n", "\n").replace('\r', '\n');
     QStringList lines = normalized.split('\n');
 
-    if (node->RawLineIndex >= lines.size())
+    if (node->RawLineIndex < 0 || node->RawLineIndex >= lines.size())
         return baseNoteText;
 
     auto style = DetectLocalStyle(lines[node->RawLineIndex], globalStyle);

@@ -33,9 +33,14 @@ int LogicOptimizer::OptimizeAsset(std::shared_ptr<IAssetItem> asset) {
     }
 
     if (changeCount > 0) {
-        asset->Logic = strategy->BuildLogic(segments);
-        if (asset->State == AssetState::Synced)
-            asset->State = AssetState::Modified;
+        QString newLogic = strategy->BuildLogic(segments);
+        if (newLogic != asset->Logic) {
+            asset->Logic = newLogic;
+            if (asset->State == AssetState::Synced)
+                asset->State = AssetState::Modified;
+        } else {
+            changeCount = 0;
+        }
     }
 
     return changeCount;
@@ -66,9 +71,14 @@ int LogicOptimizer::PadAsset(std::shared_ptr<IAssetItem> asset) {
     }
 
     if (changeCount > 0) {
-        asset->Logic = strategy->BuildLogic(segments);
-        if (asset->State == AssetState::Synced)
-            asset->State = AssetState::Modified;
+        QString newLogic = strategy->BuildLogic(segments);
+        if (newLogic != asset->Logic) {
+            asset->Logic = newLogic;
+            if (asset->State == AssetState::Synced)
+                asset->State = AssetState::Modified;
+        } else {
+            changeCount = 0;
+        }
     }
 
     return changeCount;
@@ -105,9 +115,8 @@ bool LogicOptimizer::HasLeadingZeros(const Operand& op) {
 
     // Only check memory or explicit hex values
     bool isMemory = RaLogicSyntax::MemoryTypes.contains(op.Type);
-    bool isHexValue = (op.Type == "Value" && op.Value.startsWith("0x", Qt::CaseInsensitive));
 
-    if (!isMemory && !isHexValue)
+    if (!isMemory)
         return false;
 
     QString val = op.Value.trimmed();
@@ -126,9 +135,8 @@ bool LogicOptimizer::OptimizeOperand(Operand& op) {
         return false;
 
     bool isMemory = RaLogicSyntax::MemoryTypes.contains(op.Type);
-    bool isHexValue = (op.Type == "Value" && op.Value.startsWith("0x", Qt::CaseInsensitive));
 
-    if (!isMemory && !isHexValue)
+    if (!isMemory)
         return false;
 
     QString original = op.Value;
@@ -165,9 +173,8 @@ bool LogicOptimizer::PadOperand(Operand& op) {
         return false;
 
     bool isMemory = RaLogicSyntax::MemoryTypes.contains(op.Type);
-    bool isHexValue = (op.Type == "Value" && op.Value.startsWith("0x", Qt::CaseInsensitive));
 
-    if (!isMemory && !isHexValue)
+    if (!isMemory)
         return false;
 
     QString original = op.Value;

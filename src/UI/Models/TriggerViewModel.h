@@ -66,6 +66,7 @@ class TriggerViewModel : public QObject {
     TriggerViewModel(ILogicValidator& validator, ILogicGenerator& generator, QObject* parent = nullptr);
 
     void LoadAsset(std::shared_ptr<IAssetItem> asset);
+    void SetLogicPreservingHistory(const QString& logic);
     void SelectSegment(const QString& segmentName);
 
     // Commits changes to the Asset and the History stack

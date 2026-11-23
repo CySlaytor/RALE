@@ -248,11 +248,13 @@ void CodeNoteViewModel::IntelligentDelete(const std::shared_ptr<NoteNode>& targe
 }
 
 void CodeNoteViewModel::SelectBaseNote(const CodeNote& note) {
+    const CodeNote targetNote = note;
+
     // Auto-commit any pending edits before switching context
     if (EditState.IsDirty)
         CommitEditState();
 
-    CurrentBaseNote = std::make_shared<CodeNote>(note);
+    CurrentBaseNote = std::make_shared<CodeNote>(targetNote);
     _undoStack.clear(); // Reset undo stack on new note selection
     _redoStack.clear();
     emit HistoryChanged();
@@ -263,16 +265,16 @@ void CodeNoteViewModel::SelectBaseNote(const CodeNote& note) {
     // Logic: If the note is essentially empty (no structure) AND has a referral, follow it.
     // We check if the note has actual pointer structure (plus/dots). If not, we assume it's a stub.
     static const QRegularExpression structRegex(QString::fromUtf8(R"(^[.\+\s\x{2500}-\x{257F}])"), QRegularExpression::MultilineOption);
-    bool hasStructure = structRegex.match(note.Note).hasMatch();
+    bool hasStructure = structRegex.match(targetNote.Note).hasMatch();
 
     static const QRegularExpression referralRegex(R"(refer to \$?0x([0-9a-f]+))", QRegularExpression::CaseInsensitiveOption);
-    auto referralMatch = referralRegex.match(note.Note);
+    auto referralMatch = referralRegex.match(targetNote.Note);
 
     IsRedirected = false;
     RedirectedContent = "";
     RedirectTargetAddress = "";
 
-    QString contentToParse = note.Note;
+    QString contentToParse = targetNote.Note;
 
     if (!hasStructure && referralMatch.hasMatch()) {
         QString targetAddr = referralMatch.captured(1);

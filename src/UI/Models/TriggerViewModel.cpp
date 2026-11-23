@@ -63,6 +63,23 @@ void TriggerViewModel::LoadAsset(std::shared_ptr<IAssetItem> asset) {
     emit SegmentsChanged();
 }
 
+void TriggerViewModel::SetLogicPreservingHistory(const QString& logic) {
+    if (BoundAsset == nullptr)
+        return;
+
+    emit AboutToChangeSegments();
+    GeneratorRules.clear();
+    _segmentGeneratorRules.clear();
+
+    if (AssetStrategy != nullptr) {
+        SetStateFromLogic(logic);
+    }
+    BoundAsset->Logic = logic;
+
+    emit SegmentsChanged();
+    emit LogicChanged();
+}
+
 void TriggerViewModel::SelectSegment(const QString& segmentName) {
     if (_allSegments.contains(segmentName)) {
         _segmentGeneratorRules[ActiveSegmentName] = GeneratorRules;

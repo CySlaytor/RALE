@@ -67,6 +67,7 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget* parent) : QWidget(parent), _vi
     });
 
     connect(&_viewModel, &TriggerViewModel::LogicChanged, this, [this]() {
+        _logicUpdatePending = false;
         emit TriggerTextChanged();
         _isProgrammaticallyChanging = true;
         RefreshGroupsListUI();
@@ -153,8 +154,18 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget* parent) : QWidget(parent), _vi
     });
 
     // Asynchronously dispatch logic update and validation to prevent beginResetModel from executing inside active setData
-    connect(&_conditionModel, &ConditionTableModel::ConditionDataChanged, this,
-            [this]() { QMetaObject::invokeMethod(this, [this]() { _viewModel.UpdateLogic(false); }, Qt::QueuedConnection); });
+    connect(&_conditionModel, &ConditionTableModel::ConditionDataChanged, this, [this]() {
+        _logicUpdatePending = true;
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                if (_logicUpdatePending) {
+                    _logicUpdatePending = false;
+                    _viewModel.UpdateLogic(false);
+                }
+            },
+            Qt::QueuedConnection);
+    });
 }
 
 QIcon TriggerEditorWidget::getThemeIcon(const QString& resourcePath) const {
@@ -451,7 +462,7 @@ void TriggerEditorWidget::InitializeUI() {
         bool canBake = (row >= 0 && _viewModel.GeneratorRules.contains(row));
 
         if (actCreateGenerator)
-            actCreateGenerator->setEnabled(hasActiveGroups);
+            actCreateGenerator->setEnabled(hasActiveGroups && !IsGridReadOnly());
         if (actCommitGenerator)
             actCommitGenerator->setEnabled(canBake);
         if (actMultiRegion)
@@ -643,8 +654,7 @@ void TriggerEditorWidget::SetCollapseChains(bool value) { chkCollapseChains->set
 
 void TriggerEditorWidget::SetTriggerText(const QString& value) {
     if (_viewModel.BoundAsset != nullptr && _viewModel.BoundAsset->Logic != value) {
-        _viewModel.BoundAsset->Logic = value;
-        _viewModel.LoadAsset(_viewModel.BoundAsset);
+        _viewModel.SetLogicPreservingHistory(value);
     }
 }
 
@@ -733,6 +743,7 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
         _preserveSegmentSelection = lvLeaderboardComponents->currentItem()->text();
     }
 
+    _logicUpdatePending = false;
     _isProgrammaticallyChanging = true;
     _viewModel.LoadAsset(asset);
 
@@ -875,6 +886,7 @@ void TriggerEditorWidget::SetupLeaderboardUI(const RaLeaderboard& lb) {
 }
 
 void TriggerEditorWidget::Clear() {
+    _logicUpdatePending = false;
     _isProgrammaticallyChanging = true;
     _viewModel.LoadAsset(std::make_shared<RaAchievement>());
     txtTitle->clear();
@@ -1103,6 +1115,11 @@ void TriggerEditorWidget::CommitActiveEditor() {
         if (curIdx.isValid()) {
             conditionGrid->setCurrentIndex(curIdx);
         }
+    }
+
+    if (_logicUpdatePending) {
+        _logicUpdatePending = false;
+        _viewModel.UpdateLogic(false);
     }
 }
 
@@ -2548,11 +2565,13 @@ void TriggerEditorWidget::FocusHeaderField(const QString& field) {
 }
 
 void TriggerEditorWidget::onCreateGeneratorClicked() {
+    if (IsGridReadOnly())
+        return;
+
     int row = groupsList->currentRow();
     auto& groups = _viewModel.GetActiveGroups();
     if (row < 0 || row >= groups.size())
         return;
-    auto* group = &groups[row];
 
     int groupIndex = row;
 
@@ -2580,15 +2599,17 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
             if (ok) {
                 for (const auto& n : contextNode->Children) {
                     QString nClean = n->Offset.trimmed();
+                    nClean.remove('|');
                     nClean.remove("0x", Qt::CaseInsensitive);
                     nClean.remove('+');
                     nClean.remove('-');
                     nClean = nClean.trimmed();
-                    int64_t nodeOff = nClean.toLongLong(&ok, 16);
+                    bool nodeOk = false;
+                    int64_t nodeOff = nClean.toLongLong(&nodeOk, 16);
                     if (n->Offset.contains('-'))
                         nodeOff = -nodeOff;
 
-                    if (ok && offsetVal >= nodeOff && offsetVal < nodeOff + n->Size) {
+                    if (nodeOk && offsetVal >= nodeOff && offsetVal < nodeOff + n->Size) {
                         desc = n->Description;
                         currentNote = n;
                         foundAsOffset = true;
@@ -2669,7 +2690,7 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
         return {item, currentNote};
     };
 
-    for (const auto& cond : group->Conditions) {
+    for (const auto& cond : groups[groupIndex].Conditions) {
         if (cond.Flag == "Add Address") {
             if (RaLogicSyntax::MemoryTypes.contains(cond.LeftOperand.Type)) {
                 auto val = cond.LeftOperand.Value;
@@ -2768,7 +2789,10 @@ void TriggerEditorWidget::onCreateGeneratorClicked() {
         def.IsArray = form.IsArray;
 
         if (def.IsArray) {
-            def.TemplateConditionCount = group->Conditions.size();
+            auto& activeGroups = _viewModel.GetActiveGroups();
+            if (groupIndex >= 0 && groupIndex < activeGroups.size()) {
+                def.TemplateConditionCount = activeGroups[groupIndex].Conditions.size();
+            }
         }
 
         for (const auto& addr : form.SelectedAddresses) {

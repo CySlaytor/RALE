@@ -263,8 +263,11 @@ QList<std::shared_ptr<CodeNoteLogic::CodeNoteNode>> CodeNoteLogic::ParseLinesToT
                 lastNode->Children.append(noteNode);
             }
         } else {
-            while (stack.top().indent >= indent) {
+            while (!stack.isEmpty() && stack.top().indent >= indent) {
                 stack.pop();
+            }
+            if (stack.isEmpty()) {
+                stack.push({-1, &rootNodes});
             }
 
             auto node = std::make_shared<CodeNoteNode>();

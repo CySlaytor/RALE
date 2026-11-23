@@ -1,5 +1,7 @@
 #include "LogicGeneratorService.h"
 
+#include "../Definitions/RaLogicSyntax.h"
+
 #include <QRegularExpression>
 
 #include <algorithm>
@@ -80,25 +82,28 @@ void LogicGeneratorService::ApplyGeneratorRules(QList<AchievementConditionGroup>
 void LogicGeneratorService::ApplyOffsetToOperand(Operand& op, const QString& targetAddress, int stride, int multiplier) {
     if (op.Value.isEmpty())
         return;
-    if (op.Type.compare("Recall", Qt::CaseInsensitive) == 0)
+    if (!RaLogicSyntax::MemoryTypes.contains(op.Type))
         return;
 
     QString cleanTarget = targetAddress.startsWith("0x", Qt::CaseInsensitive) ? targetAddress.mid(2) : targetAddress;
     QString cleanOp = op.Value.startsWith("0x", Qt::CaseInsensitive) ? op.Value.mid(2) : op.Value;
 
-    if (cleanOp.compare(cleanTarget, Qt::CaseInsensitive) == 0) {
-        bool ok = false;
-        int64_t baseVal = cleanOp.toLongLong(&ok, 16);
-        if (ok) {
-            int64_t offset = static_cast<int64_t>(stride) * multiplier;
-            int64_t newVal = baseVal + offset;
-            int padding = cleanOp.length();
-            // .NET "xN" formatting: negative values use two's-complement hex.
-            QString hex = QString::number(static_cast<quint64>(newVal), 16);
-            if (hex.length() < padding)
-                hex = hex.rightJustified(padding, '0');
-            op.Value = "0x" + hex;
-        }
+    bool targetOk = false;
+    uint64_t targetVal = cleanTarget.toULongLong(&targetOk, 16);
+    bool opOk = false;
+    uint64_t opVal = cleanOp.toULongLong(&opOk, 16);
+
+    bool matches = (targetOk && opOk) ? (opVal == targetVal) : (cleanOp.compare(cleanTarget, Qt::CaseInsensitive) == 0);
+    if (matches && opOk) {
+        int64_t baseVal = static_cast<int64_t>(opVal);
+        int64_t offset = static_cast<int64_t>(stride) * multiplier;
+        int64_t newVal = baseVal + offset;
+        int padding = cleanOp.length();
+        // .NET "xN" formatting: negative values use two's-complement hex.
+        QString hex = QString::number(static_cast<quint64>(newVal), 16);
+        if (hex.length() < padding)
+            hex = hex.rightJustified(padding, '0');
+        op.Value = "0x" + hex;
     }
 }
 

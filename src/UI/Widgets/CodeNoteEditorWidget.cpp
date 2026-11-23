@@ -281,6 +281,12 @@ void CodeNoteEditorWidget::Undo() {
         UpdateStatusDisplay(&msg);
         UpdateActionButtons();
         emit HistoryChanged();
+        return;
+    }
+
+    if (txtNoteBody && txtNoteBody->document()->isUndoAvailable()) {
+        txtNoteBody->undo();
+        emit HistoryChanged();
     }
 }
 
@@ -297,6 +303,12 @@ void CodeNoteEditorWidget::Redo() {
         QString msg = "Redone.";
         UpdateStatusDisplay(&msg);
         UpdateActionButtons();
+        emit HistoryChanged();
+        return;
+    }
+
+    if (txtNoteBody && txtNoteBody->document()->isRedoAvailable()) {
+        txtNoteBody->redo();
         emit HistoryChanged();
     }
 }
@@ -555,10 +567,13 @@ void CodeNoteEditorWidget::ApplyFilter(bool autoSelectFirst) {
                 firstLine = firstLine.left(47) + "...";
             cmbNotes->addItem(QString("%1 | %2").arg(n.Address, firstLine));
         }
+
+        if (autoSelectFirst && !_filteredNotes.isEmpty()) {
+            cmbNotes->setCurrentIndex(0);
+        }
     }
 
     if (autoSelectFirst && !_filteredNotes.isEmpty()) {
-        cmbNotes->setCurrentIndex(0);
         _viewModel->SelectBaseNote(_filteredNotes[0]);
     } else if (_filteredNotes.isEmpty()) {
         cmbVariables->clear();
@@ -662,26 +677,29 @@ void CodeNoteEditorWidget::RefreshVariableTreeDisplay() {
                           : QString();
     _lastVariableTreeAddress = currentAddr;
 
-    cmbVariables->clear();
-    int newSelectIdx = -1;
+    {
+        QSignalBlocker blocker(cmbVariables);
+        cmbVariables->clear();
+        int newSelectIdx = -1;
 
-    for (int i = 0; i < finalList.size(); i++) {
-        const auto& node = finalList[i];
-        QString text = node->ToString();
-        if (!chkShowLeafsOnly->isChecked() && node->IndentLevel > 0) {
-            QString pad(node->IndentLevel * 2, ' ');
-            text = pad + text;
+        for (int i = 0; i < finalList.size(); i++) {
+            const auto& node = finalList[i];
+            QString text = node->ToString();
+            if (!chkShowLeafsOnly->isChecked() && node->IndentLevel > 0) {
+                QString pad(node->IndentLevel * 2, ' ');
+                text = pad + text;
+            }
+            quintptr nodePtr = reinterpret_cast<quintptr>(node.get());
+            QString nodeKey = QString("%1|%2|%3").arg(node->IndentLevel).arg(node->Offset, node->Description);
+            cmbVariables->addItem(text, QVariant::fromValue(nodePtr));
+            cmbVariables->setItemData(cmbVariables->count() - 1, nodeKey, Qt::UserRole + 1);
+            if (!prevKey.isEmpty() && nodeKey == prevKey)
+                newSelectIdx = i;
         }
-        quintptr nodePtr = reinterpret_cast<quintptr>(node.get());
-        QString nodeKey = QString("%1|%2|%3").arg(node->IndentLevel).arg(node->Offset, node->Description);
-        cmbVariables->addItem(text, QVariant::fromValue(nodePtr));
-        cmbVariables->setItemData(cmbVariables->count() - 1, nodeKey, Qt::UserRole + 1);
-        if (!prevKey.isEmpty() && nodeKey == prevKey)
-            newSelectIdx = i;
-    }
 
-    if (newSelectIdx != -1)
-        cmbVariables->setCurrentIndex(newSelectIdx);
+        if (newSelectIdx != -1)
+            cmbVariables->setCurrentIndex(newSelectIdx);
+    }
 
     cmbVariables->setEnabled(finalList.size() > 1 && !_viewModel->EditState.IsVirtual);
 

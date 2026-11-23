@@ -342,16 +342,48 @@ QList<RegionConfig> MultiRegionDialog::GetConfiguredRegions() {
                 simpleMappings[region][QString::number(bVal, 16)] = QString::number(tVal, 16);
 
                 int64_t size = 1;
-                static const QRegularExpression sizeMatchRegex(R"(\[.*?((?:0x)?[0-9a-fA-F]+)\s*[-]?\s*bytes?.*?\])",
-                                                               QRegularExpression::CaseInsensitiveOption);
+                static const QRegularExpression sizeMatchRegex(
+                    R"(\[[^\]]*?\b(?:(\d+)\s*x\s*(\d+)|(0x[0-9A-Fa-f]+)|(\d+))[\s\-]*bytes?\b[^\]]*\])",
+                    QRegularExpression::CaseInsensitiveOption);
                 auto sizeMatch = sizeMatchRegex.match(description);
 
                 if (sizeMatch.hasMatch()) {
-                    QString sizeStr = sizeMatch.captured(1);
-                    if (sizeStr.startsWith("0x", Qt::CaseInsensitive))
-                        size = sizeStr.mid(2).toLongLong(nullptr, 16);
-                    else
-                        size = sizeStr.toLongLong();
+                    if (!sizeMatch.captured(1).isEmpty() && !sizeMatch.captured(2).isEmpty()) {
+                        bool ok1 = false, ok2 = false;
+                        int64_t w = sizeMatch.captured(1).toLongLong(&ok1);
+                        int64_t h = sizeMatch.captured(2).toLongLong(&ok2);
+                        if (ok1 && ok2 && w > 0 && h > 0)
+                            size = w * h;
+                    } else if (!sizeMatch.captured(3).isEmpty()) {
+                        bool okHex = false;
+                        int64_t bSize = sizeMatch.captured(3).mid(2).toLongLong(&okHex, 16);
+                        if (okHex && bSize > 0)
+                            size = bSize;
+                    } else if (!sizeMatch.captured(4).isEmpty()) {
+                        bool okDec = false;
+                        int64_t bSize = sizeMatch.captured(4).toLongLong(&okDec);
+                        if (okDec && bSize > 0)
+                            size = bSize;
+                    }
+                } else {
+                    static const QRegularExpression bits64Rx(R"(\[[^\]]*\b(?:64[\s\-]*bits?|Double64)\b[^\]]*\])",
+                                                             QRegularExpression::CaseInsensitiveOption);
+                    static const QRegularExpression bits32Rx(
+                        R"(\[[^\]]*\b(?:32[\s\-]*bits?|Float(?:32)?|MBF32(?:\s+LE)?|Double32(?:\s+BE)?)\b[^\]]*\])",
+                        QRegularExpression::CaseInsensitiveOption);
+                    static const QRegularExpression bits24Rx(R"(\[[^\]]*\b24[\s\-]*bits?\b[^\]]*\])",
+                                                             QRegularExpression::CaseInsensitiveOption);
+                    static const QRegularExpression bits16Rx(R"(\[[^\]]*\b16[\s\-]*bits?\b[^\]]*\])",
+                                                             QRegularExpression::CaseInsensitiveOption);
+
+                    if (bits64Rx.match(description).hasMatch())
+                        size = 8;
+                    else if (bits32Rx.match(description).hasMatch())
+                        size = 4;
+                    else if (bits24Rx.match(description).hasMatch())
+                        size = 3;
+                    else if (bits16Rx.match(description).hasMatch())
+                        size = 2;
                 }
 
                 AddressRangeMap arm;
