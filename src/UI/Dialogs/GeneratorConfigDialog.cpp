@@ -122,7 +122,10 @@ GeneratorConfigDialog::GeneratorConfigDialog(const QList<std::shared_ptr<Generat
     txtStride->setText(AppSettings::Current.Generator_Stride);
     chkGenerateAsArray->setChecked(AppSettings::Current.Generator_IsArray);
     chkDuplicateSelectedOnly->setChecked(AppSettings::Current.Generator_DuplicateSelectedOnly);
-    chkDuplicateNotes->setChecked(AppSettings::Current.Generator_DuplicateNotes);
+    {
+        QSignalBlocker blocker(chkDuplicateNotes);
+        chkDuplicateNotes->setChecked(AppSettings::Current.Generator_DuplicateNotes);
+    }
 
     // 2. Pre-fill Stride if auto-detected (Only override if the user hasn't explicitly customized it this session)
     if (defaultStride > 0 && !_userModifiedStride) {
@@ -135,7 +138,10 @@ GeneratorConfigDialog::GeneratorConfigDialog(const QList<std::shared_ptr<Generat
         txtCopies->setText(QString::number(existingDef->Copies));
         chkGenerateAsArray->setChecked(existingDef->IsArray);
         chkDuplicateSelectedOnly->setChecked(existingDef->DuplicateSelectedOnly);
-        chkDuplicateNotes->setChecked(existingDef->DuplicateNotes);
+        {
+            QSignalBlocker blocker(chkDuplicateNotes);
+            chkDuplicateNotes->setChecked(existingDef->DuplicateNotes);
+        }
 
         int foundStride = existingDef->Rules[0].Stride;
         txtStride->setText("0x" + QString::number(foundStride, 16).toUpper());
@@ -652,7 +658,7 @@ QString GeneratorConfigDialog::CheckTargetStatus(const ResolvedSourceNote& src, 
 }
 
 void GeneratorConfigDialog::RefreshNoteSourceCombo() {
-    if (_cmbNoteSource == nullptr || !_notePreviewPanel->isVisible())
+    if (_cmbNoteSource == nullptr || _notePreviewPanel == nullptr || _notePreviewPanel->isHidden())
         return;
 
     SelectedAddresses.clear();
@@ -735,7 +741,7 @@ void GeneratorConfigDialog::onNoteTemplateChanged(const QString& text) {
 }
 
 void GeneratorConfigDialog::RebuildNotePreviewTable() {
-    if (_tblNotePreview == nullptr || !_notePreviewPanel->isVisible())
+    if (_tblNotePreview == nullptr || _notePreviewPanel == nullptr || _notePreviewPanel->isHidden())
         return;
 
     int idx = _cmbNoteSource ? _cmbNoteSource->currentIndex() : -1;
