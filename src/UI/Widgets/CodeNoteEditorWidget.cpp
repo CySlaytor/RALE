@@ -146,15 +146,20 @@ void CodeNoteEditorWidget::InitializeUI() {
     cmsNoteContext = new QMenu(this);
     auto* actCut = cmsNoteContext->addAction(getThemeIcon(":/icons/cut.svg"), "Cut", this, &CodeNoteEditorWidget::onCutClicked);
     actCut->setShortcut(QKeySequence::Cut);
+    actCut->setShortcutContext(Qt::WidgetShortcut);
     actCut->setProperty("iconPath", ":/icons/cut.svg");
 
     auto* actCopy = cmsNoteContext->addAction(getThemeIcon(":/icons/copy.svg"), "Copy", this, &CodeNoteEditorWidget::onCopyClicked);
     actCopy->setShortcut(QKeySequence::Copy);
+    actCopy->setShortcutContext(Qt::WidgetShortcut);
     actCopy->setProperty("iconPath", ":/icons/copy.svg");
 
     auto* actPaste = cmsNoteContext->addAction(getThemeIcon(":/icons/paste.svg"), "Paste", this, &CodeNoteEditorWidget::onPasteClicked);
     actPaste->setShortcut(QKeySequence::Paste);
+    actPaste->setShortcutContext(Qt::WidgetShortcut);
     actPaste->setProperty("iconPath", ":/icons/paste.svg");
+
+    txtNoteBody->addActions({actCut, actCopy, actPaste});
 
     cmsNoteContext->addSeparator();
     auto* actDelNode = cmsNoteContext->addAction(getThemeIcon(":/icons/delete.svg"), "Delete Note (Selected in Tree)", this,

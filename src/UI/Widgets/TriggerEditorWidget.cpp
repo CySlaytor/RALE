@@ -109,6 +109,7 @@ TriggerEditorWidget::TriggerEditorWidget(QWidget* parent) : QWidget(parent), _vi
 
         if (groupsList->count() > 0 && state.ActiveGroupIndex >= 0 && state.ActiveGroupIndex < groupsList->count()) {
             groupsList->setCurrentRow(state.ActiveGroupIndex);
+            RefreshCurrentGridDisplay();
         }
 
         _isProgrammaticallyChanging = wasChanging;
@@ -335,6 +336,8 @@ void TriggerEditorWidget::InitializeUI() {
 
     groupsList = new QListWidget(groupsContainer);
     groupsList->setObjectName("groupsList");
+    groupsList->installEventFilter(this);
+    groupsList->viewport()->installEventFilter(this);
     connect(groupsList, &QListWidget::currentRowChanged, this, &TriggerEditorWidget::onGroupsListSelectionChanged);
     groupsLayout->addWidget(groupsList, 1);
 
@@ -348,11 +351,13 @@ void TriggerEditorWidget::InitializeUI() {
     btnAddGroup = new QPushButton("+", btnPanel);
     btnAddGroup->setObjectName("btnAddGroup");
     btnAddGroup->setFixedSize(22, 19);
+    btnAddGroup->installEventFilter(this);
     connect(btnAddGroup, &QPushButton::clicked, this, &TriggerEditorWidget::onAddGroupClicked);
 
     btnRemoveGroup = new QPushButton("-", btnPanel);
     btnRemoveGroup->setObjectName("btnRemoveGroup");
     btnRemoveGroup->setFixedSize(22, 19);
+    btnRemoveGroup->installEventFilter(this);
     connect(btnRemoveGroup, &QPushButton::clicked, this, &TriggerEditorWidget::onRemoveGroupClicked);
 
     btnLayout->addWidget(btnAddGroup);
@@ -480,7 +485,10 @@ void TriggerEditorWidget::InitializeUI() {
 
     actRemoveGroup =
         groupsContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Remove Group", this, &TriggerEditorWidget::onRemoveGroupClicked);
+    actRemoveGroup->setShortcut(QKeySequence::Delete);
+    actRemoveGroup->setShortcutContext(Qt::WidgetShortcut);
     actRemoveGroup->setProperty("iconPath", ":/icons/delete.svg");
+    groupsList->addAction(actRemoveGroup);
 
     groupsContextMenu->addSeparator();
 
@@ -489,26 +497,35 @@ void TriggerEditorWidget::InitializeUI() {
     actRemoveAllAltGroups->setProperty("iconPath", ":/icons/delete.svg");
 
     groupsList->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(groupsList, &QWidget::customContextMenuRequested, this,
-            [this](const QPoint& pos) { groupsContextMenu->exec(groupsList->mapToGlobal(pos)); });
+    connect(groupsList, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        if (auto* item = groupsList->itemAt(pos))
+            groupsList->setCurrentItem(item);
+        groupsContextMenu->exec(groupsList->mapToGlobal(pos));
+    });
 
     // Wire up dynamic enablement for Groups menu items matching WinForms GroupsContextMenu_Opening
     connect(groupsContextMenu, &QMenu::aboutToShow, this, [this]() {
         int row = groupsList->currentRow();
+        if (row < 0 && !groupsList->selectedItems().isEmpty())
+            row = groupsList->row(groupsList->selectedItems().first());
         bool hasSelection = (row >= 0);
         bool isCore = (row == 0);
 
         if (actRemoveGroup)
-            actRemoveGroup->setEnabled(hasSelection && !isCore);
+            actRemoveGroup->setEnabled(hasSelection && !isCore && !IsGridReadOnly());
+        if (actRemoveAllAltGroups)
+            actRemoveAllAltGroups->setEnabled(groupsList->count() > 1);
     });
 
     gridContextMenu = new QMenu(this);
     auto* actMoveUp = gridContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Up", this, [this]() { MoveSelected(-1); });
     actMoveUp->setShortcut(QKeySequence("Alt+Up"));
+    actMoveUp->setShortcutContext(Qt::WidgetShortcut);
     actMoveUp->setProperty("iconPath", ":/icons/sort.svg");
 
     auto* actMoveDown = gridContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Down", this, [this]() { MoveSelected(1); });
     actMoveDown->setShortcut(QKeySequence("Alt+Down"));
+    actMoveDown->setShortcutContext(Qt::WidgetShortcut);
     actMoveDown->setProperty("iconPath", ":/icons/sort.svg");
 
     gridContextMenu->addSeparator();
@@ -519,10 +536,12 @@ void TriggerEditorWidget::InitializeUI() {
 
     auto* actDup = gridContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Duplicate", this, &TriggerEditorWidget::DuplicateSelected);
     actDup->setShortcut(QKeySequence("Ctrl+D"));
+    actDup->setShortcutContext(Qt::WidgetShortcut);
     actDup->setProperty("iconPath", ":/icons/copy.svg");
 
     auto* actDel = gridContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Delete", this, &TriggerEditorWidget::DeleteSelected);
     actDel->setShortcut(QKeySequence::Delete);
+    actDel->setShortcutContext(Qt::WidgetShortcut);
     actDel->setProperty("iconPath", ":/icons/delete.svg");
 
     gridContextMenu->addSeparator();
@@ -533,21 +552,27 @@ void TriggerEditorWidget::InitializeUI() {
 
     auto* actCut = gridContextMenu->addAction(getThemeIcon(":/icons/cut.svg"), "Cut Logic", this, &TriggerEditorWidget::CutSelected);
     actCut->setShortcut(QKeySequence::Cut);
+    actCut->setShortcutContext(Qt::WidgetShortcut);
     actCut->setProperty("iconPath", ":/icons/cut.svg");
 
     auto* actCopyLogic =
         gridContextMenu->addAction(getThemeIcon(":/icons/copy_ra.svg"), "Copy Logic", this, &TriggerEditorWidget::CopySelectedLogic);
     actCopyLogic->setShortcut(QKeySequence::Copy);
+    actCopyLogic->setShortcutContext(Qt::WidgetShortcut);
     actCopyLogic->setProperty("iconPath", ":/icons/copy_ra.svg");
 
     auto* actCopyRow =
         gridContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Copy Row", this, &TriggerEditorWidget::CopySelectedRows);
     actCopyRow->setShortcut(QKeySequence("Ctrl+Shift+C"));
+    actCopyRow->setShortcutContext(Qt::WidgetShortcut);
     actCopyRow->setProperty("iconPath", ":/icons/copy.svg");
 
     auto* actPaste = gridContextMenu->addAction(getThemeIcon(":/icons/paste.svg"), "Paste Logic", this, [this]() { PasteLogic(); });
     actPaste->setShortcut(QKeySequence::Paste);
+    actPaste->setShortcutContext(Qt::WidgetShortcut);
     actPaste->setProperty("iconPath", ":/icons/paste.svg");
+
+    conditionGrid->addActions({actMoveUp, actMoveDown, actDup, actDel, actCut, actCopyLogic, actCopyRow, actPaste});
 
     conditionGrid->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(conditionGrid, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
@@ -749,6 +774,12 @@ void TriggerEditorWidget::BindAchievement(std::shared_ptr<IAssetItem> asset, con
 
     _logicUpdatePending = false;
     _isProgrammaticallyChanging = true;
+    const bool isSameAsset = (_viewModel.BoundAsset != nullptr && asset != nullptr && _viewModel.BoundAsset->ID == asset->ID &&
+                              _viewModel.BoundAsset->isLeaderboard() == asset->isLeaderboard());
+    if (!isSameAsset) {
+        groupsList->clearSelection();
+        groupsList->setCurrentRow(-1);
+    }
     _viewModel.LoadAsset(asset);
 
     txtTitle->setText(asset != nullptr ? asset->Title : "");
@@ -987,7 +1018,7 @@ void TriggerEditorWidget::RefreshGroupsListUI() {
     }
 
     if (groupsList->count() > 0) {
-        int targetIndex = (savedIndex >= 0 && savedIndex < groupsList->count()) ? savedIndex : 0;
+        int targetIndex = (savedIndex >= 0) ? std::min<int>(savedIndex, groupsList->count() - 1) : 0;
         groupsList->setCurrentRow(targetIndex);
     }
 
@@ -1280,18 +1311,37 @@ void TriggerEditorWidget::onBtnToolsClicked() { toolsContextMenu->exec(btnTools-
 void TriggerEditorWidget::onAddGroupClicked() {
     _viewModel.AddGroup();
     RefreshGroupsListUI();
-    if (groupsList->count() > 0)
+    if (groupsList->count() > 0) {
         groupsList->setCurrentRow(groupsList->count() - 1);
+        groupsList->setFocus();
+    }
 }
 
 void TriggerEditorWidget::onRemoveGroupClicked() {
     int row = groupsList->currentRow();
+    if (row < 0 && !groupsList->selectedItems().isEmpty())
+        row = groupsList->row(groupsList->selectedItems().first());
+    if (row < 0)
+        return;
     if (row == 0) {
         QMessageBox::warning(this, "Operation Not Allowed", "The Core group cannot be deleted.");
         return;
     }
+    bool isGeneratedGroup = false;
+    for (auto it = _viewModel.GeneratorRules.cbegin(); it != _viewModel.GeneratorRules.cend(); ++it) {
+        if (!it.value().IsArray && row > it.key() && row <= it.key() + it.value().Copies) {
+            isGeneratedGroup = true;
+            break;
+        }
+    }
+    if (isGeneratedGroup) {
+        QMessageBox::information(this, "Operation Not Allowed",
+                                 "Auto-generated groups cannot be deleted directly. Commit (Bake) the generator first.");
+        return;
+    }
     _viewModel.RemoveGroup(row);
     RefreshGroupsListUI();
+    groupsList->setFocus();
 }
 
 void TriggerEditorWidget::onRemoveAllAltGroupsClicked() {
@@ -1302,9 +1352,44 @@ void TriggerEditorWidget::onRemoveAllAltGroupsClicked() {
 }
 
 bool TriggerEditorWidget::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == conditionGrid && event->type() == QEvent::KeyPress) {
+    if (watched == groupsList || watched == groupsList->viewport() || watched == btnAddGroup || watched == btnRemoveGroup) {
+        if (event->type() == QEvent::ShortcutOverride) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (!(keyEvent->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier)) &&
+                keyEvent->key() == Qt::Key_Delete) {
+                event->accept();
+                return true;
+            }
+        } else if (event->type() == QEvent::KeyPress) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (!(keyEvent->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier)) &&
+                keyEvent->key() == Qt::Key_Delete) {
+                onRemoveGroupClicked();
+                return true;
+            }
+        }
+    }
+
+    if (watched == conditionGrid && (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)) {
         auto* keyEvent = static_cast<QKeyEvent*>(event);
         bool isEditing = !conditionGrid->viewport()->findChildren<QWidget*>().isEmpty();
+
+        if (event->type() == QEvent::ShortcutOverride) {
+            if (!isEditing) {
+                if ((keyEvent->modifiers() == Qt::AltModifier &&
+                     (keyEvent->key() == Qt::Key_Up || keyEvent->key() == Qt::Key_Down)) ||
+                    keyEvent->matches(QKeySequence::SelectAll) ||
+                    (keyEvent->modifiers() == Qt::ControlModifier && keyEvent->key() == Qt::Key_C) ||
+                    (keyEvent->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier) && keyEvent->key() == Qt::Key_C) ||
+                    keyEvent->matches(QKeySequence::Cut) || keyEvent->matches(QKeySequence::Paste) ||
+                    keyEvent->key() == Qt::Key_Delete ||
+                    (keyEvent->modifiers() == Qt::ControlModifier && keyEvent->key() == Qt::Key_D)) {
+                    event->accept();
+                    return true;
+                }
+            }
+            return QWidget::eventFilter(watched, event);
+        }
 
         // Generated ("Auto") groups are read-only: swallow mutating shortcuts.
         if (!isEditing && IsGridReadOnly()) {

@@ -721,10 +721,12 @@ void MainWindow::InitializeAssetContextMenu() {
 
     actDuplicateAsset = assetContextMenu->addAction(getThemeIcon(":/icons/copy.svg"), "Duplicate", this, &MainWindow::onDuplicateAsset);
     actDuplicateAsset->setShortcut(QKeySequence("Ctrl+D"));
+    actDuplicateAsset->setShortcutContext(Qt::WidgetShortcut);
     actDuplicateAsset->setProperty("iconPath", ":/icons/copy.svg");
 
     actDeleteAsset = assetContextMenu->addAction(getThemeIcon(":/icons/delete.svg"), "Delete", this, &MainWindow::onDeleteAsset);
     actDeleteAsset->setShortcut(QKeySequence::Delete);
+    actDeleteAsset->setShortcutContext(Qt::WidgetShortcut);
     actDeleteAsset->setProperty("iconPath", ":/icons/delete.svg");
 
     actResetAsset = assetContextMenu->addAction(getThemeIcon(":/icons/refresh.svg"), "Reset", this, &MainWindow::onResetAsset);
@@ -738,10 +740,12 @@ void MainWindow::InitializeAssetContextMenu() {
 
     actMoveUp = assetContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Up", this, &MainWindow::onMoveAssetUp);
     actMoveUp->setShortcut(QKeySequence("Alt+Up"));
+    actMoveUp->setShortcutContext(Qt::WidgetShortcut);
     actMoveUp->setProperty("iconPath", ":/icons/sort.svg");
 
     actMoveDown = assetContextMenu->addAction(getThemeIcon(":/icons/sort.svg"), "Move Down", this, &MainWindow::onMoveAssetDown);
     actMoveDown->setShortcut(QKeySequence("Alt+Down"));
+    actMoveDown->setShortcutContext(Qt::WidgetShortcut);
     actMoveDown->setProperty("iconPath", ":/icons/sort.svg");
 
     assetContextMenu->addSeparator();
@@ -766,6 +770,8 @@ void MainWindow::InitializeAssetContextMenu() {
         assetContextMenu->addAction(getThemeIcon(":/icons/undo.svg"), "Revert Multi-Region...", this, &MainWindow::onRevertRegion);
     actRevertRegion->setProperty("iconPath", ":/icons/undo.svg");
 
+    achievementGrid->addActions({actDuplicateAsset, actDeleteAsset, actMoveUp, actMoveDown});
+
     achievementGrid->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(achievementGrid, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
         UpdateSelectionUI();
@@ -774,8 +780,19 @@ void MainWindow::InitializeAssetContextMenu() {
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == achievementGrid && event->type() == QEvent::KeyPress) {
+    if (watched == achievementGrid && (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)) {
         auto* keyEvent = static_cast<QKeyEvent*>(event);
+
+        if (event->type() == QEvent::ShortcutOverride) {
+            if ((keyEvent->modifiers() == Qt::AltModifier &&
+                 (keyEvent->key() == Qt::Key_Up || keyEvent->key() == Qt::Key_Down)) ||
+                keyEvent->key() == Qt::Key_Delete ||
+                (keyEvent->modifiers() == Qt::ControlModifier && keyEvent->key() == Qt::Key_D)) {
+                event->accept();
+                return true;
+            }
+            return QMainWindow::eventFilter(watched, event);
+        }
 
         if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
             LoadSelectedAsset();

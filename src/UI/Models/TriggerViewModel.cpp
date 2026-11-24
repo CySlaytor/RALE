@@ -1,5 +1,7 @@
 #include "TriggerViewModel.h"
 
+#include <utility>
+
 namespace RALE {
 
 // Constructor Injection
@@ -282,12 +284,16 @@ void TriggerViewModel::AddGroup() {
 }
 
 void TriggerViewModel::RemoveGroup(int index) {
-    auto& groups = GetActiveGroups();
-    if (index < 0 || index >= groups.size())
+    const int initialSize = static_cast<int>(std::as_const(*this).GetActiveGroups().size());
+    if (index < 0 || index >= initialSize)
         return;
 
     PushUndoState(index);
     emit AboutToChangeSegments();
+
+    auto& groups = GetActiveGroups();
+    if (index < 0 || index >= groups.size())
+        return;
 
     QMap<int, GeneratorDefinition> shiftedRules;
     for (auto it = GeneratorRules.cbegin(); it != GeneratorRules.cend(); ++it) {
@@ -306,19 +312,28 @@ void TriggerViewModel::RemoveGroup(int index) {
             if (groups[i].GroupName.startsWith("Alt "))
                 groups[i].GroupName = QString("Alt %1").arg(i);
         }
+    } else {
+        for (int i = 1; i < groups.size(); i++) {
+            if (groups[i].GroupName.startsWith("Group "))
+                groups[i].GroupName = QString("Group %1").arg(i + 1);
+        }
     }
 
     UpdateLogic(false);
 }
 
 void TriggerViewModel::RemoveAllAltGroups() {
-    auto& groups = GetActiveGroups();
-    if (groups.size() <= 1)
+    const int initialSize = static_cast<int>(std::as_const(*this).GetActiveGroups().size());
+    if (initialSize <= 1)
         return;
 
     PushUndoState();
     emit AboutToChangeSegments();
     GeneratorRules.clear();
+
+    auto& groups = GetActiveGroups();
+    if (groups.size() <= 1)
+        return;
 
     AchievementConditionGroup first = groups[0];
     groups.clear();
